@@ -275,3 +275,7 @@ details.section[open] { padding-bottom: 16px; }
 .public.branded .steps li.done::before { background: var(--green); border-color: var(--green); opacity: 0.45; }
 .public.branded .timeline { border-left-color: #e6e4df; }
 .public.branded .timeline li::before { background: var(--green); opacity: 0.6; }
+.spin { animation: cos-spin 0.8s linear infinite; }
+@keyframes cos-spin { to { transform: rotate(360deg); } }
+.asidebottom .who { margin-top: 10px; display: flex; align-items: center; }
+@media (max-width: 950px) { .asidebottom .who { display: none; } }

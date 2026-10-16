@@ -36,7 +36,7 @@ export function Sidebar({ storeName, userName, roleLabel, signOut }: { storeName
       </nav>
       <div className="asidebottom">
         <div className="org">{storeName.toUpperCase()}</div>
-        <div className="who" style={{ marginTop: 10, display: 'flex', alignItems: 'center' }}>
+        <div className="who">
           <span className="avatar" aria-hidden="true">
             {userName.split(/\s+/).map((p) => p[0]).slice(0, 2).join('').toUpperCase()}
           </span>

@@ -8,6 +8,7 @@ import type { WorkRow } from '@/lib/queries';
 import { badgeClass } from '@/lib/status';
 import { RowLink } from './chrome';
 import { NotificationBell } from './notifications';
+import { RefreshButton } from './refresh-button';
 
 export function PageHeader({ staff, title, sub, actions }: { staff: Staff; title: string; sub: string; actions?: ReactNode }) {
   return (
@@ -18,6 +19,7 @@ export function PageHeader({ staff, title, sub, actions }: { staff: Staff; title
         <div className="lede">{sub}</div>
       </div>
       <div className="top-actions">
+        <RefreshButton />
         <NotificationBell />
         {actions ?? (
           <Link href="/orders/new" className="btn primary" scroll={false}>
