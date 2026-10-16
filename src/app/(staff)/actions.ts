@@ -19,6 +19,7 @@ import { acceptQuoteInStore, closeQuote, createApprovalLink, createQuote, editQu
 import {
   changeOwnPassword,
   recheckSender,
+  resetUserPassword,
   createUser,
   updateAutomations,
   updateCustomer,
@@ -260,4 +261,11 @@ export async function catalogueActiveAction(kind: 'brand' | 'model' | 'component
 
 export async function sendTestEmailAction(template: string, _: FormState, fd: FormData) {
   return act('admin', (ctx) => sendTestEmail(ctx, { template, to: fd.get('to') }), fd);
+}
+
+export async function resetUserPasswordAction(userId: string) {
+  return act('admin', async (ctx) => {
+    const temp = await resetUserPassword(ctx, userId);
+    return { message: `New temporary password: ${temp} — shown once. They can change it after signing in (or use Forgot password).` };
+  });
 }

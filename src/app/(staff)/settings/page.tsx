@@ -17,6 +17,7 @@ import {
   storeSettingsAction,
   thresholdsAction,
   updateUserAction,
+  resetUserPasswordAction,
 } from '../actions';
 
 export const metadata: Metadata = { title: 'Store settings' };
@@ -110,7 +111,13 @@ export default async function SettingsPage() {
                   <td>{u.sharedLogin || u.loginEnabled ? (u.lastLoginAt ? stamp(u.lastLoginAt, tz) : 'Never') : '—'}</td>
                   <td>
                     {admin ? (
-                      <TeamMemberControls role={u.role} active={u.active} isSelf={u.id === staff.id} update={updateUserAction.bind(null, u.id)} />
+                      <TeamMemberControls
+                        role={u.role}
+                        active={u.active}
+                        isSelf={u.id === staff.id}
+                        update={updateUserAction.bind(null, u.id)}
+                        resetPassword={u.loginEnabled || u.sharedLogin ? resetUserPasswordAction.bind(null, u.id) : undefined}
+                      />
                     ) : u.active ? (
                       'Active'
                     ) : (

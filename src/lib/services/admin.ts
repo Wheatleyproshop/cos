@@ -4,6 +4,7 @@ import { randomBytes } from 'node:crypto';
 import { withTenant } from '@/db';
 import { customers, organisations, users, type EmailAutomationKey, type EmailAutomations } from '@/db/schema';
 import { recordEvent } from '../audit';
+import { revokeUserSessions } from '../sessions';
 import { checkSenderDomain } from '../email/sender';
 import { PLANS } from '../plans';
 import {
@@ -191,6 +192,24 @@ export async function updateUser(ctx: Ctx, userId: string, patch: { role?: 'admi
       newValue: newV,
     });
   });
+}
+
+/** Admin sets a new temporary password for an account with a login (incl. the shared Pro Shop login). */
+export async function resetUserPassword(ctx: Ctx, userId: string): Promise<string> {
+  requireRole(ctx, 'admin', 'reset passwords');
+  const temp = randomBytes(9).toString('base64url');
+  await withTenant(ctx.org.id, async (tx) => {
+    const [u] = await tx.select().from(users).where(eq(users.id, userId)).limit(1);
+    if (!u) throw new ServiceError('Team member not found.');
+    if (!u.loginEnabled && !u.sharedLogin) throw new ServiceError(`${u.name} picks their name on the shared login and has no password to reset.`);
+    await tx.update(users).set({ passwordHash: await bcrypt.hash(temp, 12), failedLoginCount: 0, lockedUntil: null }).where(eq(users.id, userId));
+    await recordEvent(tx, {
+      organisationId: ctx.org.id, actor: ctx.actor, eventType: 'user_updated', entityType: 'user', entityId: userId,
+      newValue: { password: 'reset by admin' },
+    });
+  });
+  await revokeUserSessions(userId);
+  return temp;
 }
 
 export async function changeOwnPassword(ctx: Ctx, raw: unknown) {

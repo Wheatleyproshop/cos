@@ -10,7 +10,8 @@ export const metadata: Metadata = {
   appleWebApp: { capable: true, title: 'COS', statusBarStyle: 'black-translucent' },
 };
 
-export default async function LoginPage() {
+export default async function LoginPage({ searchParams }: { searchParams: Promise<{ reset?: string }> }) {
+  const { reset } = await searchParams;
   if (await getStaff()) redirect('/');
   const demo = process.env.DEMO_MODE === 'true' && process.env.NODE_ENV !== 'production';
   return (
@@ -22,7 +23,7 @@ export default async function LoginPage() {
         <div className="eyebrow" style={{ marginTop: 4 }}>
           GOLF · CUSTOMER ORDER SYSTEM
         </div>
-        <LoginForm />
+        <LoginForm justReset={reset === '1'} />
         {demo ? (
           <div className="notice" style={{ marginBottom: 0 }}>
             <b>Demo workspace</b>

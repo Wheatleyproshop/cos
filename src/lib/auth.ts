@@ -175,7 +175,4 @@ export async function logout() {
   jar.delete(ACTING_COOKIE);
 }
 
-/** Ends every session for a user (deactivation / password reset). */
-export async function revokeUserSessions(userId: string) {
-  await systemDb().delete(sessions).where(eq(sessions.userId, userId));
-}
+export { revokeUserSessions } from './sessions';

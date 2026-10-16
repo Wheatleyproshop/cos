@@ -253,11 +253,14 @@ export function TeamMemberControls({
   active,
   isSelf,
   update,
+  resetPassword,
 }: {
   role: string;
   active: boolean;
   isSelf: boolean;
   update: (patch: { role?: 'admin' | 'manager' | 'staff'; active?: boolean }) => Promise<FormState>;
+  /** Present only for accounts that sign in with a password. */
+  resetPassword?: () => Promise<FormState>;
 }) {
   const [pending, start] = useTransition();
   const [state, setState] = useState<FormState>(null);
@@ -281,7 +284,26 @@ export function TeamMemberControls({
       ) : (
         <span className="muted">You</span>
       )}
+      {resetPassword && !isSelf ? (
+        <button
+          type="button"
+          className="btn small"
+          disabled={pending}
+          onClick={() => {
+            if (window.confirm('Give this account a new temporary password? Their current password will stop working.')) {
+              start(async () => setState(await resetPassword()));
+            }
+          }}
+        >
+          Reset password
+        </button>
+      ) : null}
       {state?.error ? <span className="err" style={{ color: 'var(--err-ink)', fontSize: 12 }}>{state.error}</span> : null}
+      {state?.ok && state.message ? (
+        <span className="notice" style={{ display: 'block', margin: '6px 0 0', fontSize: 12 }}>
+          {state.message}
+        </span>
+      ) : null}
     </div>
   );
 }

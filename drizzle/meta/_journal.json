@@ -43,6 +43,13 @@
       "when": 1792171589184,
       "tag": "0005_shared_login",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1792171880492,
+      "tag": "0006_password_resets",
+      "breakpoints": true
     }
   ]
 }

@@ -117,6 +117,21 @@ export const sessions = pgTable(
   (t) => [index('sessions_user_idx').on(t.userId)],
 );
 
+/** One-time password reset links. Only the SHA-256 of the emailed token is stored. Owner-role access only. */
+export const passwordResets = pgTable(
+  'password_resets',
+  {
+    id: id(),
+    userId: uuid('user_id').notNull().references(() => users.id),
+    organisationId: orgId(),
+    tokenHash: text('token_hash').notNull().unique(),
+    expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+    usedAt: timestamp('used_at', { withTimezone: true }),
+    createdAt: createdAt(),
+  },
+  (t) => [index('password_resets_user_idx').on(t.userId, t.createdAt)],
+);
+
 /* ─────────────────────────────── Customers ──────────────────────────────── */
 
 export const customers = pgTable(

@@ -48,6 +48,7 @@ export type EventType =
   | 'settings_changed'
   | 'user_created'
   | 'user_updated'
+  | 'password_reset_requested'
   | 'data_exported'
   | 'backup_completed'
   | 'backup_failed';
