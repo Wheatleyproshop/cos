@@ -22,7 +22,7 @@ export async function sendTestEmail(ctx: Ctx, raw: unknown): Promise<string> {
   const r = schema.safeParse(raw);
   if (!r.success) throw new ServiceError('Enter a valid email address.', { to: 'Enter a valid email address' });
   const { template, to } = r.data;
-  const rendered = await renderSample(ctx.org, template, appUrl('/'));
+  const rendered = await renderSample(ctx.org, template, appUrl(`/preview/${template === 'quote_approval' ? 'quote' : 'track'}/${ctx.org.slug}`));
 
   const id = await withTenant(ctx.org.id, async (tx) => {
     const [m] = await tx

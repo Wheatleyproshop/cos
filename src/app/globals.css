@@ -272,3 +272,6 @@ details.section[open] { padding-bottom: 16px; }
 .public.branded .public-bar { height: 8px; }
 .public.branded .public-body { border-radius: 0; }
 .public.branded .steps li.current::before { background: var(--green); border-color: var(--green); }
+.public.branded .steps li.done::before { background: var(--green); border-color: var(--green); opacity: 0.45; }
+.public.branded .timeline { border-left-color: #e6e4df; }
+.public.branded .timeline li::before { background: var(--green); opacity: 0.6; }
