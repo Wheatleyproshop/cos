@@ -119,6 +119,12 @@ export const storeSettingsSchema = z.object({
   storePhone: text(40).default(''),
   openingHours: text(300).default(''),
   brandColor: z.string().trim().regex(/^#[0-9a-fA-F]{6}$/, 'Use a hex colour like #193b2c'),
+  headerTextColor: z.string().trim().regex(/^#[0-9a-fA-F]{6}$/, 'Use a hex colour').default('#ffffff'),
+  accentColor: z.string().trim().regex(/^#[0-9a-fA-F]{6}$/, 'Use a hex colour').default('#193b2c'),
+  headingFont: z.enum(['barlow', 'inter', 'georgia', 'system']).default('system'),
+  squareButtons: z.union([z.literal('on'), z.undefined()]).transform((v) => v === 'on'),
+  logoUrl: z.union([z.literal(''), z.string().trim().url('Enter a full https:// link').startsWith('https://', 'Must start with https://')]).default(''),
+  websiteUrl: z.union([z.literal(''), z.string().trim().url('Enter a full https:// link').startsWith('https://', 'Must start with https://')]).default(''),
   quoteTerms: text(4000).default(''),
 });
 

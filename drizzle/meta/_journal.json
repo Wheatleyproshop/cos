@@ -29,6 +29,13 @@
       "when": 1792154012720,
       "tag": "0003_retailer_sender",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1792159688044,
+      "tag": "0004_brand_theme",
+      "breakpoints": true
     }
   ]
 }

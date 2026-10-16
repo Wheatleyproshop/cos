@@ -14,6 +14,7 @@ export function brandingFor(org: Organisation): StoreBranding {
     storePhone: org.storePhone,
     openingHours: org.openingHours,
     brandColor: org.brandColor,
+    brandTheme: org.brandTheme,
   };
 }
 

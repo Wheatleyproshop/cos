@@ -1,4 +1,5 @@
 import type { EmailAutomationKey } from '@/db/schema';
+import { resolveBrand, type BrandTheme } from '../branding';
 import { longDate, money } from '../format';
 
 /**
@@ -12,6 +13,7 @@ export type StoreBranding = {
   storePhone: string;
   openingHours: string;
   brandColor: string;
+  brandTheme?: BrandTheme | null;
 };
 
 export type EmailContext = {
@@ -46,10 +48,6 @@ export const TEMPLATE_KEYS: EmailAutomationKey[] = [
 const esc = (s: unknown) =>
   String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
 
-function safeColor(c: string) {
-  return /^#[0-9a-f]{3,8}$/i.test(c) ? c : '#193b2c';
-}
-
 function firstName(name: string) {
   return name.trim().split(/\s+/)[0] || 'there';
 }
@@ -64,37 +62,45 @@ function layout(ctx: EmailContext, o: {
   cta?: { label: string; url: string };
   outro?: string[];
 }): { html: string; text: string } {
-  const color = safeColor(ctx.store.brandColor);
+  const b = resolveBrand(ctx.store);
+  const ink = '#090a11';
+  const muted = '#6b6f7b';
   const rowsHtml = o.rows
     .map(
       (r) =>
-        `<tr><td style="padding:6px 0;color:#7c837a;font-size:13px;width:42%;vertical-align:top">${esc(r.label)}</td><td style="padding:6px 0;color:#20251f;font-size:13px;font-weight:600">${esc(r.value)}</td></tr>`,
+        `<tr><td style="padding:7px 0;color:${muted};font-size:13px;width:44%;vertical-align:top">${esc(r.label)}</td><td style="padding:7px 0;color:${ink};font-size:13px;font-weight:600">${esc(r.value)}</td></tr>`,
     )
     .join('');
   const contact = [ctx.store.collectionLocation, ctx.store.storePhone, ctx.store.openingHours].filter(Boolean);
-  const html = `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>${esc(o.heading)}</title></head>
-<body style="margin:0;background:#f5f5f2;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;color:#20251f">
+  const brandMark = b.logoUrl
+    ? `<img src="${esc(b.logoUrl)}" alt="${esc(ctx.store.storeName)}" height="72" style="display:inline-block;height:72px;width:auto;max-width:300px;border:0;outline:none">`
+    : `<span style="font-family:${b.headingFont};font-size:22px;letter-spacing:3px;font-weight:600;color:${b.headerText}">${esc(ctx.store.storeName.toUpperCase())}</span>`;
+  const home = b.websiteUrl ? `<a href="${esc(b.websiteUrl)}" style="text-decoration:none">${brandMark}</a>` : brandMark;
+  const html = `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width"><meta name="color-scheme" content="light only"><title>${esc(o.heading)}</title>
+${b.fontsHref ? `<link href="${esc(b.fontsHref)}" rel="stylesheet">` : ''}</head>
+<body style="margin:0;background:#f4f4f2;font-family:${b.bodyFont};color:${ink}">
 <span style="display:none;max-height:0;overflow:hidden">${esc(o.preheader)}</span>
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f5f5f2;padding:24px 12px"><tr><td align="center">
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:600px;background:#ffffff;border:1px solid #e4e8e2;border-radius:14px;overflow:hidden">
-<tr><td style="background:${color};color:#ffffff;text-align:center;padding:28px 20px;font-size:20px;letter-spacing:3px;font-weight:600">${esc(ctx.store.storeName.toUpperCase())}</td></tr>
-<tr><td style="padding:28px 28px 8px">
-<div style="text-transform:uppercase;letter-spacing:2px;font-size:10px;color:#879085;font-weight:700">${esc(ctx.reference)}</div>
-<h1 style="font-size:22px;letter-spacing:-0.4px;margin:8px 0 18px">${esc(o.heading)}</h1>
-<p style="font-size:15px;line-height:1.55;margin:0 0 14px">Hi ${esc(firstName(ctx.customerName))},</p>
-${o.intro.map((p) => `<p style="font-size:15px;line-height:1.55;margin:0 0 14px;color:#3b4339">${esc(p)}</p>`).join('')}
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f4f4f2;padding:24px 12px"><tr><td align="center">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:600px;background:#ffffff;border:1px solid #e6e4df">
+<tr><td style="background:${b.headerBg};text-align:center;padding:14px 20px">${home}</td></tr>
+<tr><td style="background:${b.accent};color:${b.accentText};text-align:center;padding:9px 20px;font-size:11px;letter-spacing:2px;text-transform:uppercase">${esc(o.preheader)}</td></tr>
+<tr><td style="padding:32px 32px 8px">
+<div style="text-transform:uppercase;letter-spacing:2px;font-size:11px;color:${muted};font-weight:600">${esc(ctx.reference)}</div>
+<h1 style="font-family:${b.headingFont};font-size:26px;font-weight:600;letter-spacing:-0.2px;margin:8px 0 18px;color:${ink}">${esc(o.heading)}</h1>
+<p style="font-size:15px;line-height:1.6;margin:0 0 14px">Hi ${esc(firstName(ctx.customerName))},</p>
+${o.intro.map((p) => `<p style="font-size:15px;line-height:1.6;margin:0 0 14px;color:#2b2e38">${esc(p)}</p>`).join('')}
 </td></tr>
-<tr><td style="padding:4px 28px 8px"><div style="background:#f7f8f5;border-radius:12px;padding:16px 18px">
-<div style="font-weight:700;font-size:15px;margin-bottom:4px">${esc(ctx.brand)} ${esc(ctx.product)}</div>
-<div style="color:#5f685e;font-size:13px;line-height:1.5;margin-bottom:10px;white-space:pre-line">${esc(ctx.specification)}</div>
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0">${rowsHtml}</table></div></td></tr>
-${o.cta ? `<tr><td style="padding:18px 28px 6px" align="left"><a href="${esc(o.cta.url)}" style="display:inline-block;background:${color};color:#ffffff;text-decoration:none;padding:13px 20px;border-radius:9px;font-weight:600;font-size:14px">${esc(o.cta.label)}</a></td></tr>` : ''}
-<tr><td style="padding:14px 28px 26px">
-${(o.outro ?? []).map((p) => `<p style="font-size:14px;line-height:1.55;margin:0 0 12px;color:#3b4339">${esc(p)}</p>`).join('')}
-<p style="font-size:14px;line-height:1.55;margin:0;color:#3b4339">Thank you for choosing ${esc(ctx.store.storeName)}.</p>
+<tr><td style="padding:6px 32px 8px"><div style="border:1px solid #e6e4df;border-left:4px solid ${b.headerBg};padding:18px 20px">
+<div style="font-family:${b.headingFont};font-weight:600;font-size:17px;margin-bottom:4px;color:${ink}">${esc(ctx.brand)} ${esc(ctx.product)}</div>
+<div style="color:${muted};font-size:13px;line-height:1.55;margin-bottom:10px;white-space:pre-line">${esc(ctx.specification)}</div>
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-top:1px solid #efede8">${rowsHtml}</table></div></td></tr>
+${o.cta ? `<tr><td style="padding:22px 32px 6px" align="left"><a href="${esc(o.cta.url)}" style="display:inline-block;background:${b.accent};color:${b.accentText};text-decoration:none;padding:14px 24px;border-radius:${b.radius};font-weight:600;font-size:14px;letter-spacing:0.5px">${esc(o.cta.label)}</a></td></tr>` : ''}
+<tr><td style="padding:18px 32px 30px">
+${(o.outro ?? []).map((p) => `<p style="font-size:14px;line-height:1.6;margin:0 0 12px;color:#2b2e38">${esc(p)}</p>`).join('')}
+<p style="font-size:14px;line-height:1.6;margin:0;color:#2b2e38">Thank you for choosing ${esc(ctx.store.storeName)}.</p>
 </td></tr>
-<tr><td style="border-top:1px solid #eef0eb;padding:18px 28px;color:#899087;font-size:12px;line-height:1.6">
-<strong style="color:#5f685e">${esc(ctx.store.storeName)}</strong><br>${contact.map(esc).join('<br>')}${contact.length ? '<br>' : ''}Questions? Just reply to this email.
+<tr><td style="background:#f7f6f3;border-top:1px solid #e6e4df;padding:20px 32px;color:${muted};font-size:12px;line-height:1.7">
+<strong style="color:${ink}">${esc(ctx.store.storeName)}</strong><br>${contact.map(esc).join('<br>')}${contact.length ? '<br>' : ''}Questions? Just reply to this email.${b.websiteUrl ? `<br><a href="${esc(b.websiteUrl)}" style="color:${ink}">${esc(b.websiteUrl.replace(/^https:\/\/(www\.)?/, '').replace(/\/$/, ''))}</a>` : ''}
 </td></tr></table></td></tr></table></body></html>`;
 
   const text = [

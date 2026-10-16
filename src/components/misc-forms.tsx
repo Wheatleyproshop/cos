@@ -98,9 +98,50 @@ export function StoreForm({ action, values, disabled }: { action: BoundAction; v
             <Field state={s} name="collectionLocation" label="Collection location" wide defaultValue={values.collectionLocation} />
             <Field state={s} name="storePhone" label="Store phone" type="tel" defaultValue={values.storePhone} />
             <Field state={s} name="openingHours" label="Opening hours" defaultValue={values.openingHours} placeholder="e.g. Mon–Sun 8am–6pm" />
-            <label className="field">
-              <span>Brand colour</span>
-              <input type="color" name="brandColor" defaultValue={values.brandColor} style={{ height: 46, padding: 6 }} />
+            <div className="field wide">
+              <b style={{ fontSize: 13, color: 'var(--ink)' }}>Customer email & page branding</b>
+              <span className="hint">Match your own website. Used on every customer email, quote approval and tracking page.</span>
+            </div>
+            <Field
+              state={s}
+              name="logoUrl"
+              label="Logo image link"
+              wide
+              defaultValue={values.logoUrl}
+              placeholder="https://www.yourshop.co.uk/…/logo.png"
+              hint="A PNG on a transparent background works best. Leave blank to show your store name instead."
+            />
+            <Field state={s} name="websiteUrl" label="Your website" defaultValue={values.websiteUrl} placeholder="https://www.yourshop.co.uk" />
+            <Field
+              state={s}
+              name="headingFont"
+              label="Heading font"
+              defaultValue={values.headingFont}
+              options={[
+                { value: 'barlow', label: 'Barlow (modern sans)' },
+                { value: 'inter', label: 'Inter (clean sans)' },
+                { value: 'georgia', label: 'Georgia (classic serif)' },
+                { value: 'system', label: 'System default' },
+              ]}
+            />
+            <div className="field wide">
+              <div className="fields three">
+                <label className="field">
+                  <span>Header colour</span>
+                  <input type="color" name="brandColor" defaultValue={values.brandColor} style={{ height: 46, padding: 6 }} />
+                </label>
+                <label className="field">
+                  <span>Header text colour</span>
+                  <input type="color" name="headerTextColor" defaultValue={values.headerTextColor} style={{ height: 46, padding: 6 }} />
+                </label>
+                <label className="field">
+                  <span>Button & accent colour</span>
+                  <input type="color" name="accentColor" defaultValue={values.accentColor} style={{ height: 46, padding: 6 }} />
+                </label>
+              </div>
+            </div>
+            <label className="check wide">
+              <input type="checkbox" name="squareButtons" defaultChecked={values.squareButtons === 'true'} /> Square-cornered buttons
             </label>
             <Field state={s} name="quoteTerms" label="Quote terms shown to customers" wide textarea defaultValue={values.quoteTerms} />
           </div>

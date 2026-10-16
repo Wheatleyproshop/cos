@@ -10,6 +10,7 @@
  * - `orders.taken_by_user_id` / `orders.created_at` are immutable (DB trigger).
  */
 import { sql } from 'drizzle-orm';
+import type { BrandTheme } from '../lib/branding';
 import {
   boolean,
   date,
@@ -53,6 +54,8 @@ export const organisations = pgTable('organisations', {
   storePhone: text('store_phone').notNull().default(''),
   openingHours: text('opening_hours').notNull().default(''),
   brandColor: text('brand_color').notNull().default('#193b2c'),
+  /** Logo, colours and fonts for customer emails and pages (see src/lib/branding.ts). */
+  brandTheme: jsonb('brand_theme').$type<BrandTheme>().notNull().default({}),
   quoteTerms: text('quote_terms').notNull().default(''),
   timezone: text('timezone').notNull().default('Europe/London'),
   // SaaS

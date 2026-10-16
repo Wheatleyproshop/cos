@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import { ActionButton } from '@/components/forms';
 import { AutomationsForm, NewUserForm, PasswordForm, StoreForm, TeamMemberControls, ThresholdsForm } from '@/components/misc-forms';
 import { PageHeader } from '@/components/views';
+import { resolveBrand } from '@/lib/branding';
 import { fromHeader } from '@/lib/email/sender';
 import { hasRole, requireStaff, ROLE_LABELS } from '@/lib/auth';
 import { bytes, stamp } from '@/lib/format';
@@ -27,6 +28,7 @@ export default async function SettingsPage() {
   const { team, runs } = await getSettingsData(org);
   const tz = org.timezone;
   const plan = PLANS[org.plan];
+  const brand = resolveBrand(org);
 
   return (
     <>
@@ -54,6 +56,8 @@ export default async function SettingsPage() {
             storeName: org.storeName, replyToEmail: org.replyToEmail, senderEmail: org.senderEmail,
             senderHint: `Customers currently receive emails from “${fromHeader(org)}”.${org.senderEmail && !org.senderVerifiedAt ? ' Your own address will be used once its domain is verified.' : ''}`, collectionLocation: org.collectionLocation, storePhone: org.storePhone,
             openingHours: org.openingHours, brandColor: org.brandColor, quoteTerms: org.quoteTerms,
+            headerTextColor: brand.headerText, accentColor: brand.accent, headingFont: org.brandTheme?.headingFont ?? 'system',
+            squareButtons: String(Boolean(org.brandTheme?.squareButtons)), logoUrl: org.brandTheme?.logoUrl ?? '', websiteUrl: org.brandTheme?.websiteUrl ?? '',
           }}
         />
       </section>

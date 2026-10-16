@@ -1,0 +1,1 @@
+ALTER TABLE "organisations" ADD COLUMN "brand_theme" jsonb DEFAULT '{}'::jsonb NOT NULL;

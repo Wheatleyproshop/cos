@@ -83,11 +83,13 @@ async function updateOrg(ctx: Ctx, section: string, patch: Record<string, unknow
 
 export async function updateStoreSettings(ctx: Ctx, raw: unknown): Promise<string> {
   requireRole(ctx, 'admin', 'change store settings');
-  const input = parse(storeSettingsSchema, raw);
+  const { headerTextColor, accentColor, headingFont, squareButtons, logoUrl, websiteUrl, ...input } = parse(storeSettingsSchema, raw);
+  const brandTheme = { headerTextColor, accentColor, headingFont, squareButtons, logoUrl, websiteUrl };
   const changed = input.senderEmail !== ctx.org.senderEmail;
   const check = input.senderEmail && changed ? await checkSenderDomain(input.senderEmail) : null;
   await updateOrg(ctx, 'store', {
     ...input,
+    brandTheme,
     ...(changed ? { senderVerifiedAt: check?.verified ? new Date() : null } : {}),
   });
   if (!check) return 'Store identity saved. Customer emails and pages now use these details.';

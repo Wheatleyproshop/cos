@@ -24,6 +24,19 @@ import { hashToken } from '../lib/tokens';
 
 export const DEMO_PASSWORD = 'cos-demo-2026';
 
+/** Matches www.desirablegolf.co.uk: sand header, navy accents, Barlow headings, square buttons. */
+export const DESIRABLE_GOLF_BRAND = {
+  brandColor: '#c8b69a',
+  brandTheme: {
+    logoUrl: 'https://www.desirablegolf.co.uk/cdn/shop/files/BLACK_DG_Horizontal.png?height=120&v=1645526612',
+    websiteUrl: 'https://www.desirablegolf.co.uk',
+    headerTextColor: '#090a11',
+    accentColor: '#232743',
+    headingFont: 'barlow' as const,
+    squareButtons: true,
+  },
+};
+
 /** Fixed demo tokens so the README can link straight to the customer pages. */
 export const DEMO_TRACKING_TOKEN = 'demo-track-james-wilson-cos1048-xxxxxxxx';
 export const DEMO_QUOTE_TOKEN = 'demo-quote-emily-clarke-q1001-xxxxxxxxxx';
@@ -55,7 +68,8 @@ export async function seedDemo(db: DB, now = new Date()) {
       storeName: 'Desirable Golf',
       replyToEmail: 'orders@desirablegolf.co.uk',
       collectionLocation: 'Desirable Golf — Wheatley Golf Club, Doncaster',
-      brandColor: '#193b2c',
+      brandColor: DESIRABLE_GOLF_BRAND.brandColor,
+      brandTheme: DESIRABLE_GOLF_BRAND.brandTheme,
       quoteTerms:
         'Custom-built equipment is made to your specification and cannot be returned unless faulty. A deposit is required to place the order; the balance is payable on collection.',
       plan: 'trial',
@@ -78,7 +92,7 @@ export async function seedDemo(db: DB, now = new Date()) {
 
   const store = {
     storeName: org.storeName, replyToEmail: org.replyToEmail, collectionLocation: org.collectionLocation,
-    storePhone: org.storePhone, openingHours: org.openingHours, brandColor: org.brandColor,
+    storePhone: org.storePhone, openingHours: org.openingHours, brandColor: org.brandColor, brandTheme: org.brandTheme,
   };
 
   type Ev = { type: string; daysAgo: number; hh: number; mm: number; actor: typeof gary | 'system'; oldV?: unknown; newV?: unknown; meta?: unknown };
