@@ -143,7 +143,7 @@ export function renderEmail(type: EmailAutomationKey, ctx: EmailContext): Render
       const r = layout(ctx, {
         preheader: `Your ${ctx.brand} order is confirmed.`,
         heading: 'Your order is confirmed',
-        intro: ['We have received your order and will keep you informed every step of the way.'],
+        intro: ['Thank you for your order. It has been placed with our supplier, and we’ll let you know as soon as it arrives in store.'],
         rows: [...commercialRows(ctx), { label: 'Estimated arrival', value: longDate(ctx.etaDate) }],
         cta: ctx.actionUrl ? { label: 'Track your order', url: ctx.actionUrl } : undefined,
       });
@@ -186,8 +186,8 @@ export function renderEmail(type: EmailAutomationKey, ctx: EmailContext): Render
       if (ctx.store.openingHours) rows.push({ label: 'Opening hours', value: ctx.store.openingHours });
       rows.push({ label: 'Balance due on collection', value: money(ctx.balancePence ?? 0) });
       const r = layout(ctx, {
-        preheader: reminder ? 'Your order is still waiting for you.' : 'Your order is ready to collect.',
-        heading: reminder ? 'A friendly reminder — your order is waiting' : 'Your order is ready',
+        preheader: reminder ? 'Your order is still waiting for you.' : 'Your order has arrived in store.',
+        heading: reminder ? 'A friendly reminder — your order is waiting' : 'Your order has arrived in store',
         intro: reminder
           ? ['Your order is ready and waiting for you in store. Pop in whenever suits you.']
           : ['Great news. Your order has arrived and is ready to collect from our store.'],
@@ -195,7 +195,7 @@ export function renderEmail(type: EmailAutomationKey, ctx: EmailContext): Render
         cta: ctx.actionUrl ? { label: 'View your order', url: ctx.actionUrl } : undefined,
       });
       return {
-        subject: reminder ? `Reminder: your order ${ctx.reference} is ready to collect` : `Your order is ready to collect — ${ctx.reference}`,
+        subject: reminder ? `Reminder: your order ${ctx.reference} is ready to collect` : `Your order has arrived in store — ${ctx.reference}`,
         ...r,
       };
     }

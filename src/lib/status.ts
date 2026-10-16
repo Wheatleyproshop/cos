@@ -23,7 +23,8 @@ export const DEFAULT_WORKFLOW: WorkflowStep[] = [
   {
     key: 'place_order',
     label: 'Place order',
-    customerLabel: 'Order received',
+    // Customers see an order as placed with the supplier from the moment it's taken.
+    customerLabel: 'Ordered from supplier',
     tone: 'neutral',
     awaitingSupplier: true,
     terminal: false,
@@ -50,7 +51,7 @@ export const DEFAULT_WORKFLOW: WorkflowStep[] = [
   {
     key: 'ready',
     label: 'Ready for collection',
-    customerLabel: 'Ready to collect',
+    customerLabel: 'Arrived in store',
     tone: 'success',
     awaitingSupplier: false,
     terminal: false,

@@ -10,10 +10,13 @@ export type TrackingOrder = {
 
 export type TrackingEvent = { eventType: string; oldValueJson: unknown; newValueJson: unknown; createdAt: Date };
 
+/**
+ * Customer-facing progress. "Place order" and "Ordered" are both shown as ordered from the
+ * supplier, so customers see: Ordered from supplier → Arrived in store → Collected.
+ */
 export const STEPS: { key: OrderStatus; label: string }[] = [
-  { key: 'place_order', label: 'Order received' },
   { key: 'ordered', label: 'Ordered from supplier' },
-  { key: 'ready', label: 'Ready to collect' },
+  { key: 'ready', label: 'Arrived in store' },
   { key: 'collected', label: 'Collected' },
 ];
 
@@ -21,13 +24,14 @@ export function describe(e: { eventType: string; oldValueJson: unknown; newValue
   const n = (e.newValueJson ?? {}) as Record<string, string>;
   switch (e.eventType) {
     case 'order_created':
-      return `Order placed with ${store}`;
+      return `Order placed with ${store} and ordered from our supplier`;
     case 'status_changed':
-      return n.status === 'place_order' ? null : step(n.status as OrderStatus).customerLabel;
+      // Moving between Place order and Ordered is internal: the customer already sees "ordered".
+      return n.status === 'place_order' || n.status === 'ordered' ? null : step(n.status as OrderStatus).customerLabel;
     case 'eta_changed':
       return `Estimated arrival updated to ${longDate(n.etaDate)}${n.etaReason ? ` — ${n.etaReason}` : ''}`;
     case 'order_ready':
-      return 'Ready to collect';
+      return 'Arrived in store — ready to collect';
     case 'order_collected':
       return 'Collected — enjoy!';
     default:
@@ -43,7 +47,7 @@ export function TrackingView({
   org: Organisation; order: TrackingOrder; customerName: string; paid: number; balance: number;
   events: TrackingEvent[]; files: { id: string; filename: string }[]; token: string | null; approved?: boolean; banner?: React.ReactNode;
 }) {
-  const current = o.status === 'delayed' ? 'ordered' : o.status;
+  const current = o.status === 'delayed' || o.status === 'place_order' ? 'ordered' : o.status;
   const idx = STEPS.findIndex((s) => s.key === current);
   const timeline = events.map((e) => ({ text: describe(e, org.storeName), at: e.createdAt })).filter((e) => e.text);
   const d = { paid, balance, files, customerName };
@@ -87,7 +91,7 @@ export function TrackingView({
       </div>
       {o.status === 'ready' && org.collectionLocation ? (
         <div className="notice">
-          <b>Ready to collect</b>
+          <b>Arrived in store — ready to collect</b>
           {org.collectionLocation}
           {org.openingHours ? ` · ${org.openingHours}` : ''}
         </div>
