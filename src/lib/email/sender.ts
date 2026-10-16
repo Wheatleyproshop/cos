@@ -1,4 +1,5 @@
 import { Resend } from 'resend';
+import { resendApiKey } from './resend-key';
 import type { Organisation } from '@/db/schema';
 
 /**
@@ -25,10 +26,10 @@ export type DomainCheck = { verified: boolean; domain: string; detail: string };
 /** Asks Resend whether the address's domain is verified for sending on the COS account. */
 export async function checkSenderDomain(email: string): Promise<DomainCheck> {
   const domain = email.split('@')[1]?.toLowerCase() ?? '';
-  if (!process.env.RESEND_API_KEY) {
+  if (!resendApiKey()) {
     return { verified: false, domain, detail: 'No email provider is configured yet, so the COS address is used.' };
   }
-  const res = await new Resend(process.env.RESEND_API_KEY).domains.list();
+  const res = await new Resend(resendApiKey()).domains.list();
   if (res.error) {
     // A "sending access" key may not list domains. Resend still rejects mail from unverified
     // domains (and COS logs that as a failed email), so accept the address rather than block it.

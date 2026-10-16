@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { resendApiKey } from '@/lib/email/resend-key';
 import Link from 'next/link';
 import { MessageBadge, PageHeader } from '@/components/views';
 import type { EmailAutomationKey } from '@/db/schema';
@@ -53,7 +54,7 @@ export default async function EmailsPage({ searchParams }: { searchParams: Promi
           <>
             <p>
               Preview what customers receive at each step. Emails come from <b>{fromHeader(staff.org)}</b>, and replies go to{' '}
-              <b>{staff.org.replyToEmail}</b>. {process.env.RESEND_API_KEY ? '' : 'No email provider is configured, so sends are simulated and logged.'}
+              <b>{staff.org.replyToEmail}</b>. {resendApiKey() ? '' : 'No email provider is configured, so sends are simulated and logged.'}
             </p>
             <nav className="pills" aria-label="Email templates">
               {TEMPLATE_KEYS.map((k) => (

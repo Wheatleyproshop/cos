@@ -1,4 +1,5 @@
 import { eq, inArray } from 'drizzle-orm';
+import { resendApiKey } from './resend-key';
 import { Resend } from 'resend';
 import { withTenant, type DB } from '@/db';
 import { messages, type EmailAutomationKey, type Organisation } from '@/db/schema';
@@ -78,8 +79,8 @@ export async function enqueueEmail(tx: DB, input: EnqueueInput): Promise<string 
 
 let resendClient: Resend | null = null;
 function resend(): Resend | null {
-  if (!process.env.RESEND_API_KEY) return null;
-  resendClient ??= new Resend(process.env.RESEND_API_KEY);
+  if (!resendApiKey()) return null;
+  resendClient ??= new Resend(resendApiKey());
   return resendClient;
 }
 
