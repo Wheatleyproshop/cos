@@ -189,7 +189,7 @@ export async function updateOrderProgress(ctx: Ctx, orderId: string, raw: unknow
       let balance = 0;
       if (input.status === 'collected') {
         balance = order.totalGrossPence - (await paidPence(tx, orderId));
-        if (balance > 0 && !input.collectWithBalance) {
+        if (ctx.org.paymentTracking && balance > 0 && !input.collectWithBalance) {
           throw new ServiceError(
             `This order still has a balance outstanding. Record the payment first, or confirm collection with a balance outstanding.`,
             { collectWithBalance: 'Confirm to collect with a balance outstanding' },

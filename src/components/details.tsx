@@ -109,11 +109,13 @@ export async function OrderDetail({ staff, number, inModal }: { staff: Staff; nu
             options={statusOptions}
             canSuppress={manager}
             balanceText={money(d.balance)}
-            hasBalance={d.balance > 0}
+            hasBalance={staff.org.paymentTracking && d.balance > 0}
           />
         </>
       ) : null}
 
+      {staff.org.paymentTracking ? (
+        <>
       <h3>Payments</h3>
       {d.payments.length ? (
         <div className="tablewrap">
@@ -155,6 +157,8 @@ export async function OrderDetail({ staff, number, inModal }: { staff: Staff; nu
         <p className="muted">No payments recorded. Balance due {money(d.balance)}.</p>
       )}
       {!o.archivedAt ? <PaymentForm action={recordPaymentAction.bind(null, o.id)} canRefund={manager} /> : null}
+        </>
+      ) : null}
 
       <h3>Attachments</h3>
       {d.attachments.length ? (

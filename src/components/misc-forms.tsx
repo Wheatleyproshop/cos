@@ -327,3 +327,30 @@ export function PasswordForm({ action }: { action: BoundAction }) {
     </ActionForm>
   );
 }
+
+export function PaymentTrackingForm({ action, enabled, disabled }: { action: BoundAction; enabled: boolean; disabled: boolean }) {
+  return (
+    <ActionForm action={action}>
+      {(s) => (
+        <fieldset disabled={disabled} style={{ border: 0, padding: 0, margin: 0 }}>
+          <label className="check">
+            <input type="checkbox" name="paymentTracking" defaultChecked={enabled} />
+            <span>
+              <b>Record payments in COS</b>
+              <div className="muted">
+                Shows the Payments section on each order and checks the balance is paid before an order is marked Collected. Leave off if you take
+                payment on your till. Deposits and account credit can still be entered when taking an order.
+              </div>
+            </span>
+          </label>
+          <FormMessage state={s} />
+          {!disabled ? (
+            <div className="actions" style={{ marginTop: 10 }}>
+              <Submit>Save</Submit>
+            </div>
+          ) : null}
+        </fieldset>
+      )}
+    </ActionForm>
+  );
+}

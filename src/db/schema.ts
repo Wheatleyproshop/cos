@@ -69,6 +69,8 @@ export const organisations = pgTable('organisations', {
     ready_for_collection: true,
     collection_reminder: true,
   }),
+  /** Off = payments are taken at the shop's till: no Payments section, no balance check at collection. */
+  paymentTracking: boolean('payment_tracking').notNull().default(true),
   readyUncollectedDays: integer('ready_uncollected_days').notNull().default(7),
   quoteFollowupDays: integer('quote_followup_days').notNull().default(5),
   missingSupplierRefDays: integer('missing_supplier_ref_days').notNull().default(2),

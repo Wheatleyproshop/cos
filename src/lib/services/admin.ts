@@ -121,6 +121,11 @@ export async function updateAutomations(ctx: Ctx, enabled: Partial<Record<EmailA
   await updateOrg(ctx, 'automations', { emailAutomations: next });
 }
 
+export async function updatePaymentTracking(ctx: Ctx, enabled: boolean) {
+  requireRole(ctx, 'admin', 'change payment settings');
+  await updateOrg(ctx, 'payments', { paymentTracking: enabled });
+}
+
 export async function updateThresholds(ctx: Ctx, raw: unknown) {
   requireRole(ctx, 'admin', 'change attention settings');
   await updateOrg(ctx, 'attention', parse(thresholdsSchema, raw));

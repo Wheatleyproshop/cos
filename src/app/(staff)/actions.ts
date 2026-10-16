@@ -25,6 +25,7 @@ import {
   updateCustomer,
   updateStoreSettings,
   updateThresholds,
+  updatePaymentTracking,
   updateUser,
 } from '@/lib/services/admin';
 import { runBackup } from '@/lib/services/backups';
@@ -267,5 +268,13 @@ export async function resetUserPasswordAction(userId: string) {
   return act('admin', async (ctx) => {
     const temp = await resetUserPassword(ctx, userId);
     return { message: `New temporary password: ${temp} — shown once. They can change it after signing in (or use Forgot password).` };
+  });
+}
+
+export async function paymentTrackingAction(_: FormState, fd: FormData) {
+  return act('admin', async (ctx) => {
+    const on = fd.get('paymentTracking') === 'on';
+    await updatePaymentTracking(ctx, on);
+    return on ? 'Payments section switched on.' : 'Payments section switched off — payments are taken at your till.';
   });
 }

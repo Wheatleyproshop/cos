@@ -1,0 +1,1 @@
+ALTER TABLE "organisations" ADD COLUMN "payment_tracking" boolean DEFAULT true NOT NULL;

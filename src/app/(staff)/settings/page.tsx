@@ -1,6 +1,6 @@
 import type { Metadata } from 'next';
 import { ActionButton } from '@/components/forms';
-import { AutomationsForm, NewUserForm, PasswordForm, StoreForm, TeamMemberControls, ThresholdsForm } from '@/components/misc-forms';
+import { PaymentTrackingForm, AutomationsForm, NewUserForm, PasswordForm, StoreForm, TeamMemberControls, ThresholdsForm } from '@/components/misc-forms';
 import { PageHeader } from '@/components/views';
 import { resolveBrand } from '@/lib/branding';
 import { fromHeader } from '@/lib/email/sender';
@@ -16,6 +16,7 @@ import {
   createUserAction,
   storeSettingsAction,
   thresholdsAction,
+  paymentTrackingAction,
   updateUserAction,
   resetUserPasswordAction,
 } from '../actions';
@@ -77,6 +78,8 @@ export default async function SettingsPage() {
             disabled={!admin}
             values={{ readyUncollectedDays: org.readyUncollectedDays, quoteFollowupDays: org.quoteFollowupDays, missingSupplierRefDays: org.missingSupplierRefDays }}
           />
+          <h2 style={{ marginTop: 26 }}>Payments</h2>
+          <PaymentTrackingForm action={paymentTrackingAction} enabled={org.paymentTracking} disabled={!admin} />
         </section>
       </div>
 

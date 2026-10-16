@@ -293,3 +293,17 @@ describe('account credit', () => {
     ).rejects.toMatchObject({ fieldErrors: expect.objectContaining({ creditPence: expect.any(String) }) });
   });
 });
+
+describe('payments taken at the till', () => {
+  it('lets an order be collected without recording payment when payment tracking is off', async () => {
+    const tillCtx = { ...staff, org: { ...org, paymentTracking: false } };
+    const order = await createOrder(tillCtx, {
+      customerName: 'Till Customer', email: 'till@example.com', brand: 'PING', product: 'Glove', specificationText: 'ML',
+      totalGrossPence: '20.00', etaDate: '',
+    });
+    await updateOrderProgress(tillCtx, order.id, { status: 'ready', etaDate: '', supplierReference: '' });
+    await updateOrderProgress(tillCtx, order.id, { status: 'collected', etaDate: '', supplierReference: '' });
+    const [o] = await withTenant(org.id, (tx) => tx.select().from(orders).where(eq(orders.id, order.id)));
+    expect(o.status).toBe('collected');
+  });
+});
