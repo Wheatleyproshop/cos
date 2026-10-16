@@ -5,6 +5,8 @@ const nextConfig: NextConfig = {
   serverExternalPackages: ['@electric-sql/pglite'],
   experimental: { serverActions: { bodySizeLimit: '2mb' } },
   poweredByHeader: false,
+  // The icon renderer reads Inter from node_modules at runtime.
+  outputFileTracingIncludes: { '/icons/[name]': ['./node_modules/@fontsource/inter/files/inter-latin-{600,800}-normal.woff'] },
   async headers() {
     return [
       {

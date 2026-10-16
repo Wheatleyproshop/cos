@@ -6,7 +6,7 @@ import { LoginForm } from './login-form';
 export const metadata: Metadata = {
   title: 'Sign in',
   manifest: '/manifest.webmanifest',
-  icons: { icon: '/icons/icon.svg', apple: '/icons/apple-180.png' },
+  icons: { icon: '/icons/icon.svg?v=2', apple: '/icons/apple-180.png?v=2' },
   appleWebApp: { capable: true, title: 'COS', statusBarStyle: 'black-translucent' },
 };
 
@@ -20,7 +20,7 @@ export default async function LoginPage() {
           COS<span>.</span>
         </div>
         <div className="eyebrow" style={{ marginTop: 4 }}>
-          CUSTOMER ORDER SYSTEM
+          GOLF · CUSTOMER ORDER SYSTEM
         </div>
         <LoginForm />
         {demo ? (

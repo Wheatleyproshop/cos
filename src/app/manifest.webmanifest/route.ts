@@ -6,20 +6,20 @@
 export function GET() {
   return Response.json(
     {
-      name: 'COS — Customer Order System',
+      name: 'COS Golf',
       short_name: 'COS',
-      description: 'Customer orders, quotes and custom fitting for golf retail.',
+      description: 'Customer Order System — orders, quotes and custom fitting for golf retail.',
       id: '/',
       start_url: '/',
       scope: '/',
       display: 'standalone',
-      background_color: '#172b23',
-      theme_color: '#172b23',
+      background_color: '#0e1522',
+      theme_color: '#0e1522',
       icons: [
-        { src: '/icons/icon-192.png', sizes: '192x192', type: 'image/png' },
-        { src: '/icons/icon-512.png', sizes: '512x512', type: 'image/png' },
-        { src: '/icons/maskable-512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
-        { src: '/icons/icon.svg', sizes: 'any', type: 'image/svg+xml' },
+        { src: '/icons/icon-192.png?v=2', sizes: '192x192', type: 'image/png' },
+        { src: '/icons/icon-512.png?v=2', sizes: '512x512', type: 'image/png' },
+        { src: '/icons/maskable-512.png?v=2', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
+        { src: '/icons/icon.svg?v=2', sizes: 'any', type: 'image/svg+xml' },
       ],
       shortcuts: [
         { name: 'New order', url: '/orders/new' },

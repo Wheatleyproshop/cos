@@ -23,5 +23,5 @@ self.addEventListener('notificationclick', (event) => {
 // Ready for Web Push (VAPID) when server push is enabled — see docs/ARCHITECTURE.md.
 self.addEventListener('push', (event) => {
   const data = event.data ? event.data.json() : {};
-  event.waitUntil(self.registration.showNotification(data.title || 'COS', { body: data.body, icon: '/icons/icon-192.png', data: { url: data.url } }));
+  event.waitUntil(self.registration.showNotification(data.title || 'COS', { body: data.body, icon: '/icons/icon-192.png?v=2', data: { url: data.url } }));
 });

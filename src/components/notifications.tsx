@@ -15,7 +15,7 @@ export function ServiceWorker() {
 
 async function systemNotify(n: NotificationItem) {
   if (typeof Notification === 'undefined' || Notification.permission !== 'granted') return;
-  const opts = { body: n.body, icon: '/icons/icon-192.png', tag: n.id, data: { url: n.href } };
+  const opts = { body: n.body, icon: '/icons/icon-192.png?v=2', tag: n.id, data: { url: n.href } };
   const reg = await navigator.serviceWorker?.getRegistration();
   if (reg) await reg.showNotification(n.title, opts);
   else new Notification(n.title, opts);

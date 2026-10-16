@@ -6,7 +6,7 @@ import { logoutAction } from './actions';
 
 export const metadata: Metadata = {
   manifest: '/manifest.webmanifest',
-  icons: { icon: '/icons/icon.svg', apple: '/icons/apple-180.png' },
+  icons: { icon: '/icons/icon.svg?v=2', apple: '/icons/apple-180.png?v=2' },
   appleWebApp: { capable: true, title: 'COS', statusBarStyle: 'black-translucent' },
 };
 
