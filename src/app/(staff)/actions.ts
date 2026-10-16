@@ -30,7 +30,7 @@ import {
 } from '@/lib/services/admin';
 import { runBackup } from '@/lib/services/backups';
 import { sendTestEmail } from '@/lib/services/test-email';
-import { addBrand, addComponent, addModel, createFittingQuote, setCatalogActive } from '@/lib/services/fitting';
+import { addBrand, addComponent, addModel, createFittingQuote, setCatalogActive, updateModelPrice } from '@/lib/services/fitting';
 import { addBall, addStarterBalls, createBallPrintQuote, setBallActive, setBallPhoto, updateBallPrice, updateSetupFee } from '@/lib/services/ball-printing';
 
 const obj = (fd: FormData) => Object.fromEntries([...fd.entries()].filter(([, v]) => typeof v === 'string'));
@@ -346,4 +346,11 @@ export async function ballPhotoAction(id: string, _: FormState, fd: FormData) {
     await setBallPhoto(ctx, id, f instanceof File && f.size ? f : null);
     return 'Photo saved.';
   });
+}
+
+export async function modelPriceAction(id: string, _: FormState, fd: FormData) {
+  return act('manager', async (ctx) => {
+    await updateModelPrice(ctx, id, obj(fd));
+    return 'Price updated.';
+  }, fd);
 }

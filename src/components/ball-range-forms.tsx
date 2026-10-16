@@ -30,11 +30,16 @@ export function AddBallForm({ action }: { action: BoundAction }) {
 
 /** Inline price editor for one ball. */
 export function BallPriceForm({ action, value }: { action: BoundAction; value: string }) {
+  return <InlinePriceForm action={action} value={value} name="pricePerDozenPence" label="Price per dozen" />;
+}
+
+/** A small "amount + Save" form used in catalogue tables. */
+export function InlinePriceForm({ action, value, name, label }: { action: BoundAction; value: string; name: string; label: string }) {
   return (
     <ActionForm action={action} className="inlineform">
       {(s) => (
         <>
-          <input name="pricePerDozenPence" defaultValue={s?.values?.pricePerDozenPence ?? value} inputMode="decimal" aria-label="Price per dozen" style={{ width: 90 }} />
+          <input name={name} defaultValue={s?.values?.[name] ?? value} inputMode="decimal" aria-label={label} style={{ width: 90 }} />
           <Submit className="btn small" pendingText="…">Save</Submit>
           {s?.error ? <span className="error">{s.error}</span> : s?.ok ? <span className="muted">Saved</span> : null}
         </>

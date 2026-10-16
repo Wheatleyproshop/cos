@@ -399,3 +399,18 @@ describe('golf ball printing', () => {
     await expect(createBallPrintQuote(staff, { ...base, artworkType: 'logo' }, { logo: null, proof: jpeg() }, { send: false })).rejects.toThrow(/logo/);
   });
 });
+
+describe('catalogue prices', () => {
+  it('lets a manager change a head price, with the change in the audit trail', async () => {
+    const { getCatalog, updateModelPrice } = await import('@/lib/services/fitting');
+    const [model] = (await getCatalog(org.id)).models;
+    await expect(updateModelPrice(staff, model.id, { basePricePence: '1.00' })).rejects.toThrow(/manager/);
+    await updateModelPrice(admin, model.id, { basePricePence: '298.00' });
+    const [after] = (await getCatalog(org.id)).models.filter((m) => m.id === model.id);
+    expect(after.basePricePence).toBe(29800);
+    const events = await withTenant(org.id, (tx) =>
+      tx.select().from(auditEvents).where(sql`${auditEvents.metadataJson}->>'section' = 'catalogue.model_price'`),
+    );
+    expect(events.at(-1)?.newValueJson).toMatchObject({ basePricePence: 29800 });
+  });
+});

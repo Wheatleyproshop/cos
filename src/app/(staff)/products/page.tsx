@@ -1,12 +1,13 @@
 import type { Metadata } from 'next';
+import { InlinePriceForm } from '@/components/ball-range-forms';
 import { ActionButton } from '@/components/forms';
 import { CatalogueForm } from '@/components/catalogue-form';
 import { PageHeader } from '@/components/views';
 import { hasRole, requireStaff } from '@/lib/auth';
-import { money } from '@/lib/format';
+import { money, penceToInput } from '@/lib/format';
 import { CLUB_CATEGORIES } from '@/lib/fitting-rules';
 import { getCatalog } from '@/lib/services/fitting';
-import { catalogueAction, catalogueActiveAction } from '../actions';
+import { catalogueAction, catalogueActiveAction, modelPriceAction } from '../actions';
 
 export const metadata: Metadata = { title: 'Products' };
 
@@ -51,7 +52,13 @@ export default async function ProductsPage() {
                       </div>
                     </td>
                     <td>{CLUB_CATEGORIES.find((k) => k.key === m.category)?.label ?? m.category}</td>
-                    <td className="num">{money(m.basePricePence)}</td>
+                    <td className="num">
+                      {manager ? (
+                        <InlinePriceForm action={modelPriceAction.bind(null, m.id)} value={penceToInput(m.basePricePence)} name="basePricePence" label={`RRP for ${m.name}`} />
+                      ) : (
+                        money(m.basePricePence)
+                      )}
+                    </td>
                     <td className="num">{retire('model', m.id, m.active)}</td>
                   </tr>
                 ))}

@@ -184,6 +184,27 @@ export async function addComponent(ctx: Ctx, raw: unknown) {
   await audit(ctx, 'component_added', v);
 }
 
+/** Changes a head's RRP. The old and new price go in the audit trail; existing quotes keep their price. */
+export async function updateModelPrice(ctx: Ctx, id: string, raw: unknown) {
+  requireRole(ctx, 'manager', 'edit the product catalogue');
+  const v = parse(z.object({ basePricePence: pence('Price') }), raw);
+  if (v.basePricePence <= 0) throw new ServiceError('Enter a price above £0.', { basePricePence: 'Required' });
+  const [before] = await withTenant(ctx.org.id, async (tx) => {
+    const rows = await tx.select().from(productModels).where(and(eq(productModels.id, id), eq(productModels.organisationId, ctx.org.id)));
+    if (rows[0]) await tx.update(productModels).set(v).where(eq(productModels.id, id));
+    return rows;
+  });
+  if (!before) throw new ServiceError('That head is no longer in the catalogue.');
+  if (before.basePricePence === v.basePricePence) return;
+  await withTenant(ctx.org.id, (tx) =>
+    recordEvent(tx, {
+      organisationId: ctx.org.id, actor: ctx.actor, eventType: 'settings_changed', entityType: 'organisation', entityId: ctx.org.id,
+      oldValue: { model: before.name, basePricePence: before.basePricePence }, newValue: { model: before.name, ...v },
+      metadata: { section: 'catalogue.model_price' },
+    }),
+  );
+}
+
 /** Catalogue items are retired, never deleted, so old quotes keep their references. */
 export async function setCatalogActive(ctx: Ctx, kind: 'brand' | 'model' | 'component', id: string, active: boolean) {
   requireRole(ctx, 'manager', 'edit the product catalogue');
