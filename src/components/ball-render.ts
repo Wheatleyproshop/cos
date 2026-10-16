@@ -259,29 +259,48 @@ export function photoDecal(img: CanvasImageSource & { width: number; height: num
   const id = ctx.getImageData(0, 0, DECAL, DECAL);
   const d = id.data;
   const R = DECAL / 2;
-  // White point: the bright, unprinted ball surface near the centre.
-  const lums: number[] = [];
-  for (let y = 0; y < DECAL; y += 4) {
-    for (let x = 0; x < DECAL; x += 4) {
-      const rr = Math.hypot(x - R, y - R) / R;
+  // The photo's own lighting falls off towards the rim, so the "unprinted white" is measured
+  // ring by ring (a high percentile, since ink and dimple shadows are the darker minority).
+  const RINGS = 48;
+  const samples: number[][] = Array.from({ length: RINGS }, () => []);
+  for (let y = 0; y < DECAL; y += 2) {
+    for (let x = 0; x < DECAL; x += 2) {
+      const rr = Math.hypot(x + 0.5 - R, y + 0.5 - R) / R;
       const i = (y * DECAL + x) * 4;
-      if (rr < 0.7 && d[i + 3] > 200) lums.push(0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2]);
+      if (rr < 1 && d[i + 3] > 200) samples[Math.min(RINGS - 1, Math.floor(rr * RINGS))].push(0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2]);
     }
   }
-  lums.sort((a, b) => a - b);
-  const white = Math.max(40, lums[Math.floor(lums.length * 0.9)] ?? 255);
+  const ringWhite = samples.map((a) => {
+    if (a.length < 8) return 0;
+    a.sort((p, q) => p - q);
+    return a[Math.floor(a.length * 0.85)];
+  });
+  // Fill gaps and smooth so the white point changes gently from ring to ring.
+  for (let k = 1; k < RINGS; k++) if (!ringWhite[k]) ringWhite[k] = ringWhite[k - 1];
+  for (let k = RINGS - 2; k >= 0; k--) if (!ringWhite[k]) ringWhite[k] = ringWhite[k + 1] || 255;
+  const white = ringWhite.map((_, k) => {
+    let sum = 0;
+    let n = 0;
+    for (let j = Math.max(0, k - 2); j <= Math.min(RINGS - 1, k + 2); j++) {
+      sum += ringWhite[j];
+      n++;
+    }
+    return Math.max(40, sum / n);
+  });
   for (let y = 0; y < DECAL; y++) {
     for (let x = 0; x < DECAL; x++) {
       const i = (y * DECAL + x) * 4;
       const rr = Math.hypot(x + 0.5 - R, y + 0.5 - R) / R;
-      const lum = (0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2]) / white;
+      const w = white[Math.min(RINGS - 1, Math.floor(rr * RINGS))];
+      const lum = (0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2]) / w;
       // Keep only clearly printed pixels; soft shading and dimple shadows become "no ink".
-      const ink = 1 - smooth(0.6, 0.86, lum);
-      const edge = 1 - smooth(0.55, 0.74, rr);
+      const ink = 1 - smooth(0.58, 0.82, lum);
+      // Very near the rim the photo is too foreshortened and dark to trust.
+      const edge = 1 - smooth(0.86, 0.95, rr);
       const a = d[i + 3] < 128 ? 0 : ink * edge;
-      d[i] = Math.min(255, (d[i] / white) * 255);
-      d[i + 1] = Math.min(255, (d[i + 1] / white) * 255);
-      d[i + 2] = Math.min(255, (d[i + 2] / white) * 255);
+      d[i] = Math.min(255, (d[i] / w) * 255);
+      d[i + 1] = Math.min(255, (d[i + 1] / w) * 255);
+      d[i + 2] = Math.min(255, (d[i + 2] / w) * 255);
       d[i + 3] = Math.round(a * 255);
     }
   }
