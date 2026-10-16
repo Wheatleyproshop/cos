@@ -7,15 +7,17 @@ import { hasFeature } from '../plans';
 import { issueTrackingLink, paymentTotals } from './common';
 import { orderEmailContext } from './orders';
 import { runBackup } from './backups';
+import { runMonthlyReport } from './performance-report';
 
 /**
  * Daily scheduled work (Vercel Cron → /api/cron/daily):
  * - collection reminders for orders ready but uncollected beyond the org threshold
  * - nightly COS-hosted backup for plans that include it
+ * - the monthly performance report, once each month has finished
  */
 export async function runDailyJobs(now = new Date()) {
   const orgs = await systemDb().select().from(organisations);
-  const summary: Record<string, { reminders: number; backup: string }> = {};
+  const summary: Record<string, { reminders: number; backup: string; report: string }> = {};
 
   for (const org of orgs) {
     const cutoff = new Date(now.getTime() - org.readyUncollectedDays * 86_400_000);
@@ -63,7 +65,13 @@ export async function runDailyJobs(now = new Date()) {
         backup = `failed: ${e instanceof Error ? e.message : e}`;
       }
     }
-    summary[org.slug] = { reminders: ids.length, backup };
+    let report: string;
+    try {
+      report = await runMonthlyReport(org, { type: 'system', label: 'COS monthly report' }, now);
+    } catch (e) {
+      report = `failed: ${e instanceof Error ? e.message : e}`;
+    }
+    summary[org.slug] = { reminders: ids.length, backup, report };
   }
   return summary;
 }

@@ -71,6 +71,8 @@ export const organisations = pgTable('organisations', {
   }),
   /** Off = payments are taken at the shop's till: no Payments section, no balance check at collection. */
   paymentTracking: boolean('payment_tracking').notNull().default(true),
+  /** Monthly performance email: on/off, who gets it (empty = the owner/admins), last month sent (YYYY-MM). */
+  performanceReport: jsonb('performance_report').$type<PerformanceReportSettings>().notNull().default({ enabled: true, recipients: [] }),
   /** Golf ball printing: one-off artwork setup charge added to each print quote. */
   ballSetupFeePence: integer('ball_setup_fee_pence').notNull().default(0),
   readyUncollectedDays: integer('ready_uncollected_days').notNull().default(7),
@@ -541,6 +543,7 @@ export const configurationQuoteItems = pgTable('configuration_quote_items', {
 });
 
 export type Organisation = typeof organisations.$inferSelect;
+export type PerformanceReportSettings = { enabled: boolean; recipients: string[]; lastSentMonth?: string };
 export type User = typeof users.$inferSelect;
 export type Customer = typeof customers.$inferSelect;
 export type Order = typeof orders.$inferSelect;

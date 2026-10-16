@@ -52,7 +52,9 @@ export type EventType =
   | 'password_reset_requested'
   | 'data_exported'
   | 'backup_completed'
-  | 'backup_failed';
+  | 'backup_failed'
+  | 'performance_report_sent'
+  | 'performance_report_failed';
 
 export type EventInput = {
   organisationId: string;

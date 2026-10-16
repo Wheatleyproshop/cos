@@ -120,8 +120,14 @@ function buckets(period: PeriodKey, from: Date, now: Date, tz: string): Bucket[]
   return out;
 }
 
-export async function getPerformance(org: Organisation, period: PeriodKey, now = new Date()) {
-  const p = PERIODS.find((x) => x.key === period)!;
+/** An exact reporting window (e.g. last calendar month), compared with the window before it. */
+export type ReportRange = { key: 'month'; label: string; from: Date; to: Date; prevFrom: Date };
+
+export async function getPerformance(org: Organisation, period: PeriodKey | ReportRange, now = new Date()) {
+  const range = typeof period === 'string' ? null : period;
+  const p: { key: string; label: string; days: number | null } = range
+    ? { key: range.key, label: range.label, days: null }
+    : PERIODS.find((x) => x.key === period)!;
   const { allOrders, allQuotes, staff, statusEvents } = await withTenant(org.id, async (tx) => {
     const allOrders = await tx
       .select({
@@ -142,8 +148,9 @@ export async function getPerformance(org: Organisation, period: PeriodKey, now =
   });
 
   const first = allOrders.reduce<Date | null>((m, o) => (!m || o.createdAt < m ? o.createdAt : m), null);
-  const from = p.days ? new Date(now.getTime() - p.days * DAY) : (first ?? now);
-  const inPeriod = <T extends { createdAt: Date }>(r: T) => r.createdAt >= from && r.createdAt <= now;
+  const end = range ? range.to : now;
+  const from = range ? range.from : p.days ? new Date(now.getTime() - p.days * DAY) : (first ?? now);
+  const inPeriod = <T extends { createdAt: Date }>(r: T) => r.createdAt >= from && (range ? r.createdAt < end : r.createdAt <= end);
   const periodOrders = allOrders.filter(inPeriod);
 
   // When each order was actually placed with the supplier, and whether it was ever delayed.
@@ -158,14 +165,14 @@ export async function getPerformance(org: Organisation, period: PeriodKey, now =
 
   // Headline figures, compared with the previous period of the same length.
   const value = periodOrders.reduce((s, o) => s + o.totalGrossPence, 0);
-  const prevFrom = p.days ? new Date(from.getTime() - p.days * DAY) : null;
+  const prevFrom = range ? range.prevFrom : p.days ? new Date(from.getTime() - p.days * DAY) : null;
   const prevOrders = prevFrom ? allOrders.filter((o) => o.createdAt >= prevFrom && o.createdAt < from) : [];
   const prevValue = prevOrders.reduce((s, o) => s + o.totalGrossPence, 0);
   const change = (now: number, before: number) => (!prevFrom || !before ? null : Math.round(((now - before) / before) * 100));
   const periodQuotes = allQuotes.filter(inPeriod).filter((q) => q.status !== 'draft');
   const approved = periodQuotes.filter((q) => q.status === 'accepted');
   const approveDays = approved.filter((q) => q.sentAt && q.acceptedAt).map((q) => days(q.sentAt!, q.acceptedAt!));
-  const arrived = allOrders.filter((o) => o.readyAt && o.readyAt >= from && o.readyAt <= now);
+  const arrived = allOrders.filter((o) => o.readyAt && o.readyAt >= from && o.readyAt < (range ? end : new Date(end.getTime() + 1)));
   const turnDays = arrived.map((o) => days(o.createdAt, o.readyAt!));
   const ordersByCustomer = new Map<string, number>();
   for (const o of allOrders) ordersByCustomer.set(o.customerId, (ordersByCustomer.get(o.customerId) ?? 0) + 1);
@@ -174,7 +181,7 @@ export async function getPerformance(org: Organisation, period: PeriodKey, now =
   const open = allOrders.filter((o) => o.status !== 'collected');
 
   // Trend
-  const trend = buckets(period, from, now, org.timezone);
+  const trend = buckets(range ? '30d' : (period as PeriodKey), from, range ? new Date(end.getTime() - 1) : end, org.timezone);
   for (const o of periodOrders) {
     const b = [...trend].reverse().find((x) => x.start <= o.createdAt);
     if (b) {

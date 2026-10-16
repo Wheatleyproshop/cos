@@ -31,6 +31,7 @@ import {
 import { runBackup } from '@/lib/services/backups';
 import { sendTestEmail } from '@/lib/services/test-email';
 import { addBrand, addComponent, addModel, createFittingQuote, setCatalogActive, updateComponentUpcharge, updateModelPrice } from '@/lib/services/fitting';
+import { sendReportNow, updatePerformanceReport } from '@/lib/services/performance-report';
 import { addBall, addStarterBalls, createBallPrintQuote, setBallActive, setBallPhoto, updateBallPrice, updateSetupFee } from '@/lib/services/ball-printing';
 
 const obj = (fd: FormData) => Object.fromEntries([...fd.entries()].filter(([, v]) => typeof v === 'string'));
@@ -370,4 +371,18 @@ export async function componentUpchargeAction(id: string, _: FormState, fd: Form
     await updateComponentUpcharge(ctx, id, obj(fd));
     return 'Upcharge updated.';
   }, fd);
+}
+
+export async function performanceReportAction(_: FormState, fd: FormData) {
+  return act('admin', async (ctx) => {
+    await updatePerformanceReport(ctx, obj(fd));
+    return 'Monthly report settings saved.';
+  }, fd);
+}
+
+export async function sendReportNowAction() {
+  return act('admin', async (ctx) => {
+    const r = await sendReportNow(ctx);
+    return `Sent the ${r.month} report to ${r.recipients.join(', ')}${r.simulated ? ' (simulated — no email provider configured)' : ''}.`;
+  });
 }

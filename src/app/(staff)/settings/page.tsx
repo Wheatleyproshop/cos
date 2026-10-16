@@ -1,6 +1,8 @@
 import type { Metadata } from 'next';
 import { ActionButton } from '@/components/forms';
-import { PaymentTrackingForm, AutomationsForm, NewUserForm, PasswordForm, StoreForm, TeamMemberControls, ThresholdsForm } from '@/components/misc-forms';
+import {
+  AutomationsForm, NewUserForm, PasswordForm, PaymentTrackingForm, PerformanceReportForm, StoreForm, TeamMemberControls, ThresholdsForm,
+} from '@/components/misc-forms';
 import { PageHeader } from '@/components/views';
 import { resolveBrand } from '@/lib/branding';
 import { fromHeader } from '@/lib/email/sender';
@@ -8,6 +10,7 @@ import { hasRole, requireStaff, ROLE_LABELS } from '@/lib/auth';
 import { bytes, stamp } from '@/lib/format';
 import { hasFeature, PLANS } from '@/lib/plans';
 import { getSettingsData } from '@/lib/queries';
+import { reportRecipients } from '@/lib/services/performance-report';
 import {
   automationsAction,
   backupNowAction,
@@ -19,6 +22,8 @@ import {
   paymentTrackingAction,
   updateUserAction,
   resetUserPasswordAction,
+  performanceReportAction,
+  sendReportNowAction,
 } from '../actions';
 
 export const metadata: Metadata = { title: 'Store settings' };
@@ -82,6 +87,28 @@ export default async function SettingsPage() {
           <PaymentTrackingForm action={paymentTrackingAction} enabled={org.paymentTracking} disabled={!admin} />
         </section>
       </div>
+
+      <section className="panel" id="report" style={{ scrollMarginTop: 20 }}>
+        <h2>Monthly performance report</h2>
+        <p>
+          On the 1st of each month COS emails last month’s figures (sales, best sellers, manufacturer turnaround and team sales) with the full
+          spreadsheet attached. {org.performanceReport.lastSentMonth ? `Last report covered ${org.performanceReport.lastSentMonth}.` : ''}
+        </p>
+        <PerformanceReportForm
+          action={performanceReportAction}
+          enabled={org.performanceReport.enabled}
+          recipients={org.performanceReport.recipients}
+          defaultRecipients={await reportRecipients({ ...org, performanceReport: { ...org.performanceReport, recipients: [] } })}
+          disabled={!admin}
+        />
+        {admin ? (
+          <div className="actions" style={{ marginTop: 6 }}>
+            <ActionButton action={sendReportNowAction} className="btn small">
+              Send last month’s report now
+            </ActionButton>
+          </div>
+        ) : null}
+      </section>
 
       <section className="panel">
         <h2>Team</h2>

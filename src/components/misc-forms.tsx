@@ -354,3 +354,38 @@ export function PaymentTrackingForm({ action, enabled, disabled }: { action: Bou
     </ActionForm>
   );
 }
+
+/** Monthly performance email: on/off and who receives it. */
+export function PerformanceReportForm({
+  action, enabled, recipients, defaultRecipients, disabled,
+}: { action: BoundAction; enabled: boolean; recipients: string[]; defaultRecipients: string[]; disabled?: boolean }) {
+  return (
+    <ActionForm action={action}>
+      {(s) => (
+        <>
+          <label className="check">
+            <input type="checkbox" name="enabled" defaultChecked={enabled} disabled={disabled} /> Email last month’s performance on the 1st of each month
+          </label>
+          <div className="fields" style={{ marginTop: 12 }}>
+            <Field
+              state={s}
+              name="recipients"
+              label="Send to"
+              wide
+              textarea
+              defaultValue={recipients.join(', ')}
+              placeholder={defaultRecipients.length ? `Leave empty to send to the owner: ${defaultRecipients.join(', ')}` : 'name@example.com, another@example.com'}
+              hint="Separate addresses with commas. Leave empty to send to the owner/admins."
+            />
+          </div>
+          <FormMessage state={s} />
+          {disabled ? null : (
+            <div className="actions" style={{ marginTop: 10 }}>
+              <Submit className="btn">Save</Submit>
+            </div>
+          )}
+        </>
+      )}
+    </ActionForm>
+  );
+}

@@ -521,3 +521,44 @@ describe('csv export cells', () => {
     expect(csvRow(['PING G440, Max', '=HYPERLINK("x")', 12.5])).toBe('"PING G440, Max","\'=HYPERLINK(""x"")",12.5');
   });
 });
+
+describe('monthly performance report', () => {
+  it('covers the previous calendar month in the shop’s time zone', async () => {
+    const { previousMonth } = await import('@/lib/performance-report');
+    const r = previousMonth('Europe/London', new Date('2026-11-01T07:00:00Z'));
+    expect(r.monthKey).toBe('2026-10');
+    expect(r.label).toBe('October 2026');
+    expect(r.from.toISOString()).toBe('2026-09-30T23:00:00.000Z'); // 1 Oct 00:00 BST
+    expect(r.to.toISOString()).toBe('2026-11-01T00:00:00.000Z'); // 1 Nov 00:00 GMT
+    expect(r.prevFrom.toISOString()).toBe('2026-08-31T23:00:00.000Z');
+  });
+
+  it('sends each finished month once, with the CSV, and records it', async () => {
+    const { runMonthlyReport } = await import('@/lib/services/performance-report');
+    const actor = { type: 'system' as const, label: 'test' };
+    const load = async () => (await systemDb().select().from(organisations).where(eq(organisations.id, org.id)))[0];
+    // A shop's first run only records the month.
+    await systemDb().update(organisations).set({ performanceReport: { enabled: true, recipients: [] } }).where(eq(organisations.id, org.id));
+    expect(await runMonthlyReport(await load(), actor, new Date('2026-11-01T07:00:00Z'))).toBe('initialised');
+    expect(await runMonthlyReport(await load(), actor, new Date('2026-11-02T07:00:00Z'))).toBe('up to date');
+    // A month later, November's report goes out once.
+    expect(await runMonthlyReport(await load(), actor, new Date('2026-12-01T07:00:00Z'))).toMatch(/^sent 2026-11 to 1/);
+    expect(await runMonthlyReport(await load(), actor, new Date('2026-12-02T07:00:00Z'))).toBe('up to date');
+    const sent = await withTenant(org.id, (tx) => tx.select().from(auditEvents).where(eq(auditEvents.eventType, 'performance_report_sent')));
+    expect(sent.at(-1)?.newValueJson).toMatchObject({ month: '2026-11', recipients: 1 });
+    // Turned off: nothing is sent.
+    const off = await load();
+    await systemDb().update(organisations).set({ performanceReport: { ...off.performanceReport, enabled: false } }).where(eq(organisations.id, org.id));
+    expect(await runMonthlyReport(await load(), actor, new Date('2027-01-01T07:00:00Z'))).toBe('off');
+  });
+
+  it('only lets an owner change who gets it, and checks the addresses', async () => {
+    const { updatePerformanceReport } = await import('@/lib/services/performance-report');
+    const fresh = (await systemDb().select().from(organisations).where(eq(organisations.id, org.id)))[0];
+    await expect(updatePerformanceReport({ ...staff, org: fresh }, { enabled: 'on', recipients: 'a@b.com' })).rejects.toThrow(/owner/);
+    await expect(updatePerformanceReport({ ...admin, org: fresh }, { enabled: 'on', recipients: 'not-an-email' })).rejects.toThrow();
+    await updatePerformanceReport({ ...admin, org: fresh }, { enabled: 'on', recipients: 'Aaron@Example.com, will@example.com' });
+    const after = (await systemDb().select().from(organisations).where(eq(organisations.id, org.id)))[0];
+    expect(after.performanceReport).toMatchObject({ enabled: true, recipients: ['aaron@example.com', 'will@example.com'] });
+  });
+});

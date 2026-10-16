@@ -85,6 +85,13 @@
       "when": 1792177855180,
       "tag": "0011_clubs_in_set",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1792181237469,
+      "tag": "0012_performance_report",
+      "breakpoints": true
     }
   ]
 }
