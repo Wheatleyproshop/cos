@@ -26,7 +26,7 @@ export default async function LoginPage() {
         {demo ? (
           <div className="notice" style={{ marginBottom: 0 }}>
             <b>Demo workspace</b>
-            gary@desirablegolf.test (admin), chris@… (manager) or will@… (staff). Password: cos-demo-2026
+            aaron@desirablegolf.test (admin), chris@… (manager) or will@… (staff). Password: cos-demo-2026
           </div>
         ) : null}
       </div>

@@ -290,3 +290,15 @@ details.section[open] { padding-bottom: 16px; }
 .whobtn small { color: var(--muted); }
 .asidebottom .working { margin-top: 8px; font-size: 11px; color: #a7b2c6; }
 .asidebottom .working a { color: #fff; }
+
+/* ── Sidebar logo: matches the app icon (COS + blue dot, GOLF beneath, centred) ── */
+.logo { display: flex; flex-direction: column; align-items: center; text-decoration: none; color: #f4f6f9; margin: 6px 0 40px; }
+.logo-mark { display: inline-flex; align-items: flex-end; font-size: 52px; font-weight: 800; letter-spacing: -2.5px; line-height: 0.95; }
+.logo-dot { width: 11px; height: 11px; border-radius: 50%; background: #1f7bff; margin: 0 0 7px 4px; flex: none; }
+.logo-sub { margin-top: 8px; font-size: 13px; font-weight: 600; letter-spacing: 9px; padding-left: 9px; color: #c9ced6; }
+@media (max-width: 950px) {
+  .logo { margin: 0 0 18px; }
+  .logo-mark { font-size: 20px; letter-spacing: -1px; }
+  .logo-dot { width: 5px; height: 5px; margin: 0 0 3px 2px; }
+  .logo-sub { font-size: 7px; letter-spacing: 3px; padding-left: 3px; margin-top: 3px; }
+}

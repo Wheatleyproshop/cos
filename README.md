@@ -21,7 +21,7 @@ Local development uses **embedded Postgres (PGlite)** stored in `./.data/`. You 
 
 | Demo sign‑in | Role |
 |---|---|
-| `gary@desirablegolf.test` | Owner / Admin |
+| `aaron@desirablegolf.test` | Owner / Admin |
 | `chris@desirablegolf.test` | Manager |
 | `will@desirablegolf.test` | Staff |
 

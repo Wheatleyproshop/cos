@@ -26,9 +26,9 @@ beforeAll(async () => {
   const db = systemDb();
   [org] = await db.select().from(organisations).where(eq(organisations.slug, 'desirable-golf'));
   [other] = await db.select().from(organisations).where(eq(organisations.slug, 'fairway-demo'));
-  const [gary] = await db.select().from(users).where(eq(users.email, 'gary@desirablegolf.test'));
+  const [aaron] = await db.select().from(users).where(eq(users.email, 'aaron@desirablegolf.test'));
   const [will] = await db.select().from(users).where(eq(users.email, 'will@desirablegolf.test'));
-  admin = { org, actor: staffActor(gary), userId: gary.id, role: 'admin' };
+  admin = { org, actor: staffActor(aaron), userId: aaron.id, role: 'admin' };
   staff = { org, actor: staffActor(will), userId: will.id, role: 'staff' };
 });
 
@@ -244,9 +244,9 @@ describe('custom fitting', () => {
 describe('notifications', () => {
   it('shows other staff members’ new orders and approvals, not your own actions', async () => {
     const { listNotifications } = await import('@/lib/services/notifications');
-    const forGary = await listNotifications(org.id, admin.userId!);
-    expect(forGary.items.some((n) => n.title === 'New order received' && n.body.includes('Will Walker'))).toBe(true);
-    expect(forGary.items.some((n) => n.title === 'Quote approved')).toBe(true);
+    const forAaron = await listNotifications(org.id, admin.userId!);
+    expect(forAaron.items.some((n) => n.title === 'New order received' && n.body.includes('Will Walker'))).toBe(true);
+    expect(forAaron.items.some((n) => n.title === 'Quote approved')).toBe(true);
     const forWill = await listNotifications(org.id, staff.userId!);
     expect(forWill.items.some((n) => n.body.includes('taken by Will Walker'))).toBe(false);
   });

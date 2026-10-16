@@ -22,10 +22,12 @@ export function Sidebar({
   const isActive = (href: string) => (href === '/' ? path === '/' : path === href || path.startsWith(href + '/'));
   return (
     <aside aria-label="Main navigation">
-      <Link href="/" className="brand" aria-label="COS Golf overview">
-        COS<span>.</span>
+      <Link href="/" className="logo" aria-label="COS Golf overview">
+        <span className="logo-mark">
+          COS<span className="logo-dot" aria-hidden="true" />
+        </span>
+        <span className="logo-sub">GOLF</span>
       </Link>
-      <div className="subtitle">GOLF</div>
       <nav>
         {NAV.map((n) => (
           <Link key={n.href} href={n.href} className={`nav${isActive(n.href) ? ' active' : ''}`} aria-current={isActive(n.href) ? 'page' : undefined} title={n.label}>

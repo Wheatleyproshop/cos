@@ -18,7 +18,7 @@ async function main() {
     }
     const base = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
     console.log('✓ Seeded Desirable Golf demo workspace');
-    console.log(`  Sign in: gary@desirablegolf.test (admin) · chris@desirablegolf.test (manager) · will@desirablegolf.test (staff)`);
+    console.log(`  Sign in: aaron@desirablegolf.test (admin) · chris@desirablegolf.test (manager) · will@desirablegolf.test (staff)`);
     console.log(`  Password: ${DEMO_PASSWORD}`);
     console.log(`  Customer tracking page: ${base}/t/${DEMO_TRACKING_TOKEN}`);
     console.log(`  Customer quote approval: ${base}/q/${DEMO_QUOTE_TOKEN}`);

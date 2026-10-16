@@ -79,10 +79,10 @@ export async function seedDemo(db: DB, now = new Date()) {
     })
     .returning();
 
-  const [gary, chris, will] = await db
+  const [aaron, chris, will] = await db
     .insert(users)
     .values([
-      { organisationId: org.id, name: 'Gary Hodkin', email: 'gary@desirablegolf.test', role: 'admin', passwordHash },
+      { organisationId: org.id, name: 'Aaron Hodkin', email: 'aaron@desirablegolf.test', role: 'admin', passwordHash },
       { organisationId: org.id, name: 'Chris Long', email: 'chris@desirablegolf.test', role: 'manager', passwordHash },
       { organisationId: org.id, name: 'Will Walker', email: 'will@desirablegolf.test', role: 'staff', passwordHash },
     ])
@@ -95,11 +95,11 @@ export async function seedDemo(db: DB, now = new Date()) {
     storePhone: org.storePhone, openingHours: org.openingHours, brandColor: org.brandColor, brandTheme: org.brandTheme,
   };
 
-  type Ev = { type: string; daysAgo: number; hh: number; mm: number; actor: typeof gary | 'system'; oldV?: unknown; newV?: unknown; meta?: unknown };
+  type Ev = { type: string; daysAgo: number; hh: number; mm: number; actor: typeof aaron | 'system'; oldV?: unknown; newV?: unknown; meta?: unknown };
 
   async function makeOrder(o: {
     number: string; customer: { name: string; email: string; phone: string }; brand: string; product: string; sku: string; spec: string;
-    totalPence: number; depositPence: number; eta: string | null; status: OrderStatus; takenBy: typeof gary;
+    totalPence: number; depositPence: number; eta: string | null; status: OrderStatus; takenBy: typeof aaron;
     createdDaysAgo: number; hh: number; mm: number; supplierRef: string; notes?: string; etaReason?: string;
     readyDaysAgo?: number; collectedDaysAgo?: number; extraPayments?: number; events: Ev[]; emails: EmailAutomationKey[];
   }) {
@@ -129,8 +129,8 @@ export async function seedDemo(db: DB, now = new Date()) {
       await ev({ type: 'payment_recorded', daysAgo: o.createdDaysAgo, hh: o.hh, mm: o.mm + 1, actor: o.takenBy, newV: { kind: 'deposit', amountPence: o.depositPence, method: 'card', reference: '' } });
     }
     if (o.extraPayments) {
-      await db.insert(payments).values({ organisationId: org.id, orderId: row.id, kind: 'payment', amountPence: o.extraPayments, method: 'card', recordedByUserId: gary.id, createdAt: at(o.collectedDaysAgo ?? 0, 9, 10) });
-      await ev({ type: 'payment_recorded', daysAgo: o.collectedDaysAgo ?? 0, hh: 9, mm: 10, actor: gary, newV: { kind: 'payment', amountPence: o.extraPayments, method: 'card', reference: '' } });
+      await db.insert(payments).values({ organisationId: org.id, orderId: row.id, kind: 'payment', amountPence: o.extraPayments, method: 'card', recordedByUserId: aaron.id, createdAt: at(o.collectedDaysAgo ?? 0, 9, 10) });
+      await ev({ type: 'payment_recorded', daysAgo: o.collectedDaysAgo ?? 0, hh: 9, mm: 10, actor: aaron, newV: { kind: 'payment', amountPence: o.extraPayments, method: 'card', reference: '' } });
     }
     for (const e of o.events) await ev(e);
     const paid = o.depositPence + (o.extraPayments ?? 0);
@@ -158,11 +158,11 @@ export async function seedDemo(db: DB, now = new Date()) {
   const james = await makeOrder({
     number: 'COS-1048', customer: { name: 'James Wilson', email: 'james@example.com', phone: '07700 900111' },
     brand: 'PING', product: 'G440 MAX Driver', sku: 'PING-G440-MAX', spec: '10.5° / Alta CB Blue 50 Stiff / Golf Pride MCC +4',
-    totalPence: 52900, depositPence: 10000, eta: addDays(today, 7), status: 'ordered', takenBy: gary, createdDaysAgo: 2, hh: 15, mm: 42,
+    totalPence: 52900, depositPence: 10000, eta: addDays(today, 7), status: 'ordered', takenBy: aaron, createdDaysAgo: 2, hh: 15, mm: 42,
     supplierRef: 'PING-48192',
     events: [
-      { type: 'status_changed', daysAgo: 2, hh: 15, mm: 44, actor: gary, oldV: { status: 'place_order' }, newV: { status: 'ordered' } },
-      { type: 'supplier_reference_changed', daysAgo: 2, hh: 15, mm: 44, actor: gary, oldV: { supplierReference: '' }, newV: { supplierReference: 'PING-48192' } },
+      { type: 'status_changed', daysAgo: 2, hh: 15, mm: 44, actor: aaron, oldV: { status: 'place_order' }, newV: { status: 'ordered' } },
+      { type: 'supplier_reference_changed', daysAgo: 2, hh: 15, mm: 44, actor: aaron, oldV: { supplierReference: '' }, newV: { supplierReference: 'PING-48192' } },
     ],
     emails: ['order_confirmation'],
   });
@@ -187,8 +187,8 @@ export async function seedDemo(db: DB, now = new Date()) {
     supplierRef: 'TM-99217', notes: 'Supplier advised revised ETA', etaReason: 'TaylorMade have told us the shaft is on back order.',
     events: [
       { type: 'status_changed', daysAgo: 5, hh: 9, mm: 11, actor: will, oldV: { status: 'place_order' }, newV: { status: 'ordered' } },
-      { type: 'status_changed', daysAgo: 2, hh: 8, mm: 31, actor: gary, oldV: { status: 'ordered' }, newV: { status: 'delayed' } },
-      { type: 'eta_changed', daysAgo: 2, hh: 8, mm: 31, actor: gary, oldV: { etaDate: addDays(today, 3) }, newV: { etaDate: addDays(today, 13), etaReason: 'TaylorMade have told us the shaft is on back order.' } },
+      { type: 'status_changed', daysAgo: 2, hh: 8, mm: 31, actor: aaron, oldV: { status: 'ordered' }, newV: { status: 'delayed' } },
+      { type: 'eta_changed', daysAgo: 2, hh: 8, mm: 31, actor: aaron, oldV: { etaDate: addDays(today, 3) }, newV: { etaDate: addDays(today, 13), etaReason: 'TaylorMade have told us the shaft is on back order.' } },
     ],
     emails: ['order_confirmation', 'eta_revised'],
   });
@@ -201,7 +201,7 @@ export async function seedDemo(db: DB, now = new Date()) {
     events: [
       { type: 'status_changed', daysAgo: 10, hh: 11, mm: 39, actor: chris, oldV: { status: 'place_order' }, newV: { status: 'ordered' } },
       { type: 'order_ready', daysAgo: 3, hh: 14, mm: 5, actor: chris, oldV: { status: 'ordered' }, newV: { status: 'ready' } },
-      { type: 'order_collected', daysAgo: 2, hh: 9, mm: 12, actor: gary, oldV: { status: 'ready' }, newV: { status: 'collected' }, meta: { balanceOutstandingPence: 0 } },
+      { type: 'order_collected', daysAgo: 2, hh: 9, mm: 12, actor: aaron, oldV: { status: 'ready' }, newV: { status: 'collected' }, meta: { balanceOutstandingPence: 0 } },
     ],
     emails: ['order_confirmation', 'ready_for_collection'],
   });
@@ -216,9 +216,9 @@ export async function seedDemo(db: DB, now = new Date()) {
   await makeOrder({
     number: 'COS-1050', customer: { name: 'Tom Baker', email: 'tom@example.com', phone: '07700 900117' },
     brand: 'Titleist', product: 'Vokey SM10 Wedges', sku: 'TT-SM10', spec: '50.12F / 56.10S / Dynamic Gold S200 / Std lie',
-    totalPence: 39800, depositPence: 5000, eta: addDays(today, -1), status: 'ordered', takenBy: gary, createdDaysAgo: 9, hh: 13, mm: 30,
+    totalPence: 39800, depositPence: 5000, eta: addDays(today, -1), status: 'ordered', takenBy: aaron, createdDaysAgo: 9, hh: 13, mm: 30,
     supplierRef: 'TT-55120',
-    events: [{ type: 'status_changed', daysAgo: 9, hh: 13, mm: 40, actor: gary, oldV: { status: 'place_order' }, newV: { status: 'ordered' } }],
+    events: [{ type: 'status_changed', daysAgo: 9, hh: 13, mm: 40, actor: aaron, oldV: { status: 'place_order' }, newV: { status: 'ordered' } }],
     emails: ['order_confirmation'],
   });
   await makeOrder({
@@ -244,12 +244,12 @@ export async function seedDemo(db: DB, now = new Date()) {
       organisationId: org.id, quoteNumber: 'Q-1001', customerId: emily.id, brand: 'Titleist', product: 'T250 Iron Set', sku: 'TT-T250',
       specificationText: '5–PW / AMT Black S300 / Standard lie', totalGrossPence: 119900, depositRequiredPence: 20000,
       estimatedLeadTime: '2–3 weeks', validUntil: addDays(today, 14), internalNotes: 'Awaiting customer approval',
-      status: 'sent', tokenHash: hashToken(DEMO_QUOTE_TOKEN), createdByUserId: gary.id, createdAt: at(3, 16, 26), sentAt: at(3, 16, 27),
+      status: 'sent', tokenHash: hashToken(DEMO_QUOTE_TOKEN), createdByUserId: aaron.id, createdAt: at(3, 16, 26), sentAt: at(3, 16, 27),
     })
     .returning();
   await db.insert(auditEvents).values([
-    { organisationId: org.id, entityType: 'quote', entityId: quote.id, quoteId: quote.id, customerId: emily.id, actorType: 'user', actorUserId: gary.id, actorLabel: gary.name, eventType: 'quote_created', createdAt: at(3, 16, 26) },
-    { organisationId: org.id, entityType: 'quote', entityId: quote.id, quoteId: quote.id, customerId: emily.id, actorType: 'user', actorUserId: gary.id, actorLabel: gary.name, eventType: 'quote_sent', createdAt: at(3, 16, 27) },
+    { organisationId: org.id, entityType: 'quote', entityId: quote.id, quoteId: quote.id, customerId: emily.id, actorType: 'user', actorUserId: aaron.id, actorLabel: aaron.name, eventType: 'quote_created', createdAt: at(3, 16, 26) },
+    { organisationId: org.id, entityType: 'quote', entityId: quote.id, quoteId: quote.id, customerId: emily.id, actorType: 'user', actorUserId: aaron.id, actorLabel: aaron.name, eventType: 'quote_sent', createdAt: at(3, 16, 27) },
   ]);
 
   // A second retailer — never visible to Desirable Golf staff.
