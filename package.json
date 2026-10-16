@@ -21,7 +21,8 @@
     "shop:create": "tsx scripts/create-shop.ts",
     "plan:set": "tsx scripts/set-plan.ts",
     "backup:local": "tsx --env-file=.env.production.local scripts/backup-local.ts",
-    "staff:add": "tsx --env-file=.env.production.local scripts/add-staff.ts"
+    "staff:add": "tsx --env-file=.env.production.local scripts/add-staff.ts",
+    "catalogue:import": "tsx scripts/import-catalogue.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1152.0",

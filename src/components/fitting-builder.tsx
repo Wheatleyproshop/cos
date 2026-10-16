@@ -28,11 +28,14 @@ export function FittingBuilder({
   action: (prev: FormState, fd: FormData) => Promise<FormState>;
   defaults: { customerName?: string; email?: string; phone?: string };
 }) {
-  const steps = ['Brand', 'Head', ...catalog.categories.map((c) => c.label), 'Summary'];
   const [step, setStep] = useState(0);
   const [brandId, setBrandId] = useState<string | null>(null);
   const [club, setClub] = useState<string>('driver');
   const [modelId, setModelId] = useState<string | null>(null);
+  const chosenModel = catalog.models.find((m) => m.id === modelId) ?? null;
+  // Only show steps that have something to choose for this head (e.g. no shaft step for a putter with none listed).
+  const cats = chosenModel ? catalog.categories.filter((c) => validComponentIds(catalog, chosenModel, c.id).size > 0) : catalog.categories;
+  const steps = ['Brand', 'Head', ...cats.map((c) => c.label), 'Summary'];
   const [picks, setPicks] = useState<Record<string, string | null>>({});
   const [state, formAction, pending] = useActionState(action, null);
 
@@ -69,7 +72,7 @@ export function FittingBuilder({
   const go = (i: number) => {
     if (i <= 1 || modelId) setStep(i);
   };
-  const catForStep = step >= 2 && step < steps.length - 1 ? catalog.categories[step - 2] : null;
+  const catForStep = step >= 2 && step < steps.length - 1 ? cats[step - 2] : null;
 
   return (
     <div className="fitting">
@@ -171,7 +174,7 @@ export function FittingBuilder({
                     >
                       <PartIcon kind={catForStep.key} size={64} />
                       <b>{c.name}</b>
-                      <span className="muted">{upcharge(c) ? `+${money(upcharge(c))}` : 'No upcharge'}</span>
+                      <span className="muted">{upcharge(c) > 0 ? `+${money(upcharge(c))}` : upcharge(c) < 0 ? `−${money(-upcharge(c))}` : 'No upcharge'}</span>
                     </button>
                   ))}
               </div>

@@ -93,24 +93,45 @@ export default async function ProductsPage() {
           </section>
           <section className="panel">
             <h2>Components</h2>
-            {c.categories.map((cat) => (
-              <div key={cat.id}>
-                <h3>{cat.label}</h3>
-                <ul className="attention">
-                  {c.components
-                    .filter((x) => x.categoryId === cat.id)
-                    .map((x) => (
-                      <li key={x.id} style={x.active ? undefined : { opacity: 0.5 }}>
-                        <span>
-                          {x.name}
-                          <div className="muted">{x.upchargePence ? `+${money(x.upchargePence)}` : 'No upcharge'}</div>
-                        </span>
-                        {retire('component', x.id, x.active)}
-                      </li>
-                    ))}
-                </ul>
-              </div>
-            ))}
+            {c.categories.map((cat) => {
+              const inCat = c.components.filter((x) => x.categoryId === cat.id);
+              const groups = [...new Set(inCat.map((x) => x.brandId ?? ''))].sort((a, b) => brandName(a).localeCompare(brandName(b)));
+              return (
+                <details key={cat.id} className="section">
+                  <summary>
+                    {cat.label} <span className="muted">({inCat.length})</span>
+                  </summary>
+                  {groups.map((g) => (
+                    <div key={g || 'all'}>
+                      <h3>{g ? brandName(g) : 'All brands'}</h3>
+                      <ul className="attention">
+                        {inCat
+                          .filter((x) => (x.brandId ?? '') === g)
+                          .map((x) => {
+                            const meta = (x.metadata ?? {}) as { clubCategories?: string[]; modelIds?: string[] };
+                            const fits = meta.modelIds?.length
+                              ? c.models.filter((m) => meta.modelIds!.includes(m.id)).map((m) => m.name).join(', ')
+                              : meta.clubCategories?.length
+                                ? meta.clubCategories.map((k) => CLUB_CATEGORIES.find((cc) => cc.key === k)?.label ?? k).join(', ')
+                                : 'All clubs';
+                            return (
+                              <li key={x.id} style={x.active ? undefined : { opacity: 0.5 }}>
+                                <span>
+                                  {x.name}
+                                  <div className="muted">
+                                    {x.upchargePence > 0 ? `+${money(x.upchargePence)}` : x.upchargePence < 0 ? `−${money(-x.upchargePence)}` : 'No upcharge'} · {fits}
+                                  </div>
+                                </span>
+                                {retire('component', x.id, x.active)}
+                              </li>
+                            );
+                          })}
+                      </ul>
+                    </div>
+                  ))}
+                </details>
+              );
+            })}
             {manager ? (
               <details className="section">
                 <summary>Add a component</summary>
