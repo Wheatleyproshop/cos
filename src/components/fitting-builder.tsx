@@ -8,6 +8,9 @@ import { money } from '@/lib/format';
 import { ClubIcon, PartIcon } from './club-icon';
 import { Field, FormMessage } from './forms';
 
+// Sorts 8° before 10°, and 4-PW before 5-PW.
+const NATURAL = new Intl.Collator('en-GB', { numeric: true, sensitivity: 'base' });
+
 type Category = { id: string; key: string; label: string };
 type Rule = { modelId: string; componentId: string; rule: 'allowed' | 'excluded' | 'default'; upchargeOverridePence: number | null };
 
@@ -164,6 +167,7 @@ export function FittingBuilder({
               <div className="cardgrid">
                 {catalog.components
                   .filter((c) => validComponentIds(catalog, model, catForStep.id).has(c.id))
+                  .sort((a, b) => upcharge(a) - upcharge(b) || NATURAL.compare(a.name, b.name))
                   .map((c) => (
                     <button
                       key={c.id}
