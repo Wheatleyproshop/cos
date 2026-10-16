@@ -1,0 +1,415 @@
+import { and, eq, isNull } from 'drizzle-orm';
+import { withTenant, type DB } from '@/db';
+import { attachments, customers, orders, payments, type Customer, type Order } from '@/db/schema';
+import { recordEvent } from '../audit';
+import { dispatchMessages, enqueueEmail } from '../email/outbox';
+import type { EmailContext } from '../email/templates';
+import { ALLOWED_UPLOAD_TYPES, MAX_UPLOAD_BYTES, storage } from '../storage';
+import { canTransition, statusLabel } from '../status';
+import { newToken } from '../tokens';
+import {
+  attachmentMetaSchema,
+  noteSchema,
+  orderCreateSchema,
+  orderEditSchema,
+  orderUpdateSchema,
+  parse,
+  paymentSchema,
+} from '../validation';
+import { atLeast, findOrCreateCustomer, issueTrackingLink, nextNumber, paidPence, requireRole, ServiceError, type Ctx } from './common';
+
+async function loadOrder(tx: DB, ctx: Ctx, orderId: string) {
+  const [row] = await tx
+    .select({ order: orders, customer: customers })
+    .from(orders)
+    .innerJoin(customers, eq(customers.id, orders.customerId))
+    .where(and(eq(orders.id, orderId), eq(orders.organisationId, ctx.org.id)))
+    .for('update', { of: orders })
+    .limit(1);
+  if (!row) throw new ServiceError('Order not found.');
+  return row;
+}
+
+export function orderEmailContext(o: Order, c: Customer, paid: number, actionUrl?: string): Omit<EmailContext, 'store'> {
+  return {
+    customerName: c.name,
+    reference: o.orderNumber,
+    brand: o.brand,
+    product: o.product,
+    specification: o.specificationText,
+    totalPence: o.totalGrossPence,
+    paidPence: paid,
+    balancePence: o.totalGrossPence - paid,
+    etaDate: o.etaDate,
+    etaReason: o.etaReason,
+    actionUrl,
+  };
+}
+
+/** Creates the order (and customer if new), records any deposit and queues the confirmation. */
+export async function createOrder(ctx: Ctx, raw: unknown, opts: { notify?: boolean } = {}) {
+  if (!ctx.userId) throw new ServiceError('Orders must be taken by a signed-in staff member.');
+  const input = parse(orderCreateSchema, raw);
+  const notify = opts.notify !== false || !atLeast(ctx, 'manager');
+
+  const { order, messageId } = await withTenant(ctx.org.id, async (tx) => {
+    const customer = await findOrCreateCustomer(tx, ctx, { name: input.customerName, email: input.email, phone: input.phone });
+    const orderNumber = await nextNumber(tx, ctx.org.id, 'order');
+    const [order] = await tx
+      .insert(orders)
+      .values({
+        organisationId: ctx.org.id,
+        orderNumber,
+        customerId: customer.id,
+        status: 'place_order',
+        brand: input.brand,
+        product: input.product,
+        sku: input.sku,
+        supplier: input.brand,
+        specificationText: input.specificationText,
+        totalGrossPence: input.totalGrossPence,
+        etaDate: input.etaDate,
+        supplierReference: input.supplierReference,
+        internalNotes: input.internalNotes,
+        takenByUserId: ctx.userId!,
+      })
+      .returning();
+
+    await recordEvent(tx, {
+      organisationId: ctx.org.id,
+      actor: ctx.actor,
+      eventType: 'order_created',
+      entityType: 'order',
+      orderId: order.id,
+      customerId: customer.id,
+      newValue: {
+        orderNumber,
+        status: order.status,
+        brand: order.brand,
+        product: order.product,
+        sku: order.sku,
+        specificationText: order.specificationText,
+        totalGrossPence: order.totalGrossPence,
+        etaDate: order.etaDate,
+        supplierReference: order.supplierReference,
+        takenByUserId: order.takenByUserId,
+      },
+    });
+
+    if (input.depositPence > 0) {
+      await insertPayment(tx, ctx, order.id, { kind: 'deposit', amountPence: input.depositPence, method: input.depositMethod, reference: '' });
+    }
+
+    const link = await issueTrackingLink(tx, ctx.org.id, order.id);
+    const messageId = await enqueueEmail(tx, {
+      org: ctx.org,
+      template: 'order_confirmation',
+      recipient: customer.email,
+      customerId: customer.id,
+      orderId: order.id,
+      context: orderEmailContext(order, customer, input.depositPence, link),
+      actor: ctx.actor,
+      suppressedBy: notify ? null : actorName(ctx),
+    });
+    return { order, messageId };
+  });
+
+  await dispatchMessages(ctx.org, [messageId]);
+  return order;
+}
+
+function actorName(ctx: Ctx) {
+  return ctx.actor.type === 'user' ? ctx.actor.name : 'COS';
+}
+
+async function insertPayment(
+  tx: DB,
+  ctx: Ctx,
+  orderId: string,
+  p: { kind: 'deposit' | 'payment' | 'refund'; amountPence: number; method: (typeof payments.$inferInsert)['method']; reference: string },
+) {
+  if (!ctx.userId) throw new ServiceError('Payments must be recorded by a signed-in staff member.');
+  const [row] = await tx
+    .insert(payments)
+    .values({ organisationId: ctx.org.id, orderId, recordedByUserId: ctx.userId, ...p })
+    .returning();
+  await recordEvent(tx, {
+    organisationId: ctx.org.id,
+    actor: ctx.actor,
+    eventType: 'payment_recorded',
+    entityType: 'order',
+    orderId,
+    newValue: { paymentId: row.id, kind: row.kind, amountPence: row.amountPence, method: row.method, reference: row.reference },
+  });
+  return row;
+}
+
+/**
+ * Status / ETA / supplier reference changes from the order panel.
+ * Triggers the ETA-revised and ready-for-collection automations.
+ */
+export async function updateOrderProgress(ctx: Ctx, orderId: string, raw: unknown) {
+  const input = parse(orderUpdateSchema, raw);
+  const notify = input.notify || !atLeast(ctx, 'manager');
+
+  const messageIds = await withTenant(ctx.org.id, async (tx) => {
+    const { order, customer } = await loadOrder(tx, ctx, orderId);
+    if (order.archivedAt) throw new ServiceError('Restore this order before changing it.');
+    const ids: (string | null)[] = [];
+    const patch: Partial<typeof orders.$inferInsert> = {};
+    const now = new Date();
+    const base = { organisationId: ctx.org.id, actor: ctx.actor, entityType: 'order' as const, orderId, customerId: customer.id };
+
+    // Supplier reference
+    if (input.supplierReference !== order.supplierReference) {
+      patch.supplierReference = input.supplierReference;
+      await recordEvent(tx, {
+        ...base,
+        eventType: 'supplier_reference_changed',
+        oldValue: { supplierReference: order.supplierReference },
+        newValue: { supplierReference: input.supplierReference },
+      });
+    }
+
+    // Status
+    const statusChanged = input.status !== order.status;
+    if (statusChanged) {
+      if (!canTransition(order.status, input.status)) {
+        throw new ServiceError(`An order cannot move from ${statusLabel(order.status)} to ${statusLabel(input.status)}.`, {
+          status: 'Choose a valid next step',
+        });
+      }
+      if (order.status === 'collected') requireRole(ctx, 'manager', 're-open a collected order');
+      patch.status = input.status;
+      patch.statusChangedAt = now;
+      let balance = 0;
+      if (input.status === 'collected') {
+        balance = order.totalGrossPence - (await paidPence(tx, orderId));
+        if (balance > 0 && !input.collectWithBalance) {
+          throw new ServiceError(
+            `This order still has a balance outstanding. Record the payment first, or confirm collection with a balance outstanding.`,
+            { collectWithBalance: 'Confirm to collect with a balance outstanding' },
+          );
+        }
+        patch.collectedAt = now;
+      }
+      if (input.status === 'ready') patch.readyAt = now;
+      await recordEvent(tx, {
+        ...base,
+        eventType: input.status === 'ready' ? 'order_ready' : input.status === 'collected' ? 'order_collected' : 'status_changed',
+        oldValue: { status: order.status },
+        newValue: { status: input.status },
+        metadata: input.status === 'collected' ? { balanceOutstandingPence: Math.max(balance, 0) } : undefined,
+      });
+    }
+
+    // ETA
+    const etaChanged = input.etaDate !== order.etaDate;
+    if (etaChanged || (input.etaReason && input.etaReason !== order.etaReason)) {
+      patch.etaDate = input.etaDate;
+      patch.etaReason = input.etaReason;
+      if (etaChanged) {
+        await recordEvent(tx, {
+          ...base,
+          eventType: 'eta_changed',
+          oldValue: { etaDate: order.etaDate },
+          newValue: { etaDate: input.etaDate, etaReason: input.etaReason },
+        });
+      }
+    }
+
+    if (Object.keys(patch).length === 0) return ids;
+    patch.updatedAt = now;
+    const [updated] = await tx.update(orders).set(patch).where(eq(orders.id, orderId)).returning();
+
+    // Customer notifications
+    const willBeReady = statusChanged && input.status === 'ready';
+    const becameDelayed = statusChanged && input.status === 'delayed';
+    if (willBeReady || ((etaChanged || becameDelayed) && updated.status !== 'collected')) {
+      const paid = await paidPence(tx, orderId);
+      const link = await issueTrackingLink(tx, ctx.org.id, orderId);
+      const ctxEmail = orderEmailContext(updated, customer, paid, link);
+      const suppressedBy = notify ? null : actorName(ctx);
+      if (willBeReady) {
+        ids.push(
+          await enqueueEmail(tx, {
+            org: ctx.org, template: 'ready_for_collection', recipient: customer.email, customerId: customer.id,
+            orderId, context: ctxEmail, actor: ctx.actor, suppressedBy,
+          }),
+        );
+      } else {
+        ids.push(
+          await enqueueEmail(tx, {
+            org: ctx.org, template: 'eta_revised', recipient: customer.email, customerId: customer.id, orderId,
+            context: { ...ctxEmail, previousEtaDate: etaChanged ? order.etaDate : null },
+            actor: ctx.actor, suppressedBy,
+          }),
+        );
+      }
+    }
+    return ids;
+  });
+
+  await dispatchMessages(ctx.org, messageIds);
+}
+
+/** Product, specification, price and notes. Each change is diffed onto the ledger. */
+export async function editOrderDetails(ctx: Ctx, orderId: string, raw: unknown) {
+  const input = parse(orderEditSchema, raw);
+  await withTenant(ctx.org.id, async (tx) => {
+    const { order } = await loadOrder(tx, ctx, orderId);
+    if (order.archivedAt) throw new ServiceError('Restore this order before changing it.');
+    const keys = ['brand', 'product', 'sku', 'totalGrossPence', 'supplier', 'supplierNotes', 'internalNotes'] as const;
+    const oldV: Record<string, unknown> = {};
+    const newV: Record<string, unknown> = {};
+    for (const k of keys) {
+      if (input[k] !== order[k]) {
+        oldV[k] = order[k];
+        newV[k] = input[k];
+      }
+    }
+    const specChanged = input.specificationText !== order.specificationText;
+    if (!specChanged && Object.keys(newV).length === 0) return;
+    await tx
+      .update(orders)
+      .set({ ...newV, ...(specChanged ? { specificationText: input.specificationText } : {}), updatedAt: new Date() })
+      .where(eq(orders.id, orderId));
+    const base = { organisationId: ctx.org.id, actor: ctx.actor, entityType: 'order' as const, orderId, customerId: order.customerId };
+    if (specChanged) {
+      await recordEvent(tx, {
+        ...base,
+        eventType: 'specification_changed',
+        oldValue: { specificationText: order.specificationText },
+        newValue: { specificationText: input.specificationText },
+      });
+    }
+    if (Object.keys(newV).length) {
+      await recordEvent(tx, { ...base, eventType: 'order_details_changed', oldValue: oldV, newValue: newV });
+    }
+  });
+}
+
+export async function recordPayment(ctx: Ctx, orderId: string, raw: unknown) {
+  const input = parse(paymentSchema, raw);
+  if (input.kind === 'refund') requireRole(ctx, 'manager', 'record a refund or correction');
+  await withTenant(ctx.org.id, async (tx) => {
+    const { order } = await loadOrder(tx, ctx, orderId);
+    if (order.archivedAt) throw new ServiceError('Restore this order before recording payments.');
+    const paid = await paidPence(tx, orderId);
+    if (input.kind === 'refund' && input.amountPence > paid) {
+      throw new ServiceError('A refund cannot exceed the amount paid.', { amountPence: `Maximum refund is £${(paid / 100).toFixed(2)}` });
+    }
+    await insertPayment(tx, ctx, orderId, input);
+  });
+}
+
+export async function addNote(ctx: Ctx, orderId: string, raw: unknown) {
+  const { note } = parse(noteSchema, raw);
+  await withTenant(ctx.org.id, async (tx) => {
+    const { order } = await loadOrder(tx, ctx, orderId);
+    await recordEvent(tx, {
+      organisationId: ctx.org.id,
+      actor: ctx.actor,
+      eventType: 'note_added',
+      entityType: 'order',
+      orderId,
+      customerId: order.customerId,
+      newValue: { note },
+    });
+  });
+}
+
+export async function setArchived(ctx: Ctx, orderId: string, archived: boolean) {
+  requireRole(ctx, 'manager', archived ? 'archive orders' : 'restore orders');
+  await withTenant(ctx.org.id, async (tx) => {
+    const { order } = await loadOrder(tx, ctx, orderId);
+    if (Boolean(order.archivedAt) === archived) return;
+    await tx.update(orders).set({ archivedAt: archived ? new Date() : null, updatedAt: new Date() }).where(eq(orders.id, orderId));
+    await recordEvent(tx, {
+      organisationId: ctx.org.id,
+      actor: ctx.actor,
+      eventType: archived ? 'order_archived' : 'order_restored',
+      entityType: 'order',
+      orderId,
+      customerId: order.customerId,
+    });
+  });
+}
+
+export async function createTrackingLink(ctx: Ctx, orderId: string): Promise<string> {
+  return withTenant(ctx.org.id, async (tx) => {
+    const { order } = await loadOrder(tx, ctx, orderId);
+    const url = await issueTrackingLink(tx, ctx.org.id, orderId);
+    await recordEvent(tx, {
+      organisationId: ctx.org.id,
+      actor: ctx.actor,
+      eventType: 'tracking_link_created',
+      entityType: 'order',
+      orderId,
+      customerId: order.customerId,
+    });
+    return url;
+  });
+}
+
+export async function addAttachment(ctx: Ctx, orderId: string, file: File, rawMeta: unknown) {
+  if (!ctx.userId) throw new ServiceError('Sign in to upload files.');
+  const meta = parse(attachmentMetaSchema, rawMeta);
+  if (!file || file.size === 0) throw new ServiceError('Choose a file to upload.', { file: 'Choose a file' });
+  if (file.size > MAX_UPLOAD_BYTES) throw new ServiceError('Files must be 4 MB or smaller.', { file: 'Too large (max 4 MB)' });
+  const ext = ALLOWED_UPLOAD_TYPES[file.type];
+  if (!ext) throw new ServiceError('That file type is not supported. Upload a PDF, image, CSV, Word or Excel file.', { file: 'Unsupported type' });
+
+  const filename = file.name.replace(/[^\w.\- ()]/g, '_').slice(0, 150) || `upload.${ext}`;
+  const key = `orgs/${ctx.org.id}/orders/${orderId}/${newToken().slice(0, 16)}.${ext}`;
+
+  // Confirm the order belongs to this organisation before writing anything.
+  await withTenant(ctx.org.id, (tx) => loadOrder(tx, ctx, orderId));
+  await storage().put(key, Buffer.from(await file.arrayBuffer()), file.type);
+
+  await withTenant(ctx.org.id, async (tx) => {
+    const [row] = await tx
+      .insert(attachments)
+      .values({
+        organisationId: ctx.org.id,
+        orderId,
+        storageKey: key,
+        filename,
+        mimeType: file.type,
+        sizeBytes: file.size,
+        category: meta.category,
+        visibility: meta.visibility,
+        uploadedByUserId: ctx.userId!,
+      })
+      .returning();
+    await recordEvent(tx, {
+      organisationId: ctx.org.id,
+      actor: ctx.actor,
+      eventType: 'attachment_added',
+      entityType: 'order',
+      orderId,
+      newValue: { attachmentId: row.id, filename, category: meta.category, visibility: meta.visibility },
+    });
+  });
+}
+
+export async function archiveAttachment(ctx: Ctx, attachmentId: string) {
+  await withTenant(ctx.org.id, async (tx) => {
+    const [a] = await tx
+      .select()
+      .from(attachments)
+      .where(and(eq(attachments.id, attachmentId), isNull(attachments.archivedAt)))
+      .limit(1);
+    if (!a) throw new ServiceError('Attachment not found.');
+    if (a.uploadedByUserId !== ctx.userId) requireRole(ctx, 'manager', "archive another staff member's attachment");
+    await tx.update(attachments).set({ archivedAt: new Date() }).where(eq(attachments.id, attachmentId));
+    await recordEvent(tx, {
+      organisationId: ctx.org.id,
+      actor: ctx.actor,
+      eventType: 'attachment_archived',
+      entityType: 'order',
+      orderId: a.orderId,
+      oldValue: { attachmentId: a.id, filename: a.filename },
+    });
+  });
+}

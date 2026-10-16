@@ -1,0 +1,413 @@
+import Link from 'next/link';
+import { notFound } from 'next/navigation';
+import {
+  acceptInStoreAction,
+  addNoteAction,
+  approvalLinkAction,
+  archiveAttachmentAction,
+  archiveOrderAction,
+  closeQuoteAction,
+  createRequestAction,
+  editOrderAction,
+  editQuoteAction,
+  recordPaymentAction,
+  sendQuoteAction,
+  trackingLinkAction,
+  updateProgressAction,
+  uploadAttachmentAction,
+} from '@/app/(staff)/actions';
+import { hasRole, type Staff } from '@/lib/auth';
+import { templateName } from '@/lib/audit';
+import { bytes, longDate, money, niceDate, penceToInput, stamp, titleCase } from '@/lib/format';
+import { getCustomerDetail, getOrderDetail, getQuoteDetail } from '@/lib/queries';
+import { canTransition, DEFAULT_WORKFLOW, QUOTE_STATUS_LABELS, statusLabel } from '@/lib/status';
+import { CancelButton } from './cancel-button';
+import { CloseButton } from './chrome';
+import { ActionButton, LinkGenerator } from './forms';
+import { AcceptInStoreForm, EditQuoteForm } from './misc-forms';
+import { AttachmentForm, CreateRequestForm, EditOrderForm, NoteForm, PaymentForm, ProgressForm, type RequestDefaults } from './order-forms';
+import { Badge, DetailBox, MessageBadge, Timeline } from './views';
+
+/* ── Order ───────────────────────────────────────────────────────────── */
+
+export async function OrderDetail({ staff, number, inModal }: { staff: Staff; number: string; inModal: boolean }) {
+  const d = await getOrderDetail(staff.org, decodeURIComponent(number));
+  if (!d) notFound();
+  const { order: o, customer: c } = d;
+  const tz = staff.org.timezone;
+  const manager = hasRole(staff, 'manager');
+  const statusOptions = DEFAULT_WORKFLOW.filter((s) => canTransition(o.status, s.key)).map((s) => ({ value: s.key, label: s.label }));
+
+  return (
+    <>
+      <div className="modalhead">
+        <div>
+          <div className="eyebrow">{o.orderNumber} / CUSTOMER ORDER</div>
+          <h2>
+            {o.brand} {o.product}
+          </h2>
+        </div>
+        <CloseButton fallback="/orders" inModal={inModal} />
+      </div>
+      <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginBottom: 20, flexWrap: 'wrap' }}>
+        <Badge status={o.status} text={statusLabel(o.status)} />
+        {o.archivedAt ? <span className="badge">Archived</span> : null}
+        <span className="muted" style={{ marginTop: 0 }}>
+          <Link href={`/customers/${c.id}`}>{c.name}</Link> · <a href={`mailto:${c.email}`}>{c.email}</a>
+          {c.phone ? (
+            <>
+              {' '}
+              · <a href={`tel:${c.phone.replace(/\s/g, '')}`}>{c.phone}</a>
+            </>
+          ) : null}
+        </span>
+      </div>
+
+      {d.flags.length ? (
+        <div className="notice warn" role="status">
+          <b>Needs attention</b>
+          {d.flags.map((f) => f.label).join(' · ')}
+        </div>
+      ) : null}
+
+      <div className="detailgrid">
+        <DetailBox label="Custom specification">{o.specificationText}</DetailBox>
+        <DetailBox label="Product ID">{o.sku || '—'}</DetailBox>
+        <DetailBox label="Order value / Paid" sub={`Balance due: ${money(d.balance)}`}>
+          {money(o.totalGrossPence)} / {money(d.paid)}
+        </DetailBox>
+        <DetailBox label="Current ETA" sub={o.etaReason ? `Customer told: “${o.etaReason}”` : undefined}>
+          {niceDate(o.etaDate)}
+        </DetailBox>
+        <DetailBox label="Order taken by" sub={stamp(o.createdAt, tz)}>
+          {d.takenByName}
+        </DetailBox>
+        <DetailBox label="Supplier reference" sub={o.supplier ? `Supplier: ${o.supplier}` : undefined}>
+          {o.supplierReference || 'Not added'}
+        </DetailBox>
+      </div>
+      {d.sourceQuoteNumber ? (
+        <p className="muted">
+          Created from accepted quote <Link href={`/quotes/${d.sourceQuoteNumber}`}>{d.sourceQuoteNumber}</Link>.
+        </p>
+      ) : null}
+      {o.internalNotes ? (
+        <div className="notice" style={{ background: '#f7f8f5', color: '#3b4339' }}>
+          <b>Internal notes</b>
+          {o.internalNotes}
+        </div>
+      ) : null}
+
+      {!o.archivedAt ? (
+        <>
+          <h3>Progress</h3>
+          <ProgressForm
+            key={`${o.status}-${o.etaDate}-${o.supplierReference}`}
+            action={updateProgressAction.bind(null, o.id)}
+            order={{ status: o.status, etaDate: o.etaDate, etaReason: o.etaReason, supplierReference: o.supplierReference }}
+            options={statusOptions}
+            canSuppress={manager}
+            balanceText={money(d.balance)}
+            hasBalance={d.balance > 0}
+          />
+        </>
+      ) : null}
+
+      <h3>Payments</h3>
+      {d.payments.length ? (
+        <div className="tablewrap">
+          <table className="compact">
+            <thead>
+              <tr>
+                <th>When</th>
+                <th>Type</th>
+                <th>Method</th>
+                <th>Recorded by</th>
+                <th className="num">Amount</th>
+              </tr>
+            </thead>
+            <tbody>
+              {d.payments.map(({ p, by }) => (
+                <tr key={p.id}>
+                  <td>{stamp(p.createdAt, tz)}</td>
+                  <td>
+                    {titleCase(p.kind)}
+                    {p.reference ? <div className="muted">Ref {p.reference}</div> : null}
+                  </td>
+                  <td>{titleCase(p.method)}</td>
+                  <td>{by}</td>
+                  <td className="num">{p.kind === 'refund' ? `−${money(p.amountPence)}` : money(p.amountPence)}</td>
+                </tr>
+              ))}
+              <tr>
+                <td colSpan={4}>
+                  <b>Total {money(o.totalGrossPence)} · Paid {money(d.paid)}</b>
+                </td>
+                <td className="num">
+                  <b>Balance {money(d.balance)}</b>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      ) : (
+        <p className="muted">No payments recorded. Balance due {money(d.balance)}.</p>
+      )}
+      {!o.archivedAt ? <PaymentForm action={recordPaymentAction.bind(null, o.id)} canRefund={manager} /> : null}
+
+      <h3>Attachments</h3>
+      {d.attachments.length ? (
+        <ul className="attention">
+          {d.attachments.map(({ a, by }) => (
+            <li key={a.id}>
+              <div>
+                <a href={`/api/attachments/${a.id}`} target="_blank" rel="noopener">
+                  {a.filename}
+                </a>
+                <div className="muted">
+                  {titleCase(a.category)} · {bytes(a.sizeBytes)} · {a.visibility === 'internal' ? 'Staff only' : 'Customer visible'} · {by},{' '}
+                  {stamp(a.createdAt, tz)}
+                </div>
+              </div>
+              <ActionButton action={archiveAttachmentAction.bind(null, a.id)} className="btn small" confirm={`Archive ${a.filename}? It stays in the audit trail.`}>
+                Archive
+              </ActionButton>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="muted">Attach supplier confirmations, fitting sheets, invoices, screenshots or product photos.</p>
+      )}
+      {!o.archivedAt ? <AttachmentForm action={uploadAttachmentAction.bind(null, o.id)} /> : null}
+
+      <h3>Customer communication</h3>
+      {d.messages.length ? (
+        <div className="tablewrap">
+          <table className="compact">
+            <tbody>
+              {d.messages.map((m) => (
+                <tr key={m.id}>
+                  <td>
+                    <Link href={`/emails?view=${m.id}`}>{templateName(m.templateType)}</Link>
+                    <div className="muted">to {m.recipient}</div>
+                  </td>
+                  <td>{stamp(m.createdAt, tz)}</td>
+                  <td className="num">
+                    <MessageBadge status={m.status} simulated={m.simulated} />
+                    {m.error ? <div className="muted">{m.error}</div> : null}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : (
+        <p className="muted">No emails yet.</p>
+      )}
+      <div style={{ marginTop: 12 }}>
+        <LinkGenerator
+          action={trackingLinkAction.bind(null, o.id)}
+          label="Get customer tracking link"
+          note="Read-only page with your branding, status and ETA. Never shows internal notes or supplier details. Shown once — copy it now."
+        />
+      </div>
+
+      {!o.archivedAt ? (
+        <details className="section">
+          <summary>Edit product, specification & price</summary>
+          <EditOrderForm
+            action={editOrderAction.bind(null, o.id)}
+            values={{
+              brand: o.brand, product: o.product, sku: o.sku, specificationText: o.specificationText, total: penceToInput(o.totalGrossPence),
+              supplier: o.supplier, supplierNotes: o.supplierNotes, internalNotes: o.internalNotes,
+            }}
+          />
+        </details>
+      ) : null}
+
+      <h3>Activity timeline</h3>
+      <NoteForm action={addNoteAction.bind(null, o.id)} />
+      <Timeline events={d.events} tz={tz} />
+
+      <div className="actions">
+        {manager ? (
+          <ActionButton
+            action={archiveOrderAction.bind(null, o.id, !o.archivedAt)}
+            className="btn danger"
+            confirm={o.archivedAt ? undefined : 'Archive this order? It will be hidden from lists but kept with its full history.'}
+          >
+            {o.archivedAt ? 'Restore order' : 'Archive order'}
+          </ActionButton>
+        ) : null}
+        <Link href={`/orders/new?customer=${c.id}&from=${o.orderNumber}`} className="btn">
+          Reorder this build
+        </Link>
+      </div>
+    </>
+  );
+}
+
+/* ── Quote ───────────────────────────────────────────────────────────── */
+
+export async function QuoteDetail({ staff, number, inModal }: { staff: Staff; number: string; inModal: boolean }) {
+  const d = await getQuoteDetail(staff.org, decodeURIComponent(number));
+  if (!d) notFound();
+  const { quote: q, customer: c } = d;
+  const tz = staff.org.timezone;
+  const open = ['draft', 'sent'].includes(q.status) && !q.archivedAt;
+
+  return (
+    <>
+      <div className="modalhead">
+        <div>
+          <div className="eyebrow">{q.quoteNumber} / CUSTOMER QUOTE</div>
+          <h2>
+            {q.brand} {q.product}
+          </h2>
+        </div>
+        <CloseButton fallback="/quotes" inModal={inModal} />
+      </div>
+      <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginBottom: 20, flexWrap: 'wrap' }}>
+        <Badge status="quote" text={QUOTE_STATUS_LABELS[q.status]} />
+        <span className="muted" style={{ marginTop: 0 }}>
+          <Link href={`/customers/${c.id}`}>{c.name}</Link> · <a href={`mailto:${c.email}`}>{c.email}</a>
+          {c.phone ? ` · ${c.phone}` : ''}
+        </span>
+      </div>
+      {d.flags.length ? <div className="notice warn">{d.flags.map((f) => f.label).join(' · ')}</div> : null}
+      {d.convertedOrderNumber ? (
+        <div className="notice">
+          <b>Approved {q.acceptedAt ? stamp(q.acceptedAt, tz) : ''}{q.acceptedName ? ` by ${q.acceptedName}` : ''}</b>
+          Converted to order <Link href={`/orders/${d.convertedOrderNumber}`}>{d.convertedOrderNumber}</Link>.
+        </div>
+      ) : null}
+
+      <div className="detailgrid">
+        <DetailBox label="Custom specification">{q.specificationText}</DetailBox>
+        <DetailBox label="Product ID">{q.sku || '—'}</DetailBox>
+        <DetailBox label="Price / Deposit required">
+          {money(q.totalGrossPence)} / {money(q.depositRequiredPence)}
+        </DetailBox>
+        <DetailBox label="Lead time / Valid until">
+          {q.estimatedLeadTime || '—'} / {q.validUntil ? longDate(q.validUntil) : 'No expiry'}
+        </DetailBox>
+        <DetailBox label="Quote created by" sub={stamp(q.createdAt, tz)}>
+          {d.createdByName}
+        </DetailBox>
+        <DetailBox label="Sent to customer">{q.sentAt ? stamp(q.sentAt, tz) : 'Not sent yet'}</DetailBox>
+      </div>
+
+      {open ? (
+        <>
+          <h3>Customer approval</h3>
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'flex-start' }}>
+            <ActionButton action={sendQuoteAction.bind(null, q.id)} className="btn primary">
+              {q.status === 'sent' ? 'Re-send approval email' : 'Email approval link'}
+            </ActionButton>
+            <LinkGenerator
+              action={approvalLinkAction.bind(null, q.id)}
+              label="Get approval link to share"
+              note="Secure, single-use link. Generating a new one revokes earlier links."
+            />
+          </div>
+          <div style={{ marginTop: 16 }}>
+            <AcceptInStoreForm action={acceptInStoreAction.bind(null, q.id)} defaultName={c.name} />
+          </div>
+          <details className="section">
+            <summary>Edit quote</summary>
+            <EditQuoteForm
+              action={editQuoteAction.bind(null, q.id)}
+              values={{
+                brand: q.brand, product: q.product, sku: q.sku, specificationText: q.specificationText, total: penceToInput(q.totalGrossPence),
+                deposit: penceToInput(q.depositRequiredPence), estimatedLeadTime: q.estimatedLeadTime, validUntil: q.validUntil ?? '',
+                internalNotes: q.internalNotes,
+              }}
+            />
+          </details>
+        </>
+      ) : null}
+
+      {d.messages.length ? (
+        <>
+          <h3>Emails</h3>
+          <ul className="attention">
+            {d.messages.map((m) => (
+              <li key={m.id}>
+                <span>
+                  <Link href={`/emails?view=${m.id}`}>{templateName(m.templateType)}</Link> to {m.recipient}
+                  <div className="muted">{stamp(m.createdAt, tz)}</div>
+                </span>
+                <MessageBadge status={m.status} simulated={m.simulated} />
+              </li>
+            ))}
+          </ul>
+        </>
+      ) : null}
+
+      <h3>Activity timeline</h3>
+      <Timeline events={d.events} tz={tz} />
+
+      {open ? (
+        <div className="actions">
+          <ActionButton action={closeQuoteAction.bind(null, q.id, 'declined')} className="btn" confirm="Mark this quote as declined by the customer?">
+            Customer declined
+          </ActionButton>
+          <ActionButton action={closeQuoteAction.bind(null, q.id, 'cancelled')} className="btn danger" confirm="Cancel this quote? The approval link will stop working.">
+            Cancel quote
+          </ActionButton>
+        </div>
+      ) : null}
+    </>
+  );
+}
+
+/* ── New order / quote ───────────────────────────────────────────────── */
+
+export async function NewRequest({
+  staff,
+  inModal,
+  params,
+}: {
+  staff: Staff;
+  inModal: boolean;
+  params: { mode?: string; customer?: string; from?: string };
+}) {
+  const defaults: RequestDefaults = {};
+  if (params.customer) {
+    const cust = await getCustomerDetail(staff.org, params.customer);
+    if (cust) {
+      Object.assign(defaults, { customerName: cust.customer.name, email: cust.customer.email, phone: cust.customer.phone });
+      const build = params.from ? cust.builds.find((b) => b.orderNumber === params.from) : undefined;
+      if (build) Object.assign(defaults, { brand: build.brand, product: build.product, sku: build.sku, specificationText: build.spec });
+    }
+  }
+  const mode = params.mode === 'quote' ? 'quote' : 'order';
+  return (
+    <>
+      <div className="modalhead">
+        <div>
+          <div className="eyebrow">NEW CUSTOMER REQUEST</div>
+          <h2>Create an order or quote</h2>
+        </div>
+        <CloseButton fallback="/" inModal={inModal} />
+      </div>
+      <CreateRequestForm
+        action={createRequestAction}
+        staffName={staff.name}
+        canSuppress={hasRole(staff, 'manager')}
+        initialMode={mode}
+        defaults={defaults}
+        cancel={<CancelLink inModal={inModal} />}
+      />
+    </>
+  );
+}
+
+function CancelLink({ inModal }: { inModal: boolean }) {
+  return inModal ? <CancelButton /> : (
+    <Link href="/" className="btn">
+      Cancel
+    </Link>
+  );
+}
+
