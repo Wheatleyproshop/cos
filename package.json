@@ -2,7 +2,7 @@
   "name": "cos",
   "version": "1.0.0",
   "private": true,
-  "description": "COS — Customer Order System for golf professional shops",
+  "description": "COS \u2014 Customer Order System for golf professional shops",
   "engines": {
     "node": ">=20.9"
   },
@@ -18,7 +18,8 @@
     "db:seed": "tsx scripts/seed.ts",
     "setup": "npm run db:migrate && npm run db:seed",
     "vercel-build": "npm run db:migrate && next build",
-    "shop:create": "tsx scripts/create-shop.ts"
+    "shop:create": "tsx scripts/create-shop.ts",
+    "plan:set": "tsx scripts/set-plan.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1152.0",
