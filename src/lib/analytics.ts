@@ -1,0 +1,253 @@
+import { and, eq, inArray } from 'drizzle-orm';
+import { withTenant } from '@/db';
+import { auditEvents, orders, quotes, users, type Organisation } from '@/db/schema';
+import { asBallPrintSpec } from './ball-print';
+import { fitSpec } from './fit-spec';
+import { CLUB_CATEGORIES } from './fitting-rules';
+
+/**
+ * Ordering performance for the Overview: sales, trends, best sellers and how quickly each
+ * manufacturer turns orders around. Computed from the shop's own orders, quotes and audit trail.
+ */
+
+export const PERIODS = [
+  { key: '30d', label: '30 days', days: 30 },
+  { key: '90d', label: '90 days', days: 90 },
+  { key: '12m', label: '12 months', days: 365 },
+  { key: 'all', label: 'All time', days: null },
+] as const;
+export type PeriodKey = (typeof PERIODS)[number]['key'];
+
+export function parsePeriod(v: string | undefined): PeriodKey {
+  return PERIODS.some((p) => p.key === v) ? (v as PeriodKey) : '90d';
+}
+
+type Item = { brand: string; product: string; category: string; valuePence: number; qty: number };
+export type Ranked = { name: string; valuePence: number; count: number };
+export type Turnaround = {
+  brand: string; orders: number; avgDays: number; minDays: number; maxDays: number; medianDays: number;
+  supplierAvgDays: number | null; delayedPct: number;
+};
+export type Bucket = { label: string; start: Date; valuePence: number; count: number };
+
+const DAY = 86_400_000;
+const days = (a: Date, b: Date) => (b.getTime() - a.getTime()) / DAY;
+const round1 = (n: number) => Math.round(n * 10) / 10;
+const median = (xs: number[]) => {
+  const s = [...xs].sort((a, b) => a - b);
+  const m = Math.floor(s.length / 2);
+  return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2;
+};
+
+/** Groups names case-insensitively ("TITLEIST" and "Titleist"), keeping the most common spelling. */
+function rank(items: { name: string; valuePence: number; qty: number }[], limit = 8): Ranked[] {
+  const groups = new Map<string, { names: Map<string, number>; valuePence: number; count: number }>();
+  for (const it of items) {
+    const key = it.name.trim().toLowerCase();
+    if (!key) continue;
+    const g = groups.get(key) ?? { names: new Map(), valuePence: 0, count: 0 };
+    g.names.set(it.name.trim(), (g.names.get(it.name.trim()) ?? 0) + 1);
+    g.valuePence += it.valuePence;
+    g.count += it.qty;
+    groups.set(key, g);
+  }
+  return [...groups.values()]
+    .map((g) => ({ name: [...g.names.entries()].sort((a, b) => b[1] - a[1])[0][0], valuePence: g.valuePence, count: g.count }))
+    .sort((a, b) => b.valuePence - a.valuePence || b.count - a.count)
+    .slice(0, limit);
+}
+
+/** What was actually sold on an order: each fitted club, a ball print job, or the order itself. */
+function itemsOf(o: { brand: string; product: string; totalGrossPence: number; specificationJson: unknown }): Item[] {
+  const fit = fitSpec(o.specificationJson);
+  if (fit) {
+    return fit.builds.map((b) => {
+      const brand = b.brand || (o.brand.includes('/') ? b.title.split(' ')[0] : o.brand);
+      return {
+        brand,
+        product: b.title.startsWith(brand) ? b.title.slice(brand.length).trim() || b.title : b.title,
+        category: CLUB_CATEGORIES.find((c) => c.key === b.category)?.label ?? 'Clubs',
+        valuePence: b.totalPence,
+        qty: 1,
+      };
+    });
+  }
+  const ball = asBallPrintSpec(o.specificationJson);
+  if (ball) {
+    return [{ brand: ball.ball.brand, product: `${ball.ball.name} (printed)`, category: 'Printed balls', valuePence: o.totalGrossPence, qty: 1 }];
+  }
+  return [{ brand: o.brand, product: o.product, category: guessKind(o.product), valuePence: o.totalGrossPence, qty: 1 }];
+}
+
+/** Best guess at what a manually entered order is, from its product name. */
+const KINDS: [RegExp, string][] = [
+  [/\bdrivers?\b/i, 'Drivers'],
+  [/\b(fairway|[3579]\s?-?wood|fw)\b/i, 'Fairways'],
+  [/\b(hybrid|rescue|utility wood)\b/i, 'Hybrids'],
+  [/\b(irons?|iron set|utility iron)\b/i, 'Irons'],
+  [/\bwedges?\b|vokey|\bsm1\d\b/i, 'Wedges'],
+  [/\bputters?\b|scotty|odyssey|spider/i, 'Putters'],
+  [/\bballs?\b|pro ?v1|tp5|chrome (soft|tour)|z-?star/i, 'Balls'],
+  [/\bshoes?\b/i, 'Shoes'],
+  [/\b(bag|trolley|cart)\b/i, 'Bags & trolleys'],
+  [/\b(glove|grip|towel|rangefinder|gps|headcover)s?\b/i, 'Accessories'],
+  [/\b(shirt|polo|jacket|jumper|trousers|shorts|cap|hat|waterproof)s?\b/i, 'Clothing'],
+];
+function guessKind(product: string) {
+  return KINDS.find(([re]) => re.test(product))?.[1] ?? 'Other';
+}
+
+function orderType(specificationJson: unknown) {
+  return fitSpec(specificationJson) ? 'Custom fitting' : asBallPrintSpec(specificationJson) ? 'Ball printing' : 'Standard order';
+}
+
+function buckets(period: PeriodKey, from: Date, now: Date, tz: string): Bucket[] {
+  const out: Bucket[] = [];
+  if (period === '30d' || period === '90d') {
+    // Weeks starting Monday
+    const start = new Date(from);
+    start.setUTCHours(0, 0, 0, 0);
+    start.setUTCDate(start.getUTCDate() - ((start.getUTCDay() + 6) % 7));
+    for (let d = start; d <= now; d = new Date(d.getTime() + 7 * DAY)) {
+      out.push({ label: d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: tz }), start: d, valuePence: 0, count: 0 });
+    }
+  } else {
+    const start = new Date(Date.UTC(from.getUTCFullYear(), from.getUTCMonth(), 1));
+    for (let d = start; d <= now; d = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 1))) {
+      out.push({ label: d.toLocaleDateString('en-GB', { month: 'short', year: '2-digit', timeZone: tz }), start: d, valuePence: 0, count: 0 });
+    }
+  }
+  return out;
+}
+
+export async function getPerformance(org: Organisation, period: PeriodKey, now = new Date()) {
+  const p = PERIODS.find((x) => x.key === period)!;
+  const { allOrders, allQuotes, staff, statusEvents } = await withTenant(org.id, async (tx) => {
+    const allOrders = await tx
+      .select({
+        id: orders.id, brand: orders.brand, product: orders.product, totalGrossPence: orders.totalGrossPence, status: orders.status,
+        createdAt: orders.createdAt, readyAt: orders.readyAt, specificationJson: orders.specificationJson,
+        takenByUserId: orders.takenByUserId, customerId: orders.customerId,
+      })
+      .from(orders);
+    const allQuotes = await tx.select({ status: quotes.status, createdAt: quotes.createdAt, sentAt: quotes.sentAt, acceptedAt: quotes.acceptedAt }).from(quotes);
+    const staff = await tx.select({ id: users.id, name: users.name }).from(users);
+    const statusEvents = allOrders.length
+      ? await tx
+          .select({ orderId: auditEvents.orderId, newValueJson: auditEvents.newValueJson, createdAt: auditEvents.createdAt })
+          .from(auditEvents)
+          .where(and(eq(auditEvents.entityType, 'order'), inArray(auditEvents.eventType, ['status_changed'])))
+      : [];
+    return { allOrders, allQuotes, staff, statusEvents };
+  });
+
+  const first = allOrders.reduce<Date | null>((m, o) => (!m || o.createdAt < m ? o.createdAt : m), null);
+  const from = p.days ? new Date(now.getTime() - p.days * DAY) : (first ?? now);
+  const inPeriod = <T extends { createdAt: Date }>(r: T) => r.createdAt >= from && r.createdAt <= now;
+  const periodOrders = allOrders.filter(inPeriod);
+
+  // When each order was actually placed with the supplier, and whether it was ever delayed.
+  const orderedAt = new Map<string, Date>();
+  const delayed = new Set<string>();
+  for (const e of statusEvents) {
+    if (!e.orderId) continue;
+    const status = (e.newValueJson as { status?: string } | null)?.status;
+    if (status === 'ordered' && (!orderedAt.has(e.orderId) || e.createdAt < orderedAt.get(e.orderId)!)) orderedAt.set(e.orderId, e.createdAt);
+    if (status === 'delayed') delayed.add(e.orderId);
+  }
+
+  // Headline figures, compared with the previous period of the same length.
+  const value = periodOrders.reduce((s, o) => s + o.totalGrossPence, 0);
+  const prevFrom = p.days ? new Date(from.getTime() - p.days * DAY) : null;
+  const prevOrders = prevFrom ? allOrders.filter((o) => o.createdAt >= prevFrom && o.createdAt < from) : [];
+  const prevValue = prevOrders.reduce((s, o) => s + o.totalGrossPence, 0);
+  const change = (now: number, before: number) => (!prevFrom || !before ? null : Math.round(((now - before) / before) * 100));
+  const periodQuotes = allQuotes.filter(inPeriod).filter((q) => q.status !== 'draft');
+  const approved = periodQuotes.filter((q) => q.status === 'accepted');
+  const approveDays = approved.filter((q) => q.sentAt && q.acceptedAt).map((q) => days(q.sentAt!, q.acceptedAt!));
+  const arrived = allOrders.filter((o) => o.readyAt && o.readyAt >= from && o.readyAt <= now);
+  const turnDays = arrived.map((o) => days(o.createdAt, o.readyAt!));
+  const ordersByCustomer = new Map<string, number>();
+  for (const o of allOrders) ordersByCustomer.set(o.customerId, (ordersByCustomer.get(o.customerId) ?? 0) + 1);
+  const periodCustomers = [...new Set(periodOrders.map((o) => o.customerId))];
+  const repeat = periodCustomers.filter((c) => (ordersByCustomer.get(c) ?? 0) > 1).length;
+  const open = allOrders.filter((o) => o.status !== 'collected');
+
+  // Trend
+  const trend = buckets(period, from, now, org.timezone);
+  for (const o of periodOrders) {
+    const b = [...trend].reverse().find((x) => x.start <= o.createdAt);
+    if (b) {
+      b.valuePence += o.totalGrossPence;
+      b.count += 1;
+    }
+  }
+
+  // Best sellers
+  const items = periodOrders.flatMap(itemsOf);
+  const brands = rank(items.map((i) => ({ name: i.brand, valuePence: i.valuePence, qty: i.qty })));
+  const products = rank(items.map((i) => ({ name: `${i.brand} ${i.product}`.trim(), valuePence: i.valuePence, qty: i.qty })));
+  const categories = rank(items.map((i) => ({ name: i.category, valuePence: i.valuePence, qty: i.qty })), 10);
+  const mix = rank(periodOrders.map((o) => ({ name: orderType(o.specificationJson), valuePence: o.totalGrossPence, qty: 1 })), 5);
+  const staffNames = new Map(staff.map((u) => [u.id, u.name]));
+  const team = rank(periodOrders.map((o) => ({ name: staffNames.get(o.takenByUserId) ?? 'Unknown', valuePence: o.totalGrossPence, qty: 1 })), 10);
+
+  // Manufacturer turnaround: order taken → arrived in store, per brand on the order.
+  const perBrand = new Map<string, { name: string; days: number[]; supplier: number[]; delayed: number }>();
+  for (const o of arrived) {
+    const d = days(o.createdAt, o.readyAt!);
+    const placed = orderedAt.get(o.id);
+    const brandNames = [...new Set(itemsOf(o).map((i) => i.brand.trim()))];
+    for (const name of brandNames) {
+      const key = name.toLowerCase();
+      const g = perBrand.get(key) ?? { name, days: [], supplier: [], delayed: 0 };
+      g.days.push(d);
+      if (placed && placed < o.readyAt!) g.supplier.push(days(placed, o.readyAt!));
+      if (delayed.has(o.id)) g.delayed += 1;
+      perBrand.set(key, g);
+    }
+  }
+  const turnaround: Turnaround[] = [...perBrand.values()]
+    .map((g) => ({
+      brand: g.name,
+      orders: g.days.length,
+      avgDays: round1(g.days.reduce((s, x) => s + x, 0) / g.days.length),
+      minDays: round1(Math.min(...g.days)),
+      maxDays: round1(Math.max(...g.days)),
+      medianDays: round1(median(g.days)),
+      supplierAvgDays: g.supplier.length ? round1(g.supplier.reduce((s, x) => s + x, 0) / g.supplier.length) : null,
+      delayedPct: Math.round((g.delayed / g.days.length) * 100),
+    }))
+    .sort((a, b) => b.orders - a.orders || a.avgDays - b.avgDays);
+
+  return {
+    period: p,
+    from,
+    kpis: {
+      valuePence: value,
+      valueChange: change(value, prevValue),
+      orders: periodOrders.length,
+      ordersChange: change(periodOrders.length, prevOrders.length),
+      avgOrderPence: periodOrders.length ? Math.round(value / periodOrders.length) : 0,
+      quotes: periodQuotes.length,
+      quotesApproved: approved.length,
+      approvalRate: periodQuotes.length ? Math.round((approved.length / periodQuotes.length) * 100) : null,
+      avgApproveDays: approveDays.length ? round1(approveDays.reduce((s, x) => s + x, 0) / approveDays.length) : null,
+      avgTurnaroundDays: turnDays.length ? round1(turnDays.reduce((s, x) => s + x, 0) / turnDays.length) : null,
+      arrived: arrived.length,
+      customers: periodCustomers.length,
+      repeatPct: periodCustomers.length ? Math.round((repeat / periodCustomers.length) * 100) : null,
+      openValuePence: open.reduce((s, o) => s + o.totalGrossPence, 0),
+      openOrders: open.length,
+    },
+    trend,
+    brands,
+    products,
+    categories,
+    mix,
+    team,
+    turnaround,
+  };
+}
+
+export type Performance = Awaited<ReturnType<typeof getPerformance>>;

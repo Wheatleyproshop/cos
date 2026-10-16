@@ -6,7 +6,7 @@ import { money } from './format';
  * Stored in `specification_json`; shared by staff pages, customer pages and emails.
  */
 export type SpecLine = { label: string; value: string; pricePence: number; detail?: string };
-export type SpecBuild = { title: string; category?: string; lines: SpecLine[]; notes?: string; totalPence: number };
+export type SpecBuild = { title: string; brand?: string; category?: string; lines: SpecLine[]; notes?: string; totalPence: number };
 export type FitSpec = { kind: 'cos-configure'; version: 2; builds: SpecBuild[]; notes?: string; totalPence: number };
 
 type V1 = {
@@ -29,7 +29,7 @@ export function fitSpec(json: unknown): FitSpec | null {
     ];
     return {
       kind: 'cos-configure', version: 2, totalPence: v1.totalPence,
-      builds: [{ title: `${v1.model.brand} ${v1.model.name}`.trim(), category: v1.model.category, lines, notes: v1.notes, totalPence: v1.totalPence }],
+      builds: [{ title: `${v1.model.brand} ${v1.model.name}`.trim(), brand: v1.model.brand, category: v1.model.category, lines, notes: v1.notes, totalPence: v1.totalPence }],
     };
   }
   return null;

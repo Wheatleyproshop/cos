@@ -493,3 +493,24 @@ describe('multi-club fitting quotes', () => {
     ).rejects.toThrow(/isn’t available/);
   });
 });
+
+describe('performance overview', () => {
+  it('totals sales, ranks brands and measures turnaround from the shop’s orders', async () => {
+    const { getPerformance } = await import('@/lib/analytics');
+    const all = await withTenant(org.id, (tx) => tx.select().from(orders));
+    const p = await getPerformance(org, 'all');
+    expect(p.kpis.orders).toBe(all.length);
+    expect(p.kpis.valuePence).toBe(all.reduce((s, o) => s + o.totalGrossPence, 0));
+    expect(p.brands.length).toBeGreaterThan(0);
+    // Brands are counted per club on multi-club fittings, so totals still add up to sales.
+    const brandTotal = p.brands.reduce((s, b) => s + b.valuePence, 0);
+    expect(brandTotal).toBeLessThanOrEqual(p.kpis.valuePence);
+    for (const t of p.turnaround) {
+      expect(t.avgDays).toBeGreaterThanOrEqual(0);
+      expect(t.minDays).toBeLessThanOrEqual(t.maxDays);
+    }
+    // Other shops' orders never appear.
+    const theirs = await getPerformance(other, 'all');
+    expect(theirs.kpis.valuePence).not.toBe(p.kpis.valuePence);
+  });
+});

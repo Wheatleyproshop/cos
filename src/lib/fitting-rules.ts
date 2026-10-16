@@ -105,5 +105,5 @@ export function priceBuild(catalog: BuildCatalog, model: BuildModel, componentId
       lines.push({ label: cat.label, value: c.name, pricePence: price, detail: perClub ? `${money(price / clubs)} × ${clubs} clubs` : undefined });
     }
   }
-  return { title, category: model.category, lines, notes: notes || undefined, totalPence: lines.reduce((s, l) => s + l.pricePence, 0) };
+  return { title, brand: brand || undefined, category: model.category, lines, notes: notes || undefined, totalPence: lines.reduce((s, l) => s + l.pricePence, 0) };
 }

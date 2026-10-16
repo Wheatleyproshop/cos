@@ -1,15 +1,40 @@
 import Link from 'next/link';
+import { PerformanceView } from '@/components/performance';
 import { PageHeader } from '@/components/views';
 import { parseFilter, WorkList } from '@/components/work-list';
 import { requireStaff } from '@/lib/auth';
 import { greeting } from '@/lib/format';
+import { getPerformance, parsePeriod } from '@/lib/analytics';
 import { listWork, metrics } from '@/lib/queries';
 
-type SP = Promise<{ q?: string; filter?: string }>;
+type SP = Promise<{ q?: string; filter?: string; view?: string; period?: string }>;
+
+function ViewTabs({ view }: { view: 'orders' | 'performance' }) {
+  return (
+    <div className="seg viewtabs" role="tablist" aria-label="Overview">
+      <Link href="/" className={view === 'orders' ? 'on' : ''} role="tab" aria-selected={view === 'orders'} scroll={false}>
+        Orders
+      </Link>
+      <Link href="/?view=performance" className={view === 'performance' ? 'on' : ''} role="tab" aria-selected={view === 'performance'} scroll={false}>
+        Performance
+      </Link>
+    </div>
+  );
+}
 
 export default async function Overview({ searchParams }: { searchParams: SP }) {
   const staff = await requireStaff();
   const sp = await searchParams;
+  if (sp.view === 'performance') {
+    const data = await getPerformance(staff.org, parsePeriod(sp.period));
+    return (
+      <>
+        <PageHeader staff={staff} title={greeting(staff.org.timezone)} sub="How the shop is performing, from your own orders." />
+        <ViewTabs view="performance" />
+        <PerformanceView data={data} />
+      </>
+    );
+  }
   const filter = parseFilter(sp.filter);
   const q = sp.q ?? '';
   const { rows, all } = await listWork(staff.org, { q, filter, scope: 'overview' });
@@ -28,6 +53,7 @@ export default async function Overview({ searchParams }: { searchParams: SP }) {
   return (
     <>
       <PageHeader staff={staff} title={greeting(staff.org.timezone)} sub="Your customer orders, beautifully organised." />
+      <ViewTabs view="orders" />
       <div className="grid">
         {cards.map((c) => (
           <Link key={c.key} href={`/?filter=${c.key}`} className={`metric${c.alert ? ' alert' : ''}`} scroll={false}>
