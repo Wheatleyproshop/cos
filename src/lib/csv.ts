@@ -33,3 +33,14 @@ export function parseCsv(input: string): string[][] {
   }
   return rows.filter((r) => r.some((f) => f.trim() !== ''));
 }
+
+/** One CSV cell, quoted as needed, with spreadsheet formula injection neutralised. */
+export function csvCell(v: unknown): string {
+  const s = v === null || v === undefined ? '' : String(v);
+  const safe = /^[=+\-@\t\r]/.test(s) ? `'${s}` : s;
+  return /[",\n]/.test(safe) ? `"${safe.replace(/"/g, '""')}"` : safe;
+}
+
+export function csvRow(cells: unknown[]): string {
+  return cells.map(csvCell).join(',');
+}

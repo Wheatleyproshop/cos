@@ -466,3 +466,4 @@ details.section[open] { padding-bottom: 16px; }
 .perf .grid { grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); }
 .perf .metric { min-width: 0; }
 .metric-money { font-size: clamp(20px, 5.5vw, 26px) !important; overflow-wrap: anywhere; }
+.perf-bar { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }

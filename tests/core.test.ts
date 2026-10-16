@@ -514,3 +514,10 @@ describe('performance overview', () => {
     expect(theirs.kpis.valuePence).not.toBe(p.kpis.valuePence);
   });
 });
+
+describe('csv export cells', () => {
+  it('quotes commas and neutralises spreadsheet formulas', async () => {
+    const { csvRow } = await import('@/lib/csv');
+    expect(csvRow(['PING G440, Max', '=HYPERLINK("x")', 12.5])).toBe('"PING G440, Max","\'=HYPERLINK(""x"")",12.5');
+  });
+});

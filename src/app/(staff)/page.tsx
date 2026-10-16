@@ -2,7 +2,7 @@ import Link from 'next/link';
 import { PerformanceView } from '@/components/performance';
 import { PageHeader } from '@/components/views';
 import { parseFilter, WorkList } from '@/components/work-list';
-import { requireStaff } from '@/lib/auth';
+import { hasRole, requireStaff } from '@/lib/auth';
 import { greeting } from '@/lib/format';
 import { getPerformance, parsePeriod } from '@/lib/analytics';
 import { listWork, metrics } from '@/lib/queries';
@@ -31,7 +31,7 @@ export default async function Overview({ searchParams }: { searchParams: SP }) {
       <>
         <PageHeader staff={staff} title={greeting(staff.org.timezone)} sub="How the shop is performing, from your own orders." />
         <ViewTabs view="performance" />
-        <PerformanceView data={data} />
+        <PerformanceView data={data} canExport={hasRole(staff, 'manager')} />
       </>
     );
   }

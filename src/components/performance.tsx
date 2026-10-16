@@ -187,7 +187,7 @@ function Change({ pct, period }: { pct: number | null; period: string }) {
   );
 }
 
-export function PerformanceView({ data }: { data: Performance }) {
+export function PerformanceView({ data, canExport }: { data: Performance; canExport?: boolean }) {
   const k = data.kpis;
   const per = data.period.label.toLowerCase();
   const cards = [
@@ -220,12 +220,19 @@ export function PerformanceView({ data }: { data: Performance }) {
   ];
   return (
     <div className="perf">
-      <div className="pills" role="tablist" aria-label="Period">
-        {PERIODS.map((p) => (
-          <Link key={p.key} href={`/?view=performance&period=${p.key}`} className={`pill${p.key === data.period.key ? ' selected' : ''}`} scroll={false} aria-current={p.key === data.period.key ? 'page' : undefined}>
-            {p.label}
-          </Link>
-        ))}
+      <div className="perf-bar">
+        <div className="pills" role="tablist" aria-label="Period">
+          {PERIODS.map((p) => (
+            <Link key={p.key} href={`/?view=performance&period=${p.key}`} className={`pill${p.key === data.period.key ? ' selected' : ''}`} scroll={false} aria-current={p.key === data.period.key ? 'page' : undefined}>
+              {p.label}
+            </Link>
+          ))}
+        </div>
+        {canExport ? (
+          <a className="btn small" href={`/api/export/performance?period=${data.period.key}`} download>
+            ⤓ Download CSV
+          </a>
+        ) : null}
       </div>
 
       <div className="grid">

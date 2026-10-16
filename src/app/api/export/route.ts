@@ -3,16 +3,10 @@ import { withTenant } from '@/db';
 import { customers, orders, users } from '@/db/schema';
 import { staffActor, recordEvent } from '@/lib/audit';
 import { getStaff, hasRole } from '@/lib/auth';
+import { csvCell } from '@/lib/csv';
 import { buildExport } from '@/lib/services/backups';
 import { paidPence } from '@/lib/services/common';
 import { statusLabel } from '@/lib/status';
-
-const csvCell = (v: unknown) => {
-  const s = v === null || v === undefined ? '' : String(v);
-  // Neutralise spreadsheet formula injection.
-  const safe = /^[=+\-@\t\r]/.test(s) ? `'${s}` : s;
-  return /[",\n]/.test(safe) ? `"${safe.replace(/"/g, '""')}"` : safe;
-};
 
 export async function GET(req: Request) {
   const staff = await getStaff();
