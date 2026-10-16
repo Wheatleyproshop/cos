@@ -16,7 +16,7 @@ import {
   parse,
   paymentSchema,
 } from '../validation';
-import { atLeast, findOrCreateCustomer, issueTrackingLink, nextNumber, paidPence, requireRole, ServiceError, type Ctx } from './common';
+import { atLeast, findOrCreateCustomer, issueTrackingLink, nextNumber, paidPence, paymentTotals, requireRole, ServiceError, type Ctx, type PaymentTotals } from './common';
 
 async function loadOrder(tx: DB, ctx: Ctx, orderId: string) {
   const [row] = await tx
@@ -30,7 +30,7 @@ async function loadOrder(tx: DB, ctx: Ctx, orderId: string) {
   return row;
 }
 
-export function orderEmailContext(o: Order, c: Customer, paid: number, actionUrl?: string): Omit<EmailContext, 'store'> {
+export function orderEmailContext(o: Order, c: Customer, t: PaymentTotals, actionUrl?: string): Omit<EmailContext, 'store'> {
   return {
     customerName: c.name,
     reference: o.orderNumber,
@@ -38,8 +38,9 @@ export function orderEmailContext(o: Order, c: Customer, paid: number, actionUrl
     product: o.product,
     specification: o.specificationText,
     totalPence: o.totalGrossPence,
-    paidPence: paid,
-    balancePence: o.totalGrossPence - paid,
+    paidPence: t.paid,
+    creditPence: t.credit,
+    balancePence: o.totalGrossPence - t.paid - t.credit,
     etaDate: o.etaDate,
     etaReason: o.etaReason,
     actionUrl,
@@ -96,6 +97,9 @@ export async function createOrder(ctx: Ctx, raw: unknown, opts: { notify?: boole
       },
     });
 
+    if (input.creditPence > 0) {
+      await insertPayment(tx, ctx, order.id, { kind: 'credit', amountPence: input.creditPence, method: 'account', reference: 'Till account credit' });
+    }
     if (input.depositPence > 0) {
       await insertPayment(tx, ctx, order.id, { kind: 'deposit', amountPence: input.depositPence, method: input.depositMethod, reference: '' });
     }
@@ -107,7 +111,7 @@ export async function createOrder(ctx: Ctx, raw: unknown, opts: { notify?: boole
       recipient: customer.email,
       customerId: customer.id,
       orderId: order.id,
-      context: orderEmailContext(order, customer, input.depositPence, link),
+      context: orderEmailContext(order, customer, { paid: input.depositPence, credit: input.creditPence }, link),
       actor: ctx.actor,
       suppressedBy: notify ? null : actorName(ctx),
     });
@@ -126,7 +130,7 @@ async function insertPayment(
   tx: DB,
   ctx: Ctx,
   orderId: string,
-  p: { kind: 'deposit' | 'payment' | 'refund'; amountPence: number; method: (typeof payments.$inferInsert)['method']; reference: string },
+  p: { kind: (typeof payments.$inferInsert)['kind']; amountPence: number; method: (typeof payments.$inferInsert)['method']; reference: string },
 ) {
   if (!ctx.userId) throw new ServiceError('Payments must be recorded by a signed-in staff member.');
   const [row] = await tx
@@ -226,9 +230,9 @@ export async function updateOrderProgress(ctx: Ctx, orderId: string, raw: unknow
     const willBeReady = statusChanged && input.status === 'ready';
     const becameDelayed = statusChanged && input.status === 'delayed';
     if (willBeReady || ((etaChanged || becameDelayed) && updated.status !== 'collected')) {
-      const paid = await paidPence(tx, orderId);
+      const totals = await paymentTotals(tx, orderId);
       const link = await issueTrackingLink(tx, ctx.org.id, orderId);
-      const ctxEmail = orderEmailContext(updated, customer, paid, link);
+      const ctxEmail = orderEmailContext(updated, customer, totals, link);
       const suppressedBy = notify ? null : actorName(ctx);
       if (willBeReady) {
         ids.push(
@@ -299,7 +303,7 @@ export async function recordPayment(ctx: Ctx, orderId: string, raw: unknown) {
     if (input.kind === 'refund' && input.amountPence > paid) {
       throw new ServiceError('A refund cannot exceed the amount paid.', { amountPence: `Maximum refund is £${(paid / 100).toFixed(2)}` });
     }
-    await insertPayment(tx, ctx, orderId, input);
+    await insertPayment(tx, ctx, orderId, input.kind === 'credit' ? { ...input, method: 'account' } : input);
   });
 }
 

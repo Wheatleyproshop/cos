@@ -295,7 +295,7 @@ async function acceptAndConvert(
     recipient: customer.email,
     customerId: customer.id,
     orderId: order.id,
-    context: orderEmailContext(order, customer, 0, link),
+    context: orderEmailContext(order, customer, { paid: 0, credit: 0 }, link),
     actor: ctx.actor,
   });
   return { order, messageId, trackingUrl: link };

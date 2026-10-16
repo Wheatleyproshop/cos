@@ -4,7 +4,7 @@ import { customers, orders, organisations } from '@/db/schema';
 import { SYSTEM } from '../audit';
 import { dispatchMessages, enqueueEmail } from '../email/outbox';
 import { hasFeature } from '../plans';
-import { issueTrackingLink, paidPence } from './common';
+import { issueTrackingLink, paymentTotals } from './common';
 import { orderEmailContext } from './orders';
 import { runBackup } from './backups';
 
@@ -35,7 +35,7 @@ export async function runDailyJobs(now = new Date()) {
         );
       const out: (string | null)[] = [];
       for (const { order, customer } of due) {
-        const paid = await paidPence(tx, order.id);
+        const totals = await paymentTotals(tx, order.id);
         const link = await issueTrackingLink(tx, org.id, order.id);
         out.push(
           await enqueueEmail(tx, {
@@ -44,7 +44,7 @@ export async function runDailyJobs(now = new Date()) {
             recipient: customer.email,
             customerId: customer.id,
             orderId: order.id,
-            context: orderEmailContext(order, customer, paid, link),
+            context: orderEmailContext(order, customer, totals, link),
             actor: SYSTEM,
           }),
         );

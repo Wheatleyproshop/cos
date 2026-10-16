@@ -222,7 +222,15 @@ export const orders = pgTable(
 
 /* ─────────────────────────────── Payments ───────────────────────────────── */
 
-export const PAYMENT_KINDS = ['deposit', 'payment', 'refund'] as const;
+/** `credit` = customer account credit from the till, applied against the order. */
+export const PAYMENT_KINDS = ['deposit', 'payment', 'credit', 'refund'] as const;
+
+export const PAYMENT_KIND_LABELS: Record<(typeof PAYMENT_KINDS)[number], string> = {
+  deposit: 'Deposit',
+  payment: 'Payment',
+  credit: 'Account credit',
+  refund: 'Refund',
+};
 export const PAYMENT_METHODS = ['card', 'cash', 'bank_transfer', 'voucher', 'account', 'other'] as const;
 
 /** Append-only. Corrections are recorded as a `refund` entry, never by editing. */

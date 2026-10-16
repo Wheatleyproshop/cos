@@ -1,7 +1,7 @@
 import { and, asc, eq, gt, inArray, isNull } from 'drizzle-orm';
 import { systemDb, withTenant } from '@/db';
 import { attachments, auditEvents, customers, orders, organisations, trackingTokens } from '@/db/schema';
-import { paidPence } from './common';
+import { paymentTotals } from './common';
 import { hashToken } from '../tokens';
 
 /** Events a customer may see. Internal notes, staff names and supplier details are excluded. */
@@ -24,7 +24,7 @@ export async function findOrderByTrackingToken(token: string) {
       .where(and(eq(orders.id, hit.orderId), isNull(orders.archivedAt)))
       .limit(1);
     if (!row) return null;
-    const [events, files, paid] = await Promise.all([
+    const [events, files, totals] = await Promise.all([
       tx
         .select({ eventType: auditEvents.eventType, oldValueJson: auditEvents.oldValueJson, newValueJson: auditEvents.newValueJson, metadataJson: auditEvents.metadataJson, createdAt: auditEvents.createdAt })
         .from(auditEvents)
@@ -34,7 +34,7 @@ export async function findOrderByTrackingToken(token: string) {
         .select({ id: attachments.id, filename: attachments.filename, category: attachments.category })
         .from(attachments)
         .where(and(eq(attachments.orderId, hit.orderId), eq(attachments.visibility, 'customer-visible'), isNull(attachments.archivedAt))),
-      paidPence(tx, hit.orderId),
+      paymentTotals(tx, hit.orderId),
     ]);
     const o = row.order;
     return {
@@ -45,8 +45,9 @@ export async function findOrderByTrackingToken(token: string) {
         totalGrossPence: o.totalGrossPence, etaDate: o.etaDate, etaReason: o.etaReason, createdAt: o.createdAt,
       },
       customerName: row.customerName,
-      paid,
-      balance: o.totalGrossPence - paid,
+      paid: totals.paid,
+      credit: totals.credit,
+      balance: o.totalGrossPence - totals.paid - totals.credit,
       events,
       files,
     };

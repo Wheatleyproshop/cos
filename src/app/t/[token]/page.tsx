@@ -17,6 +17,7 @@ export default async function TrackingPage({ params, searchParams }: { params: P
       order={d.order}
       customerName={d.customerName}
       paid={d.paid}
+      credit={d.credit}
       balance={d.balance}
       events={d.events}
       files={d.files}

@@ -126,7 +126,9 @@ export function describeEvent(e: Pick<AuditEvent, 'eventType' | 'oldValueJson' |
     case 'order_details_changed':
       return `Details updated: ${Object.keys(n).map(fieldLabel).join(', ')}`;
     case 'payment_recorded':
-      return `${titleCase(n.kind)} of ${money(n.amountPence)} recorded (${titleCase(n.method)}${n.reference ? `, ref ${n.reference}` : ''})`;
+      return n.kind === 'credit'
+        ? `Account credit of ${money(n.amountPence)} applied${n.reference ? ` (${n.reference})` : ''}`
+        : `${titleCase(n.kind)} of ${money(n.amountPence)} recorded (${titleCase(n.method)}${n.reference ? `, ref ${n.reference}` : ''})`;
     case 'note_added':
       return `Note: ${n.note}`;
     case 'attachment_added':

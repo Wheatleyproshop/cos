@@ -12,10 +12,10 @@ export type TrackingEvent = { eventType: string; oldValueJson: unknown; newValue
 
 /**
  * Customer-facing progress. "Place order" and "Ordered" are both shown as ordered from the
- * supplier, so customers see: Ordered from supplier → Arrived in store → Collected.
+ * manufacturer, so customers see: Placed with manufacturer → Arrived in store → Collected.
  */
 export const STEPS: { key: OrderStatus; label: string }[] = [
-  { key: 'ordered', label: 'Ordered from supplier' },
+  { key: 'ordered', label: 'Placed with manufacturer' },
   { key: 'ready', label: 'Arrived in store' },
   { key: 'collected', label: 'Collected' },
 ];
@@ -24,7 +24,7 @@ export function describe(e: { eventType: string; oldValueJson: unknown; newValue
   const n = (e.newValueJson ?? {}) as Record<string, string>;
   switch (e.eventType) {
     case 'order_created':
-      return `Order placed with ${store} and ordered from our supplier`;
+      return `Order placed with ${store} and with the manufacturer`;
     case 'status_changed':
       // Moving between Place order and Ordered is internal: the customer already sees "ordered".
       return n.status === 'place_order' || n.status === 'ordered' ? null : step(n.status as OrderStatus).customerLabel;
@@ -42,9 +42,9 @@ export function describe(e: { eventType: string; oldValueJson: unknown; newValue
 
 /** The customer-facing order page. Shared by real tracking links and the shop's preview page. */
 export function TrackingView({
-  org, order: o, customerName, paid, balance, events, files, token, approved, banner,
+  org, order: o, customerName, paid, credit = 0, balance, events, files, token, approved, banner,
 }: {
-  org: Organisation; order: TrackingOrder; customerName: string; paid: number; balance: number;
+  org: Organisation; order: TrackingOrder; customerName: string; paid: number; credit?: number; balance: number;
   events: TrackingEvent[]; files: { id: string; filename: string }[]; token: string | null; approved?: boolean; banner?: React.ReactNode;
 }) {
   const current = o.status === 'delayed' || o.status === 'place_order' ? 'ordered' : o.status;
@@ -70,7 +70,7 @@ export function TrackingView({
         {STEPS.map((s, i) => (
           <li key={s.key} className={i < idx ? 'done' : i === idx ? 'current' : ''} aria-current={i === idx ? 'step' : undefined}>
             {s.label}
-            {s.key === 'ordered' && o.status === 'delayed' ? ' — delayed at supplier' : ''}
+            {s.key === 'ordered' && o.status === 'delayed' ? ' — delayed at the manufacturer' : ''}
           </li>
         ))}
       </ol>
@@ -86,6 +86,7 @@ export function TrackingView({
           <b>
             {money(o.totalGrossPence)} / {money(d.paid)}
           </b>
+          {credit ? <div className="muted">Account credit applied: {money(credit)}</div> : null}
           <div className="muted">{d.balance > 0 ? `Balance due on collection: ${money(d.balance)}` : 'Paid in full'}</div>
         </div>
       </div>

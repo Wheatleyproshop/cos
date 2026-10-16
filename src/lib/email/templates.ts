@@ -25,6 +25,8 @@ export type EmailContext = {
   specification: string;
   totalPence: number;
   paidPence?: number;
+  /** Customer account credit applied from the till. */
+  creditPence?: number;
   balancePence?: number;
   depositRequiredPence?: number;
   etaDate?: string | null;
@@ -132,6 +134,7 @@ ${(o.outro ?? []).map((p) => `<p style="font-size:14px;line-height:1.6;margin:0 
 function commercialRows(ctx: EmailContext): Block[] {
   const rows: Block[] = [{ label: 'Order total', value: money(ctx.totalPence) }];
   if (ctx.paidPence !== undefined) rows.push({ label: 'Paid so far', value: money(ctx.paidPence) });
+  if (ctx.creditPence) rows.push({ label: 'Account credit applied', value: money(ctx.creditPence) });
   if (ctx.balancePence !== undefined) rows.push({ label: 'Balance due', value: money(ctx.balancePence) });
   return rows;
 }
@@ -143,7 +146,7 @@ export function renderEmail(type: EmailAutomationKey, ctx: EmailContext): Render
       const r = layout(ctx, {
         preheader: `Your ${ctx.brand} order is confirmed.`,
         heading: 'Your order is confirmed',
-        intro: ['Thank you for your order. It has been placed with our supplier, and we’ll let you know as soon as it arrives in store.'],
+        intro: ['Thank you for your order. It has been placed with the manufacturer, and we’ll let you know as soon as it arrives in store.'],
         rows: [...commercialRows(ctx), { label: 'Estimated arrival', value: longDate(ctx.etaDate) }],
         cta: ctx.actionUrl ? { label: 'Track your order', url: ctx.actionUrl } : undefined,
       });

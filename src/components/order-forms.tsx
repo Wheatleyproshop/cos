@@ -55,6 +55,14 @@ export function CreateRequestForm({
               <>
                 <Field state={s} name="depositPence" label="Deposit received (GBP)" inputMode="decimal" defaultValue="0.00" />
                 <Field state={s} name="depositMethod" label="Deposit paid by" options={METHODS} />
+                <Field
+                  state={s}
+                  name="creditPence"
+                  label="Account credit applied (GBP)"
+                  inputMode="decimal"
+                  defaultValue="0.00"
+                  hint="From the customer’s till account. Reduces the balance owed."
+                />
                 <Field state={s} name="etaDate" label="Estimated arrival" type="date" />
                 <Field state={s} name="supplierReference" label="Supplier order reference" placeholder="e.g. PING-48192" />
               </>
@@ -211,6 +219,7 @@ export function PaymentForm({ action, canRefund }: { action: BoundAction; canRef
   const kinds = [
     { value: 'payment', label: 'Payment' },
     { value: 'deposit', label: 'Deposit' },
+    { value: 'credit', label: 'Account credit (till)' },
     ...(canRefund ? [{ value: 'refund', label: 'Refund / correction' }] : []),
   ];
   return (

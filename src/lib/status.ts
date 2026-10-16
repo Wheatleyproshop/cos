@@ -23,8 +23,8 @@ export const DEFAULT_WORKFLOW: WorkflowStep[] = [
   {
     key: 'place_order',
     label: 'Place order',
-    // Customers see an order as placed with the supplier from the moment it's taken.
-    customerLabel: 'Ordered from supplier',
+    // Customers see an order as placed with the manufacturer from the moment it's taken.
+    customerLabel: 'Placed with manufacturer',
     tone: 'neutral',
     awaitingSupplier: true,
     terminal: false,
@@ -33,7 +33,7 @@ export const DEFAULT_WORKFLOW: WorkflowStep[] = [
   {
     key: 'ordered',
     label: 'Ordered',
-    customerLabel: 'Ordered from supplier',
+    customerLabel: 'Placed with manufacturer',
     tone: 'progress',
     awaitingSupplier: true,
     terminal: false,
@@ -42,7 +42,7 @@ export const DEFAULT_WORKFLOW: WorkflowStep[] = [
   {
     key: 'delayed',
     label: 'Delayed',
-    customerLabel: 'Delayed at supplier',
+    customerLabel: 'Delayed at manufacturer',
     tone: 'warning',
     awaitingSupplier: true,
     terminal: false,

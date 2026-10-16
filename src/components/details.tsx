@@ -18,6 +18,7 @@ import {
 } from '@/app/(staff)/actions';
 import { hasRole, type Staff } from '@/lib/auth';
 import { templateName } from '@/lib/audit';
+import { PAYMENT_KIND_LABELS } from '@/db/schema';
 import { bytes, longDate, money, niceDate, penceToInput, stamp, titleCase } from '@/lib/format';
 import { getCustomerDetail, getOrderDetail, getQuoteDetail } from '@/lib/queries';
 import { canTransition, DEFAULT_WORKFLOW, QUOTE_STATUS_LABELS, statusLabel } from '@/lib/status';
@@ -73,7 +74,7 @@ export async function OrderDetail({ staff, number, inModal }: { staff: Staff; nu
       <div className="detailgrid">
         <DetailBox label="Custom specification">{o.specificationText}</DetailBox>
         <DetailBox label="Product ID">{o.sku || '—'}</DetailBox>
-        <DetailBox label="Order value / Paid" sub={`Balance due: ${money(d.balance)}`}>
+        <DetailBox label="Order value / Paid" sub={`${d.credit ? `Includes ${money(d.credit)} account credit · ` : ''}Balance due: ${money(d.balance)}`}>
           {money(o.totalGrossPence)} / {money(d.paid)}
         </DetailBox>
         <DetailBox label="Current ETA" sub={o.etaReason ? `Customer told: “${o.etaReason}”` : undefined}>
@@ -131,7 +132,7 @@ export async function OrderDetail({ staff, number, inModal }: { staff: Staff; nu
                 <tr key={p.id}>
                   <td>{stamp(p.createdAt, tz)}</td>
                   <td>
-                    {titleCase(p.kind)}
+                    {PAYMENT_KIND_LABELS[p.kind]}
                     {p.reference ? <div className="muted">Ref {p.reference}</div> : null}
                   </td>
                   <td>{titleCase(p.method)}</td>

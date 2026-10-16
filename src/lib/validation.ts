@@ -16,6 +16,7 @@ const isoDate = z
 const money = (label: string, opts: { optional?: boolean } = {}) =>
   z
     .union([z.string(), z.number(), z.null(), z.undefined()])
+    .optional()
     .transform((v, ctx) => {
       if ((v === '' || v === null || v === undefined) && opts.optional) return 0;
       const p = parseMoneyToPence(v);
@@ -46,11 +47,15 @@ export const orderCreateSchema = z
     ...productFields,
     depositPence: money('Deposit', { optional: true }),
     depositMethod: z.enum(PAYMENT_METHODS).default('card'),
+    creditPence: money('Account credit', { optional: true }),
     etaDate: isoDate,
     supplierReference: text(120).default(''),
     internalNotes: text(4000).default(''),
   })
-  .refine((v) => v.depositPence <= v.totalGrossPence, { message: 'Deposit cannot exceed the total price', path: ['depositPence'] });
+  .refine((v) => v.depositPence + v.creditPence <= v.totalGrossPence, {
+    message: 'Deposit and account credit together cannot exceed the total price',
+    path: ['creditPence'],
+  });
 
 export const quoteCreateSchema = z
   .object({

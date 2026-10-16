@@ -100,6 +100,21 @@ export async function issueTrackingLink(tx: DB, orgId: string, orderId: string):
   return appUrl(`/t/${token}`);
 }
 
+export type PaymentTotals = { paid: number; credit: number };
+
+/** Money paid (deposits + payments − refunds) and account credit applied, kept separate for customers. */
+export async function paymentTotals(tx: DB, orderId: string): Promise<PaymentTotals> {
+  const [row] = await tx
+    .select({
+      paid: sql<number>`coalesce(sum(case when ${payments.kind} = 'refund' then -${payments.amountPence} when ${payments.kind} = 'credit' then 0 else ${payments.amountPence} end), 0)::int`,
+      credit: sql<number>`coalesce(sum(case when ${payments.kind} = 'credit' then ${payments.amountPence} else 0 end), 0)::int`,
+    })
+    .from(payments)
+    .where(eq(payments.orderId, orderId));
+  return { paid: Number(row?.paid ?? 0), credit: Number(row?.credit ?? 0) };
+}
+
+/** Everything that reduces the balance: money paid plus account credit. */
 export async function paidPence(tx: DB, orderId: string): Promise<number> {
   const [row] = await tx
     .select({

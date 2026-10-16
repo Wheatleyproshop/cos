@@ -263,3 +263,33 @@ describe('email sender', () => {
     process.env.EMAIL_FROM_DOMAIN = prev;
   });
 });
+
+describe('account credit', () => {
+  it('records till account credit separately and reduces the balance', async () => {
+    const order = await createOrder(staff, {
+      customerName: 'Credit Customer', email: 'credit@example.com', brand: 'Titleist', product: 'Pro V1', sku: '',
+      specificationText: '2 dozen', totalGrossPence: '104.00', depositPence: '20.00', depositMethod: 'card',
+      creditPence: '30.00', etaDate: '', supplierReference: '', internalNotes: '',
+    });
+    const rows = await withTenant(org.id, (tx) => tx.select().from(payments).where(eq(payments.orderId, order.id)));
+    const credit = rows.find((p) => p.kind === 'credit')!;
+    expect(credit.amountPence).toBe(3000);
+    expect(credit.method).toBe('account');
+    const { paymentTotals } = await import('@/lib/services/common');
+    const t = await withTenant(org.id, (tx) => paymentTotals(tx, order.id));
+    expect(t).toEqual({ paid: 2000, credit: 3000 });
+    const [msg] = await withTenant(org.id, (tx) => tx.select().from(messages).where(eq(messages.orderId, order.id)));
+    expect(msg.bodyHtml).toContain('Account credit applied');
+    expect(msg.bodyHtml).toContain('£54.00'); // balance due
+    expect(msg.bodyHtml).toContain('placed with the manufacturer');
+  });
+
+  it('rejects deposit plus credit above the total', async () => {
+    await expect(
+      createOrder(staff, {
+        customerName: 'X', email: 'x2@example.com', brand: 'B', product: 'P', specificationText: 'S',
+        totalGrossPence: '10.00', depositPence: '6.00', creditPence: '5.00', etaDate: '',
+      }),
+    ).rejects.toMatchObject({ fieldErrors: expect.objectContaining({ creditPence: expect.any(String) }) });
+  });
+});

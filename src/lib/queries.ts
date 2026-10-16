@@ -248,6 +248,7 @@ export async function getOrderDetail(org: Organisation, orderNumber: string) {
         : Promise.resolve([]),
     ]);
     const paid = paymentRows.reduce((s, { p }) => s + (p.kind === 'refund' ? -p.amountPence : p.amountPence), 0);
+    const credit = paymentRows.reduce((s, { p }) => s + (p.kind === 'credit' ? p.amountPence : 0), 0);
     return {
       ...row,
       payments: paymentRows,
@@ -255,6 +256,7 @@ export async function getOrderDetail(org: Organisation, orderNumber: string) {
       messages: messageRows,
       events,
       paid,
+      credit,
       balance: row.order.totalGrossPence - paid,
       flags: orderAttention(row.order, org, todayInTz(org.timezone)),
       sourceQuoteNumber: sourceQuote[0]?.number ?? null,
