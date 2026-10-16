@@ -321,10 +321,10 @@ export async function listCustomers(org: Organisation, qRaw?: string) {
     tx
       .select({
         c: customers,
-        activeOrders: sql<number>`(select count(*)::int from ${orders} o where o.customer_id = ${customers.id} and o.archived_at is null and o.status <> 'collected')`,
-        totalOrders: sql<number>`(select count(*)::int from ${orders} o where o.customer_id = ${customers.id} and o.archived_at is null)`,
-        lifetimePence: sql<number>`(select coalesce(sum(o.total_gross_pence),0)::int from ${orders} o where o.customer_id = ${customers.id} and o.archived_at is null)`,
-        lastOrderAt: sql<Date | null>`(select max(o.created_at) from ${orders} o where o.customer_id = ${customers.id})`,
+        activeOrders: sql<number>`(select count(*)::int from ${orders} o where o.customer_id = "customers"."id" and o.archived_at is null and o.status <> 'collected')`,
+        totalOrders: sql<number>`(select count(*)::int from ${orders} o where o.customer_id = "customers"."id" and o.archived_at is null)`,
+        lifetimePence: sql<number>`(select coalesce(sum(o.total_gross_pence),0)::int from ${orders} o where o.customer_id = "customers"."id" and o.archived_at is null)`,
+        lastOrderAt: sql<Date | null>`(select max(o.created_at) from ${orders} o where o.customer_id = "customers"."id")`,
       })
       .from(customers)
       .where(

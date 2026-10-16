@@ -150,7 +150,8 @@ export const customers = pgTable(
     archivedAt: timestamp('archived_at', { withTimezone: true }),
   },
   (t) => [
-    uniqueIndex('customers_org_email_unique').on(t.organisationId, sql`lower(${t.email})`),
+    // Imported customers may have no email yet; only real addresses must be unique.
+    uniqueIndex('customers_org_email_unique').on(t.organisationId, sql`lower(${t.email})`).where(sql`${t.email} <> ''`),
     index('customers_org_name_idx').on(t.organisationId, t.name),
   ],
 );

@@ -302,3 +302,10 @@ details.section[open] { padding-bottom: 16px; }
   .logo-dot { width: 5px; height: 5px; margin: 0 0 3px 2px; }
   .logo-sub { font-size: 7px; letter-spacing: 3px; padding-left: 3px; margin-top: 3px; }
 }
+
+/* ── Returning customer picker ───────────────────────────────────────── */
+.picker { position: absolute; top: 100%; left: 0; right: 0; z-index: 30; list-style: none; margin: 4px 0 0; padding: 6px; background: #fff; border: 1px solid var(--line); border-radius: 12px; box-shadow: 0 16px 40px #0a122026; max-height: 300px; overflow: auto; }
+.picker button { width: 100%; text-align: left; background: none; border: 0; border-radius: 8px; padding: 9px 10px; display: grid; gap: 2px; font-weight: 400; color: var(--ink); }
+.picker button.on, .picker button:hover { background: #edf3fd; }
+.picker small { color: var(--muted); font-size: 12px; }
+.returning { font-weight: 500; color: #24508f; }

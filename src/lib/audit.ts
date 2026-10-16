@@ -45,6 +45,7 @@ export type EventType =
   | 'email_suppressed'
   | 'customer_created'
   | 'customer_updated'
+  | 'customers_imported'
   | 'settings_changed'
   | 'user_created'
   | 'user_updated'

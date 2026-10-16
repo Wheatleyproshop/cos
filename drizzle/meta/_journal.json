@@ -57,6 +57,13 @@
       "when": 1792172214677,
       "tag": "0007_payment_tracking",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1792172427049,
+      "tag": "0008_customer_email_optional",
+      "breakpoints": true
     }
   ]
 }

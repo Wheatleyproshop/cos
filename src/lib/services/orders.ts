@@ -54,7 +54,7 @@ export async function createOrder(ctx: Ctx, raw: unknown, opts: { notify?: boole
   const notify = opts.notify !== false || !atLeast(ctx, 'manager');
 
   const { order, messageId } = await withTenant(ctx.org.id, async (tx) => {
-    const customer = await findOrCreateCustomer(tx, ctx, { name: input.customerName, email: input.email, phone: input.phone });
+    const customer = await findOrCreateCustomer(tx, ctx, { name: input.customerName, email: input.email, phone: input.phone, customerId: input.customerId });
     const orderNumber = await nextNumber(tx, ctx.org.id, 'order');
     const [order] = await tx
       .insert(orders)

@@ -63,7 +63,7 @@ export async function createQuote(ctx: Ctx, raw: unknown, opts: CreateQuoteOptio
   if (!ctx.userId) throw new ServiceError('Quotes must be created by a signed-in staff member.');
   const input = parse(quoteCreateSchema, raw);
   const { quote, messageId } = await withTenant(ctx.org.id, async (tx) => {
-    const customer = await findOrCreateCustomer(tx, ctx, { name: input.customerName, email: input.email, phone: input.phone });
+    const customer = await findOrCreateCustomer(tx, ctx, { name: input.customerName, email: input.email, phone: input.phone, customerId: input.customerId });
     const quoteNumber = await nextNumber(tx, ctx.org.id, 'quote');
     const [quote] = await tx
       .insert(quotes)

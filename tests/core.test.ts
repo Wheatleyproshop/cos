@@ -2,7 +2,7 @@ import { and, eq, sql } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { setDatabaseHandle, systemDb, withTenant } from '@/db';
 import { runMigrations } from '@/db/migrate';
-import { auditEvents, messages, orders, organisations, payments, quotes, users, type Organisation } from '@/db/schema';
+import { auditEvents, customers, messages, orders, organisations, payments, quotes, users, type Organisation } from '@/db/schema';
 import { DEMO_QUOTE_TOKEN, seedDemo } from '@/db/seed';
 import { orderAttention } from '@/lib/attention';
 import { staffActor } from '@/lib/audit';
@@ -305,5 +305,53 @@ describe('payments taken at the till', () => {
     await updateOrderProgress(tillCtx, order.id, { status: 'collected', etaDate: '', supplierReference: '' });
     const [o] = await withTenant(org.id, (tx) => tx.select().from(orders).where(eq(orders.id, order.id)));
     expect(o.status).toBe('collected');
+  });
+});
+
+describe('customer import & returning customers', () => {
+  const csv = [
+    'First Name,Surname,E-mail,Mobile,Notes,Loyalty points',
+    'Sam,Hill,sam@example.com,07700 111222,"Left-handed, likes stiff shafts",120',
+    'James,Wilson,JAMES@example.com,07700 900111,,10', // existing seed customer (case-insensitive)
+    'No,Email,,07700 333444,,0',
+    ',,,,,',
+    'Sam,Hill,sam@example.com,07700 111222,dup,0',
+    'Bad,Address,not-an-email,,,0',
+  ].join('\n');
+
+  it('reads common column names and previews without saving', async () => {
+    const { importCustomers } = await import('@/lib/services/customer-import');
+    const preview = await importCustomers(admin, csv, { dryRun: true });
+    expect(preview.plan.columns).toMatchObject({ first: 'First Name', last: 'Surname', email: 'E-mail', phone: 'Mobile', notes: 'Notes' });
+    expect(preview).toMatchObject({ created: 3, duplicatesInFile: 1 });
+    const none = await withTenant(org.id, (tx) => tx.select().from(customers).where(eq(customers.email, 'sam@example.com')));
+    expect(none).toHaveLength(0);
+  });
+
+  it('imports new customers and never overwrites existing details', async () => {
+    const { importCustomers } = await import('@/lib/services/customer-import');
+    const before = (await withTenant(org.id, (tx) => tx.select().from(customers).where(eq(customers.email, 'james@example.com'))))[0];
+    const res = await importCustomers(admin, csv, { dryRun: false });
+    expect(res.created).toBe(3);
+    const sam = (await withTenant(org.id, (tx) => tx.select().from(customers).where(eq(customers.email, 'sam@example.com'))))[0];
+    expect(sam).toMatchObject({ name: 'Sam Hill', phone: '07700 111222', notes: 'Left-handed, likes stiff shafts' });
+    const after = (await withTenant(org.id, (tx) => tx.select().from(customers).where(eq(customers.email, 'james@example.com'))))[0];
+    expect(after.name).toBe(before.name);
+    const noEmail = (await withTenant(org.id, (tx) => tx.select().from(customers).where(eq(customers.phone, '07700 333444'))))[0];
+    expect(noEmail.email).toBe('');
+    // second run: nothing new
+    const again = await importCustomers(admin, csv, { dryRun: true });
+    expect(again.created).toBe(0);
+  });
+
+  it('links a new order to the picked returning customer and adds their missing email', async () => {
+    const [noEmail] = await withTenant(org.id, (tx) => tx.select().from(customers).where(eq(customers.phone, '07700 333444')));
+    const order = await createOrder(staff, {
+      customerId: noEmail.id, customerName: noEmail.name, email: 'now-has-email@example.com', phone: noEmail.phone,
+      brand: 'PING', product: 'Putter', specificationText: '34"', totalGrossPence: '200', etaDate: '',
+    });
+    expect(order.customerId).toBe(noEmail.id);
+    const [updated] = await withTenant(org.id, (tx) => tx.select().from(customers).where(eq(customers.id, noEmail.id)));
+    expect(updated.email).toBe('now-has-email@example.com');
   });
 });

@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { CustomerPicker } from './customer-picker';
 import { ActionForm, Field, FormMessage, Submit, type BoundAction } from './forms';
 
 const METHODS = [
@@ -12,7 +13,7 @@ const METHODS = [
   { value: 'other', label: 'Other' },
 ];
 
-export type RequestDefaults = Partial<Record<'customerName' | 'email' | 'phone' | 'brand' | 'product' | 'sku' | 'specificationText', string>>;
+export type RequestDefaults = Partial<Record<'customerId' | 'customerName' | 'email' | 'phone' | 'brand' | 'product' | 'sku' | 'specificationText', string>>;
 
 export function CreateRequestForm({
   action,
@@ -37,9 +38,7 @@ export function CreateRequestForm({
         <>
           <FormMessage state={s?.error ? s : null} />
           <div className="fields">
-            <Field state={s} name="customerName" label="Customer name" required defaultValue={defaults.customerName} placeholder="Full name" autoComplete="off" />
-            <Field state={s} name="email" label="Email address" type="email" required defaultValue={defaults.email} placeholder="customer@example.com" autoComplete="off" />
-            <Field state={s} name="phone" label="Phone" type="tel" defaultValue={defaults.phone} placeholder="Mobile number" inputMode="tel" />
+            <CustomerPicker state={s} defaults={defaults} />
             <Field state={s} name="brand" label="Brand" required defaultValue={defaults.brand} placeholder="e.g. PING" />
             <Field state={s} name="product" label="Product" required defaultValue={defaults.product} placeholder="e.g. G440 MAX Driver" />
             <Field state={s} name="sku" label="Product ID / SKU" defaultValue={defaults.sku} placeholder="Supplier product code" />

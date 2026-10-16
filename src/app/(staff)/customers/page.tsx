@@ -15,7 +15,21 @@ export default async function CustomersPage({ searchParams }: { searchParams: Pr
   const rows = await listCustomers(staff.org, q);
   return (
     <>
-      <PageHeader staff={staff} title="Customers." sub="Every customer, their orders and the builds they love." />
+      <PageHeader
+        staff={staff}
+        title="Customers."
+        sub="Every customer, their orders and the builds they love."
+        actions={
+          <>
+            <Link href="/customers/import" className="btn">
+              Import customers
+            </Link>
+            <Link href="/orders/new" className="btn primary" scroll={false}>
+              ＋ &nbsp; New order
+            </Link>
+          </>
+        }
+      />
       <div className="toolbar">
         <Suspense>
           <SearchBox placeholder="Search by name, email or phone…" />

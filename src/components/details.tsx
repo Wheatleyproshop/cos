@@ -381,7 +381,7 @@ export async function NewRequest({
   if (params.customer) {
     const cust = await getCustomerDetail(staff.org, params.customer);
     if (cust) {
-      Object.assign(defaults, { customerName: cust.customer.name, email: cust.customer.email, phone: cust.customer.phone });
+      Object.assign(defaults, { customerId: cust.customer.id, customerName: cust.customer.name, email: cust.customer.email, phone: cust.customer.phone });
       const build = params.from ? cust.builds.find((b) => b.orderNumber === params.from) : undefined;
       if (build) Object.assign(defaults, { brand: build.brand, product: build.product, sku: build.sku, specificationText: build.spec });
     }

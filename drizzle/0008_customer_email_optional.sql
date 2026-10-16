@@ -1,0 +1,2 @@
+DROP INDEX "customers_org_email_unique";--> statement-breakpoint
+CREATE UNIQUE INDEX "customers_org_email_unique" ON "customers" USING btree ("organisation_id",lower("email")) WHERE "customers"."email" <> '';

@@ -46,11 +46,42 @@ export async function nextNumber(tx: DB, orgId: string, kind: 'order' | 'quote')
   return kind === 'order' ? `${row.prefix}-${n}` : `Q-${n}`;
 }
 
-export type CustomerInput = { name: string; email: string; phone?: string };
+export type CustomerInput = { name: string; email: string; phone?: string; customerId?: string | null };
 
-/** Reuses an existing customer by email (case-insensitive) or creates one. */
+/**
+ * Uses the returning customer picked on the form (customerId), otherwise reuses one by email
+ * (case-insensitive) or creates a new one. A picked customer's missing email/phone are filled in.
+ */
 export async function findOrCreateCustomer(tx: DB, ctx: Ctx, input: CustomerInput) {
   const email = input.email.trim().toLowerCase();
+  if (input.customerId) {
+    const [picked] = await tx
+      .select()
+      .from(customers)
+      .where(and(eq(customers.id, input.customerId), eq(customers.organisationId, ctx.org.id)))
+      .limit(1);
+    if (!picked) throw new ServiceError('That customer record could not be found. Search again or enter their details.');
+    const patch: Record<string, string> = {};
+    if (email && email !== picked.email.toLowerCase()) {
+      const [clash] = await tx
+        .select({ id: customers.id })
+        .from(customers)
+        .where(and(eq(customers.organisationId, ctx.org.id), sql`lower(${customers.email}) = ${email}`, sql`${customers.id} <> ${picked.id}`))
+        .limit(1);
+      if (clash) throw new ServiceError('Another customer already uses that email.', { email: 'Already used by another customer' });
+      patch.email = email;
+    }
+    const phone = input.phone?.trim();
+    if (phone && phone !== picked.phone) patch.phone = phone;
+    if (Object.keys(patch).length) {
+      await tx.update(customers).set({ ...patch, updatedAt: new Date() }).where(eq(customers.id, picked.id));
+      await recordEvent(tx, {
+        organisationId: ctx.org.id, actor: ctx.actor, eventType: 'customer_updated', entityType: 'customer', customerId: picked.id,
+        oldValue: Object.fromEntries(Object.keys(patch).map((k) => [k, picked[k as 'email' | 'phone']])), newValue: patch,
+      });
+    }
+    return { ...picked, ...patch };
+  }
   const [existing] = await tx
     .select()
     .from(customers)

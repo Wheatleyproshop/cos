@@ -3,7 +3,7 @@ import type { NextConfig } from 'next';
 const nextConfig: NextConfig = {
   // PGlite ships WASM + data files that must be loaded from node_modules at runtime.
   serverExternalPackages: ['@electric-sql/pglite'],
-  experimental: { serverActions: { bodySizeLimit: '2mb' } },
+  experimental: { serverActions: { bodySizeLimit: '5mb' } },
   poweredByHeader: false,
   // The icon renderer reads Inter from node_modules at runtime.
   outputFileTracingIncludes: { '/icons/[name]': ['./node_modules/@fontsource/inter/files/inter-latin-{600,800}-normal.woff'] },

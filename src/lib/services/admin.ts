@@ -24,7 +24,7 @@ export async function updateCustomer(ctx: Ctx, customerId: string, raw: unknown)
   await withTenant(ctx.org.id, async (tx) => {
     const [c] = await tx.select().from(customers).where(eq(customers.id, customerId)).for('update').limit(1);
     if (!c) throw new ServiceError('Customer not found.');
-    if (input.email !== c.email.toLowerCase()) {
+    if (input.email && input.email !== c.email.toLowerCase()) {
       const [clash] = await tx
         .select({ id: customers.id })
         .from(customers)

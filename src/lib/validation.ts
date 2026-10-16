@@ -28,6 +28,8 @@ const money = (label: string, opts: { optional?: boolean } = {}) =>
     });
 
 export const customerFields = {
+  /** Set when a returning customer was picked from the search. */
+  customerId: z.union([z.literal(''), z.string().uuid()]).optional().transform((v) => v || null),
   customerName: required('Customer name', 120),
   email: z.string().trim().toLowerCase().email('Enter a valid email address'),
   phone: text(40).default(''),
@@ -111,7 +113,7 @@ export const attachmentMetaSchema = z.object({
 
 export const customerEditSchema = z.object({
   name: required('Name', 120),
-  email: z.string().trim().toLowerCase().email('Enter a valid email address'),
+  email: z.union([z.literal(''), z.string().trim().toLowerCase().email('Enter a valid email address')]),
   phone: text(40).default(''),
   notes: text(4000).default(''),
 });

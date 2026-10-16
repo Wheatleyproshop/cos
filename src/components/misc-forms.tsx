@@ -61,7 +61,7 @@ export function CustomerForm({ action, values }: { action: BoundAction; values: 
         <>
           <div className="fields">
             <Field state={s} name="name" label="Name" required defaultValue={values.name} />
-            <Field state={s} name="email" label="Email" type="email" required defaultValue={values.email} />
+            <Field state={s} name="email" label="Email" type="email" defaultValue={values.email} />
             <Field state={s} name="phone" label="Phone" type="tel" defaultValue={values.phone} />
             <Field state={s} name="notes" label="Customer notes (staff only)" textarea defaultValue={values.notes} />
           </div>
