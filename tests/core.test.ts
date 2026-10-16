@@ -118,7 +118,7 @@ describe('order lifecycle', () => {
     expect(events.find((e) => e.eventType === 'email_sent')!.actorType).toBe('system');
     const [msg] = await withTenant(org.id, (tx) => tx.select().from(messages).where(eq(messages.orderId, order.id)));
     expect(msg.status).toBe('sent');
-    expect(msg.bodyHtml).toContain('DESIRABLE GOLF');
+    expect(msg.bodyHtml).toContain('alt="Desirable Golf"'); // retailer logo, not COS
     expect(msg.bodyHtml).not.toMatch(/\bCOS\b(?!-)/);
   });
 
