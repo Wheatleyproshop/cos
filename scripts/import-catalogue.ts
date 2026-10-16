@@ -105,7 +105,9 @@ async function main() {
 
         for (const m of b.models) {
           // Irons sold per club are priced as the standard 5-PW set.
-          const isIrons = m.category === 'irons';
+          // Single irons (e.g. utility/driving irons) are priced each and have no set make-up.
+          const single = m.category === 'irons' && /single/i.test(m.setMakeup ?? '');
+          const isIrons = m.category === 'irons' && !single;
           const perClub = pence(m.perClubGBP);
           const base = isIrons && m.priceBasis === 'each' ? (perClub != null ? perClub * 6 : null) : pence(m.rrpGBP);
           if (base == null) {
