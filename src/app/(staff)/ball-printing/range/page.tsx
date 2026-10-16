@@ -1,12 +1,12 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
-import { AddBallForm, BallPriceForm, SetupFeeForm } from '@/components/ball-range-forms';
+import { AddBallForm, BallPhotoForm, BallPriceForm, SetupFeeForm } from '@/components/ball-range-forms';
 import { ActionButton } from '@/components/forms';
 import { PageHeader } from '@/components/views';
 import { hasRole, requireStaff } from '@/lib/auth';
 import { money, penceToInput } from '@/lib/format';
 import { getBallRange } from '@/lib/services/ball-printing';
-import { addBallAction, ballActiveAction, ballPriceAction, setupFeeAction, starterBallsAction } from '../../actions';
+import { addBallAction, ballActiveAction, ballPhotoAction, ballPriceAction, setupFeeAction, starterBallsAction } from '../../actions';
 
 export const metadata: Metadata = { title: 'Ball range' };
 
@@ -35,6 +35,7 @@ export default async function BallRangePage() {
                 <thead>
                   <tr>
                     <th>Ball</th>
+                    <th>Photo</th>
                     <th className="num">Per dozen</th>
                     <th />
                   </tr>
@@ -48,6 +49,15 @@ export default async function BallRangePage() {
                           {b.minDozens > 1 ? `Minimum ${b.minDozens} dozen` : 'From 1 dozen'}
                           {b.leadTimeDays ? ` · ${b.leadTimeDays} day lead time` : ''}
                         </div>
+                      </td>
+                      <td>
+                        {manager ? (
+                          <BallPhotoForm
+                            action={ballPhotoAction.bind(null, b.id)}
+                            photoUrl={b.photoKey ? `/api/ball-photo/${b.id}?v=${b.photoKey.slice(-10)}` : null}
+                            label={`${b.brand} ${b.name}`}
+                          />
+                        ) : b.photoKey ? 'Yes' : '—'}
                       </td>
                       <td className="num">{manager ? <BallPriceForm action={ballPriceAction.bind(null, b.id)} value={penceToInput(b.pricePerDozenPence)} /> : money(b.pricePerDozenPence)}</td>
                       <td className="num">
@@ -88,6 +98,12 @@ export default async function BallRangePage() {
           )}
           <p className="muted" style={{ marginTop: 16 }}>
             Retired balls disappear from the builder but stay on old quotes and orders.
+          </p>
+          <h3>Ball photos</h3>
+          <p className="muted">
+            Add a straight-on product photo of each ball (the side with the brand and model printed on it), ideally on a white or
+            transparent background. The builder wraps that print onto the 3D ball, so customers see the real ball. Use photos you
+            have the rights to use, such as your supplier’s retailer images or your own.
           </p>
         </section>
       </div>

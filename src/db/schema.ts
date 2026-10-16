@@ -469,6 +469,9 @@ export const printBalls = pgTable('print_balls', {
   /** Ball colour used for the rendered preview, e.g. #ffffff or #f4e21b. */
   colour: text('colour').notNull().default('#ffffff'),
   pricePerDozenPence: integer('price_per_dozen_pence').notNull(),
+  /** Product photo of the ball (private storage). Its printed side is wrapped onto the 3D preview. */
+  photoKey: text('photo_key'),
+  photoMime: text('photo_mime'),
   minDozens: integer('min_dozens').notNull().default(1),
   leadTimeDays: integer('lead_time_days'),
   sortOrder: integer('sort_order').notNull().default(0),

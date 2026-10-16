@@ -1,27 +1,170 @@
 'use client';
 
-import { startTransition, useActionState, useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
-import type { PrintBall } from '@/db/schema';
+import { startTransition, useActionState, useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent, type PointerEvent } from 'react';
 import type { FormState } from '@/lib/action-utils';
 import { INK_COLOURS, LOGO_TYPES, MAX_LOGO_BYTES, PRINT_FONTS, type InkKey, type PrintFontKey } from '@/lib/ball-print';
 import { money, penceToInput, parseMoneyToPence } from '@/lib/format';
-import { drawBall, renderProof, type BallArtwork, type BallScene } from './ball-render';
+import {
+  artworkDecal, BRAND_SIDE, IDENTITY, photoDecal, qAxisAngle, qMul, qNormalize, qSlerp, renderBall, renderProof, sidestampDecal,
+  type BallArtwork, type BallLook, type Quat,
+} from './ball-render';
 import { CustomerPicker, type PickerDefaults } from './customer-picker';
 import { Field, FormMessage } from './forms';
 
 const STEPS = ['Ball', 'Personalise', 'Quantity & send'];
 
-/** Draws a ball scene into a crisp, devicePixelRatio-aware canvas. */
-function BallCanvas({ scene, size, label }: { scene: BallScene; size: number; label: string }) {
+export type BuilderBall = {
+  id: string; brand: string; name: string; colour: string; pricePerDozenPence: number; minDozens: number; photoUrl: string | null;
+};
+
+type Img = HTMLImageElement;
+
+function loadImage(url: string): Promise<Img> {
+  return new Promise((res, rej) => {
+    const img = new Image();
+    img.onload = () => res(img);
+    img.onerror = rej;
+    img.src = url;
+  });
+}
+
+/**
+ * The interactive 3D ball: drag (mouse, finger or arrow keys) to spin it in any direction,
+ * with a little momentum. `target` animates it to the logo or brand side.
+ */
+function BallStage({ look, target, guide, label }: { look: BallLook; target: { q: Quat; n: number }; guide: boolean; label: string }) {
+  const ref = useRef<HTMLCanvasElement>(null);
+  const q = useRef<Quat>(target.q);
+  const drag = useRef<{ x: number; y: number; t: number } | null>(null);
+  const vel = useRef({ x: 0, y: 0 });
+  const frame = useRef(0);
+  const [hint, setHint] = useState(true);
+
+  const draw = useCallback(
+    (quality: number) => {
+      const c = ref.current;
+      if (!c) return;
+      const px = Math.round(c.clientWidth * Math.min(window.devicePixelRatio || 1, 2)) || 560;
+      if (c.width !== px) c.width = c.height = px;
+      renderBall(c.getContext('2d')!, px, look, q.current, { guide, quality });
+    },
+    [look, guide],
+  );
+
+  // Redraw at full quality whenever the design changes.
+  useEffect(() => {
+    if (!drag.current) draw(1);
+  }, [draw]);
+
+  useEffect(() => {
+    const onResize = () => draw(1);
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, [draw]);
+
+  // Animate to the requested side.
+  useEffect(() => {
+    cancelAnimationFrame(frame.current);
+    const from = q.current;
+    const start = performance.now();
+    const dur = 750;
+    const tick = (now: number) => {
+      const t = Math.min(1, (now - start) / dur);
+      const e = 1 - Math.pow(1 - t, 3);
+      q.current = qSlerp(from, target.q, e);
+      draw(t < 1 ? 0.5 : 1);
+      if (t < 1) frame.current = requestAnimationFrame(tick);
+    };
+    frame.current = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(frame.current);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [target]);
+
+  const rotateBy = (dx: number, dy: number) => {
+    const c = ref.current!;
+    const R = c.clientWidth * 0.355;
+    const angle = Math.hypot(dx, dy) / R;
+    if (angle > 0) q.current = qNormalize(qMul(qAxisAngle(dy, dx, 0, angle), q.current));
+  };
+
+  const down = (e: PointerEvent<HTMLCanvasElement>) => {
+    cancelAnimationFrame(frame.current);
+    e.currentTarget.setPointerCapture(e.pointerId);
+    drag.current = { x: e.clientX, y: e.clientY, t: performance.now() };
+    vel.current = { x: 0, y: 0 };
+    setHint(false);
+  };
+  const move = (e: PointerEvent<HTMLCanvasElement>) => {
+    const d = drag.current;
+    if (!d) return;
+    const dx = e.clientX - d.x;
+    const dy = e.clientY - d.y;
+    const now = performance.now();
+    const dt = Math.max(1, now - d.t);
+    vel.current = { x: (dx / dt) * 16, y: (dy / dt) * 16 };
+    drag.current = { x: e.clientX, y: e.clientY, t: now };
+    rotateBy(dx, dy);
+    cancelAnimationFrame(frame.current);
+    frame.current = requestAnimationFrame(() => draw(0.45));
+  };
+  const up = () => {
+    if (!drag.current) return;
+    drag.current = null;
+    // Momentum, then a crisp full-quality frame.
+    const spin = () => {
+      vel.current = { x: vel.current.x * 0.92, y: vel.current.y * 0.92 };
+      if (Math.hypot(vel.current.x, vel.current.y) < 0.3) return draw(1);
+      rotateBy(vel.current.x, vel.current.y);
+      draw(0.45);
+      frame.current = requestAnimationFrame(spin);
+    };
+    frame.current = requestAnimationFrame(spin);
+  };
+  const key = (e: KeyboardEvent<HTMLCanvasElement>) => {
+    const step = 18;
+    const m: Record<string, [number, number]> = { ArrowLeft: [-step, 0], ArrowRight: [step, 0], ArrowUp: [0, -step], ArrowDown: [0, step] };
+    if (!m[e.key]) return;
+    e.preventDefault();
+    rotateBy(...m[e.key]);
+    draw(1);
+    setHint(false);
+  };
+
+  return (
+    <div className="bp-3d">
+      <canvas
+        ref={ref}
+        role="img"
+        aria-label={`${label}. Drag or use the arrow keys to rotate.`}
+        tabIndex={0}
+        onPointerDown={down}
+        onPointerMove={move}
+        onPointerUp={up}
+        onPointerCancel={up}
+        onKeyDown={key}
+      />
+      {hint ? <span className="bp-hint" aria-hidden="true">⟲ Drag to spin the ball</span> : null}
+    </div>
+  );
+}
+
+/** Small static render for balls without a product photo. */
+function BallThumb({ ball }: { ball: BuilderBall }) {
   const ref = useRef<HTMLCanvasElement>(null);
   useEffect(() => {
+    if (ball.photoUrl) return;
     const c = ref.current;
     if (!c) return;
-    const px = Math.round(size * Math.min(window.devicePixelRatio || 1, 2));
-    if (c.width !== px) c.width = c.height = px;
-    drawBall(c.getContext('2d')!, px, scene);
-  }, [scene, size]);
-  return <canvas ref={ref} role="img" aria-label={label} style={{ width: '100%', maxWidth: size, aspectRatio: '1 / 1', display: 'block' }} />;
+    c.width = c.height = 200;
+    const look: BallLook = { colour: ball.colour, front: null, back: sidestampDecal(ball.brand, ball.name, ball.colour) };
+    renderBall(c.getContext('2d')!, 200, look, BRAND_SIDE);
+  }, [ball]);
+  return ball.photoUrl ? (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img src={ball.photoUrl} alt="" className="bp-thumb" />
+  ) : (
+    <canvas ref={ref} className="bp-thumb" aria-hidden="true" />
+  );
 }
 
 export function BallPrintBuilder({
@@ -30,7 +173,7 @@ export function BallPrintBuilder({
   action,
   defaults,
 }: {
-  balls: PrintBall[];
+  balls: BuilderBall[];
   setupFeePence: number;
   action: (prev: FormState, fd: FormData) => Promise<FormState>;
   defaults: PickerDefaults;
@@ -47,7 +190,9 @@ export function BallPrintBuilder({
   const [font, setFont] = useState<PrintFontKey>('classic');
   const [ink, setInk] = useState<InkKey>('navy');
   const [scale, setScale] = useState(0.8);
-  const [view, setView] = useState<'logo' | 'brand'>('logo');
+  const [view, setViewState] = useState<{ side: 'logo' | 'brand'; q: Quat; n: number }>({ side: 'brand', q: BRAND_SIDE, n: 0 });
+  const setView = (side: 'logo' | 'brand') => setViewState((v) => ({ side, q: side === 'logo' ? IDENTITY : BRAND_SIDE, n: v.n + 1 }));
+  const [photo, setPhoto] = useState<{ url: string; img: Img } | null>(null);
   const [guide, setGuide] = useState(true);
   const [dozens, setDozens] = useState(1);
   const [price, setPrice] = useState('');
@@ -63,21 +208,43 @@ export function BallPrintBuilder({
   const artwork: BallArtwork =
     mode === 'logo' ? (logoImg ? { type: 'logo', image: logoImg, scale } : null) : { type: 'text', lines, font, ink, scale };
   const hasArtwork = mode === 'logo' ? Boolean(logoImg) : lines.some((l) => l.trim());
-  const scene: BallScene = useMemo(
-    () => ({ colour: ball?.colour ?? '#ffffff', brand: ball?.brand ?? '', model: ball?.name ?? '', view, artwork, guide, backdrop: false }),
+  const colour = ball?.colour ?? '#ffffff';
+  const front = useMemo(
+    () => artworkDecal(artwork, colour),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [ball, view, logoImg, mode, lines, font, ink, scale, guide],
+    [logoImg, mode, lines, font, ink, scale, colour],
   );
+  const back = useMemo(() => {
+    if (!ball) return null;
+    if (photo && photo.url === ball.photoUrl) return photoDecal(photo.img);
+    return sidestampDecal(ball.brand, ball.name, ball.colour);
+  }, [ball, photo]);
+  const look: BallLook = useMemo(() => ({ colour, front, back }), [colour, front, back]);
+
+  // Editing the artwork turns the ball round to show it.
+  useEffect(() => {
+    if (front) setViewState((v) => (v.side === 'logo' ? v : { side: 'logo', q: IDENTITY, n: v.n + 1 }));
+  }, [front]);
+
+  // Load the chosen ball's product photo so its real sidestamp can be wrapped onto the ball.
+  useEffect(() => {
+    if (!ball?.photoUrl || photo?.url === ball.photoUrl) return;
+    let live = true;
+    loadImage(ball.photoUrl).then((img) => live && setPhoto({ url: ball.photoUrl!, img }), () => undefined);
+    return () => {
+      live = false;
+    };
+  }, [ball, photo]);
 
   const pricePence = parseMoneyToPence(price) ?? 0;
   const setupPence = parseMoneyToPence(setup) ?? 0;
   const total = dozens * pricePence + setupPence;
 
-  const chooseBall = (b: PrintBall) => {
+  const chooseBall = (b: BuilderBall) => {
     setBallId(b.id);
     setPrice(penceToInput(b.pricePerDozenPence));
     setDozens((d) => Math.max(d, b.minDozens));
-    setView('logo');
+    setView('brand');
   };
 
   const loadLogo = (file: File | undefined | null) => {
@@ -106,7 +273,7 @@ export function BallPrintBuilder({
     fd.set('intent', submitter?.value ?? 'save');
     setBusy(true);
     try {
-      fd.set('proof', await renderProof(scene));
+      fd.set('proof', await renderProof(look));
     } finally {
       setBusy(false);
     }
@@ -121,10 +288,10 @@ export function BallPrintBuilder({
       <section className="bp-stage" aria-label="Live preview">
         <div className="bp-stage-top">
           <div className="seg" role="tablist" aria-label="Ball side">
-            <button type="button" role="tab" aria-selected={view === 'logo'} className={view === 'logo' ? 'on' : ''} onClick={() => setView('logo')}>
+            <button type="button" role="tab" aria-selected={view.side === 'logo'} className={view.side === 'logo' ? 'on' : ''} onClick={() => setView('logo')}>
               Logo side
             </button>
-            <button type="button" role="tab" aria-selected={view === 'brand'} className={view === 'brand' ? 'on' : ''} onClick={() => setView('brand')} disabled={!ball}>
+            <button type="button" role="tab" aria-selected={view.side === 'brand'} className={view.side === 'brand' ? 'on' : ''} onClick={() => setView('brand')} disabled={!ball}>
               Brand side
             </button>
           </div>
@@ -133,7 +300,7 @@ export function BallPrintBuilder({
           </label>
         </div>
         <div className="bp-canvas">
-          <BallCanvas scene={scene} size={560} label={ball ? `Preview of ${ball.brand} ${ball.name} with personalisation` : 'Golf ball preview'} />
+          <BallStage look={look} target={view} guide={guide && view.side === 'logo'} label={ball ? `3D preview of ${ball.brand} ${ball.name} with personalisation` : 'Golf ball preview'} />
         </div>
         <div className="bp-caption">
           {ball ? (
@@ -184,7 +351,7 @@ export function BallPrintBuilder({
             <div className="bp-balls">
               {shown.map((b) => (
                 <button key={b.id} type="button" className={`bp-ball${b.id === ballId ? ' selected' : ''}`} aria-pressed={b.id === ballId} onClick={() => chooseBall(b)}>
-                  <BallCanvas scene={{ colour: b.colour, brand: b.brand, model: b.name, view: 'brand', artwork: null, backdrop: false }} size={120} label="" />
+                  <BallThumb ball={b} />
                   <small>{b.brand}</small>
                   <b>{b.name}</b>
                   <span>{money(b.pricePerDozenPence)}/dz</span>
@@ -357,7 +524,15 @@ export function BallPrintBuilder({
                 ← Back
               </button>
             ) : null}
-            <button type="button" className="btn primary" disabled={!canNext} onClick={() => setStep(step + 1)}>
+            <button
+              type="button"
+              className="btn primary"
+              disabled={!canNext}
+              onClick={() => {
+                if (step === 0) setView('logo');
+                setStep(step + 1);
+              }}
+            >
               Next: {STEPS[step + 1]} →
             </button>
           </div>

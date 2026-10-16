@@ -1,8 +1,11 @@
 import { and, asc, eq, gt, inArray, isNull } from 'drizzle-orm';
 import { systemDb, withTenant } from '@/db';
 import { attachments, auditEvents, customers, orders, organisations, trackingTokens } from '@/db/schema';
-import { paymentTotals } from './common';
+import { asBallPrintSpec } from '../ball-print';
+import { journeyFor } from '../status';
 import { hashToken } from '../tokens';
+import { paymentTotals } from './common';
+import { proofPathFor } from './quotes';
 
 /** Events a customer may see. Internal notes, staff names and supplier details are excluded. */
 const CUSTOMER_EVENTS = ['order_created', 'status_changed', 'order_ready', 'order_collected', 'eta_changed'];
@@ -44,6 +47,8 @@ export async function findOrderByTrackingToken(token: string) {
         orderNumber: o.orderNumber, status: o.status, brand: o.brand, product: o.product, specificationText: o.specificationText,
         totalGrossPence: o.totalGrossPence, etaDate: o.etaDate, etaReason: o.etaReason, createdAt: o.createdAt,
       },
+      journey: journeyFor(o.specificationJson),
+      proofUrl: o.quoteId && asBallPrintSpec(o.specificationJson) ? proofPathFor(o.quoteId) : null,
       customerName: row.customerName,
       paid: totals.paid,
       credit: totals.credit,

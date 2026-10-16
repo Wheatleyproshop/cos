@@ -27,7 +27,10 @@ export default async function BallPrintingPage({ searchParams }: { searchParams:
       />
       {balls.length ? (
         <BallPrintBuilder
-          balls={balls}
+          balls={balls.map((b) => ({
+            id: b.id, brand: b.brand, name: b.name, colour: b.colour, pricePerDozenPence: b.pricePerDozenPence, minDozens: b.minDozens,
+            photoUrl: b.photoKey ? `/api/ball-photo/${b.id}?v=${b.photoKey.slice(-10)}` : null,
+          }))}
           setupFeePence={staff.org.ballSetupFeePence}
           action={ballPrintAction}
           defaults={cust ? { customerId: cust.customer.id, customerName: cust.customer.name, email: cust.customer.email, phone: cust.customer.phone } : {}}

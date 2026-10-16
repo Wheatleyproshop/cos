@@ -31,7 +31,7 @@ import {
 import { runBackup } from '@/lib/services/backups';
 import { sendTestEmail } from '@/lib/services/test-email';
 import { addBrand, addComponent, addModel, createFittingQuote, setCatalogActive } from '@/lib/services/fitting';
-import { addBall, addStarterBalls, createBallPrintQuote, setBallActive, updateBallPrice, updateSetupFee } from '@/lib/services/ball-printing';
+import { addBall, addStarterBalls, createBallPrintQuote, setBallActive, setBallPhoto, updateBallPrice, updateSetupFee } from '@/lib/services/ball-printing';
 
 const obj = (fd: FormData) => Object.fromEntries([...fd.entries()].filter(([, v]) => typeof v === 'string'));
 const flag = (fd: FormData, name: string) => fd.get(name) === 'on' || fd.get(name) === 'true';
@@ -338,4 +338,12 @@ export async function setupFeeAction(_: FormState, fd: FormData) {
     await updateSetupFee(ctx, obj(fd));
     return 'Setup fee saved.';
   }, fd);
+}
+
+export async function ballPhotoAction(id: string, _: FormState, fd: FormData) {
+  return act('manager', async (ctx) => {
+    const f = fd.get('photo');
+    await setBallPhoto(ctx, id, f instanceof File && f.size ? f : null);
+    return 'Photo saved.';
+  });
 }

@@ -67,3 +67,32 @@ export function SetupFeeForm({ action, value }: { action: BoundAction; value: st
     </ActionForm>
   );
 }
+
+/** Upload or replace a ball's product photo; submits as soon as a file is chosen. */
+export function BallPhotoForm({ action, photoUrl, label }: { action: BoundAction; photoUrl: string | null; label: string }) {
+  return (
+    <ActionForm action={action} className="bp-photoform" encType="multipart/form-data">
+      {(s) => (
+        <>
+          {photoUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={photoUrl} alt={`Photo of ${label}`} width={44} height={44} />
+          ) : (
+            <span className="bp-nophoto" aria-hidden="true">No photo</span>
+          )}
+          <label className="btn small">
+            {photoUrl ? 'Replace photo' : 'Add photo'}
+            <input
+              type="file"
+              name="photo"
+              accept="image/png,image/jpeg,image/webp"
+              hidden
+              onChange={(e) => e.currentTarget.form?.requestSubmit()}
+            />
+          </label>
+          {s?.error ? <span className="error">{s.error}</span> : null}
+        </>
+      )}
+    </ActionForm>
+  );
+}

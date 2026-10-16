@@ -99,3 +99,37 @@ export function badgeClass(status: OrderStatus | 'quote'): string {
   const tone = step(status).tone;
   return tone === 'success' ? 'badge ready' : tone === 'warning' ? 'badge delayed' : tone === 'progress' ? 'badge progress' : 'badge';
 }
+
+/**
+ * What the customer is told depends on how the order is fulfilled: club orders go to the
+ * manufacturer; personalised balls come from stock and go to the printer.
+ */
+export type Journey = 'supplier' | 'print';
+
+export function journeyFor(specificationJson: unknown): Journey {
+  return (specificationJson as { kind?: string } | null)?.kind === 'cos-ball-print' ? 'print' : 'supplier';
+}
+
+export const JOURNEY_WORDS: Record<
+  Journey,
+  { placed: string; delayed: string; ready: string; readyLong: string; created: (store: string) => string; etaLabel: string; doneValue: string }
+> = {
+  supplier: {
+    placed: 'Placed with manufacturer',
+    delayed: 'Delayed at manufacturer',
+    ready: 'Arrived in store',
+    readyLong: 'Arrived in store — ready to collect',
+    created: (store) => `Order placed with ${store} and with the manufacturer`,
+    etaLabel: 'Estimated arrival',
+    doneValue: 'In store',
+  },
+  print: {
+    placed: 'Sent for printing',
+    delayed: 'Delayed at the printer',
+    ready: 'Ready to collect',
+    readyLong: 'Printed — ready to collect',
+    created: (store) => `Proof approved — order placed with ${store} and sent for printing`,
+    etaLabel: 'Estimated ready date',
+    doneValue: 'Ready in store',
+  },
+};

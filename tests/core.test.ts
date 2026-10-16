@@ -380,6 +380,14 @@ describe('golf ball printing', () => {
     const [msg] = await withTenant(org.id, (tx) => tx.select().from(messages).where(eq(messages.quoteId, q.id)));
     expect(msg.subject).toContain('golf ball proof');
     expect(msg.bodyHtml).toContain(`/api/public/ball-proof/${q.id}/`);
+
+    // Balls come from stock: once approved the customer is told they've gone into print, not to a manufacturer.
+    const { acceptQuoteInStore } = await import('@/lib/services/quotes');
+    await acceptQuoteInStore(staff, q.id, 'Pat Print');
+    const [order] = await withTenant(org.id, (tx) => tx.select().from(orders).where(eq(orders.quoteId, q.id)));
+    const [confirm] = await withTenant(org.id, (tx) => tx.select().from(messages).where(eq(messages.orderId, order.id)));
+    expect(confirm.subject).toContain('gone into print');
+    expect(confirm.bodyHtml).not.toContain('manufacturer');
   });
 
   it('rejects a proof that is not really an image, and logo jobs without a logo', async () => {

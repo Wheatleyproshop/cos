@@ -37,6 +37,8 @@ export type EmailContext = {
   actionUrl?: string; // tracking or approval link
   /** A rendered artwork proof (golf ball printing) shown above the specification. */
   previewImageUrl?: string;
+  /** 'print' = personalised balls from stock sent to the printer, not ordered from a manufacturer. */
+  journey?: 'supplier' | 'print';
 };
 
 export type RenderedEmail = { subject: string; html: string; text: string };
@@ -144,16 +146,19 @@ function commercialRows(ctx: EmailContext): Block[] {
 
 export function renderEmail(type: EmailAutomationKey, ctx: EmailContext): RenderedEmail {
   const s = ctx.store.storeName;
+  const print = ctx.journey === 'print';
   switch (type) {
     case 'order_confirmation': {
       const r = layout(ctx, {
-        preheader: `Your ${ctx.brand} order is confirmed.`,
-        heading: 'Your order is confirmed',
-        intro: ['Thank you for your order. It has been placed with the manufacturer, and we’ll let you know as soon as it arrives in store.'],
-        rows: [...commercialRows(ctx), { label: 'Estimated arrival', value: longDate(ctx.etaDate) }],
+        preheader: print ? 'Your personalised golf balls have gone into print.' : `Your ${ctx.brand} order is confirmed.`,
+        heading: print ? 'Your golf balls have gone into print' : 'Your order is confirmed',
+        intro: print
+          ? ['Thank you for approving your proof. Your personalised golf balls have gone into print, and we’ll let you know as soon as they’re ready to collect.']
+          : ['Thank you for your order. It has been placed with the manufacturer, and we’ll let you know as soon as it arrives in store.'],
+        rows: [...commercialRows(ctx), { label: print ? 'Estimated ready date' : 'Estimated arrival', value: longDate(ctx.etaDate) }],
         cta: ctx.actionUrl ? { label: 'Track your order', url: ctx.actionUrl } : undefined,
       });
-      return { subject: `Order confirmed — ${ctx.brand} ${ctx.product} (${ctx.reference})`, ...r };
+      return { subject: print ? `Your golf balls have gone into print (${ctx.reference})` : `Order confirmed — ${ctx.brand} ${ctx.product} (${ctx.reference})`, ...r };
     }
     case 'quote_approval': {
       const rows: Block[] = [{ label: 'Price (incl. VAT)', value: money(ctx.totalPence) }];
@@ -176,17 +181,17 @@ export function renderEmail(type: EmailAutomationKey, ctx: EmailContext): Render
     case 'eta_revised': {
       const rows: Block[] = [];
       if (ctx.previousEtaDate) rows.push({ label: 'Previous estimate', value: longDate(ctx.previousEtaDate) });
-      rows.push({ label: 'New estimated arrival', value: longDate(ctx.etaDate) });
-      const intro = ['The estimated arrival date for your order has changed. We will continue to keep you updated.'];
+      rows.push({ label: print ? 'New estimated ready date' : 'New estimated arrival', value: longDate(ctx.etaDate) });
+      const intro = [print ? 'The date your golf balls will be ready has changed. We will continue to keep you updated.' : 'The estimated arrival date for your order has changed. We will continue to keep you updated.'];
       if (ctx.etaReason) intro.push(ctx.etaReason);
       const r = layout(ctx, {
-        preheader: `New estimated arrival: ${longDate(ctx.etaDate)}.`,
+        preheader: `${print ? 'New estimated ready date' : 'New estimated arrival'}: ${longDate(ctx.etaDate)}.`,
         heading: 'An update on your order',
         intro,
         rows,
         cta: ctx.actionUrl ? { label: 'Track your order', url: ctx.actionUrl } : undefined,
       });
-      return { subject: `Update on your order ${ctx.reference} — new estimated arrival`, ...r };
+      return { subject: `Update on your order ${ctx.reference} — new estimated ${print ? 'ready date' : 'arrival'}`, ...r };
     }
     case 'ready_for_collection':
     case 'collection_reminder': {
@@ -195,16 +200,22 @@ export function renderEmail(type: EmailAutomationKey, ctx: EmailContext): Render
       if (ctx.store.openingHours) rows.push({ label: 'Opening hours', value: ctx.store.openingHours });
       rows.push({ label: 'Balance due on collection', value: money(ctx.balancePence ?? 0) });
       const r = layout(ctx, {
-        preheader: reminder ? 'Your order is still waiting for you.' : 'Your order has arrived in store.',
-        heading: reminder ? 'A friendly reminder — your order is waiting' : 'Your order has arrived in store',
+        preheader: reminder ? 'Your order is still waiting for you.' : print ? 'Your personalised golf balls are ready.' : 'Your order has arrived in store.',
+        heading: reminder ? 'A friendly reminder — your order is waiting' : print ? 'Your golf balls are ready to collect' : 'Your order has arrived in store',
         intro: reminder
           ? ['Your order is ready and waiting for you in store. Pop in whenever suits you.']
-          : ['Great news. Your order has arrived and is ready to collect from our store.'],
+          : print
+            ? ['Great news. Your personalised golf balls have been printed and are ready to collect from our store.']
+            : ['Great news. Your order has arrived and is ready to collect from our store.'],
         rows,
         cta: ctx.actionUrl ? { label: 'View your order', url: ctx.actionUrl } : undefined,
       });
       return {
-        subject: reminder ? `Reminder: your order ${ctx.reference} is ready to collect` : `Your order has arrived in store — ${ctx.reference}`,
+        subject: reminder
+          ? `Reminder: your order ${ctx.reference} is ready to collect`
+          : print
+            ? `Your golf balls are ready to collect — ${ctx.reference}`
+            : `Your order has arrived in store — ${ctx.reference}`,
         ...r,
       };
     }

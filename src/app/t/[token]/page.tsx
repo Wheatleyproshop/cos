@@ -23,6 +23,8 @@ export default async function TrackingPage({ params, searchParams }: { params: P
       files={d.files}
       token={token}
       approved={Boolean(approved)}
+      journey={d.journey}
+      proofUrl={d.proofUrl}
     />
   );
 }

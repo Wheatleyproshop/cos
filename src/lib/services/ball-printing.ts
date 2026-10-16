@@ -78,6 +78,19 @@ export async function updateBallPrice(ctx: Ctx, id: string, raw: unknown) {
   await auditCatalogue(ctx, 'ball_price_changed', { id, ...v });
 }
 
+/** Stores a product photo for a ball; the builder wraps its printed side onto the 3D ball. */
+export async function setBallPhoto(ctx: Ctx, id: string, file: File | null) {
+  requireRole(ctx, 'manager', 'edit the ball range');
+  const img = await readImage(file, 'photo', MAX_LOGO_BYTES);
+  if (!img) throw new ServiceError('Choose a photo of the ball.', { photo: 'Required' });
+  const [ball] = await withTenant(ctx.org.id, (tx) => tx.select().from(printBalls).where(eq(printBalls.id, id)).limit(1));
+  if (!ball) throw new ServiceError('Ball not found.');
+  const key = `orgs/${ctx.org.id}/ball-photos/${id}-${newToken().slice(0, 10)}.${LOGO_TYPES[img.mime]}`;
+  await storage().put(key, img.buf, img.mime);
+  await withTenant(ctx.org.id, (tx) => tx.update(printBalls).set({ photoKey: key, photoMime: img.mime }).where(eq(printBalls.id, id)));
+  await auditCatalogue(ctx, 'ball_photo_set', { id, ball: `${ball.brand} ${ball.name}` });
+}
+
 /** Balls are retired, never deleted, so old quotes keep their references. */
 export async function setBallActive(ctx: Ctx, id: string, active: boolean) {
   requireRole(ctx, 'manager', 'edit the ball range');

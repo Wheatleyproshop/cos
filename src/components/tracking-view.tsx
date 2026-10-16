@@ -1,6 +1,6 @@
 import type { Organisation, OrderStatus } from '@/db/schema';
 import { longDate, money, niceDate, stamp } from '@/lib/format';
-import { step } from '@/lib/status';
+import { JOURNEY_WORDS, type Journey } from '@/lib/status';
 import { PublicShell } from './public-shell';
 
 export type TrackingOrder = {
@@ -11,27 +11,33 @@ export type TrackingOrder = {
 export type TrackingEvent = { eventType: string; oldValueJson: unknown; newValueJson: unknown; createdAt: Date };
 
 /**
- * Customer-facing progress. "Place order" and "Ordered" are both shown as ordered from the
- * manufacturer, so customers see: Placed with manufacturer → Arrived in store → Collected.
+ * Customer-facing progress. "Place order" and "Ordered" are both shown as already placed, so
+ * customers see e.g. Placed with manufacturer → Arrived in store → Collected (or, for printed
+ * balls, Sent for printing → Ready to collect → Collected).
  */
-export const STEPS: { key: OrderStatus; label: string }[] = [
-  { key: 'ordered', label: 'Placed with manufacturer' },
-  { key: 'ready', label: 'Arrived in store' },
-  { key: 'collected', label: 'Collected' },
-];
+export function steps(journey: Journey): { key: OrderStatus; label: string }[] {
+  const w = JOURNEY_WORDS[journey];
+  return [
+    { key: 'ordered', label: w.placed },
+    { key: 'ready', label: w.ready },
+    { key: 'collected', label: 'Collected' },
+  ];
+}
 
-export function describe(e: { eventType: string; oldValueJson: unknown; newValueJson: unknown }, store: string): string | null {
+export function describe(e: { eventType: string; oldValueJson: unknown; newValueJson: unknown }, store: string, journey: Journey = 'supplier'): string | null {
   const n = (e.newValueJson ?? {}) as Record<string, string>;
+  const w = JOURNEY_WORDS[journey];
   switch (e.eventType) {
     case 'order_created':
-      return `Order placed with ${store} and with the manufacturer`;
+      return w.created(store);
     case 'status_changed':
       // Moving between Place order and Ordered is internal: the customer already sees "ordered".
-      return n.status === 'place_order' || n.status === 'ordered' ? null : step(n.status as OrderStatus).customerLabel;
+      if (n.status === 'place_order' || n.status === 'ordered') return null;
+      return n.status === 'delayed' ? w.delayed : n.status === 'ready' ? w.ready : n.status === 'collected' ? 'Collected' : null;
     case 'eta_changed':
-      return `Estimated arrival updated to ${longDate(n.etaDate)}${n.etaReason ? ` — ${n.etaReason}` : ''}`;
+      return `${w.etaLabel} updated to ${longDate(n.etaDate)}${n.etaReason ? ` — ${n.etaReason}` : ''}`;
     case 'order_ready':
-      return 'Arrived in store — ready to collect';
+      return w.readyLong;
     case 'order_collected':
       return 'Collected — enjoy!';
     default:
@@ -42,14 +48,18 @@ export function describe(e: { eventType: string; oldValueJson: unknown; newValue
 
 /** The customer-facing order page. Shared by real tracking links and the shop's preview page. */
 export function TrackingView({
-  org, order: o, customerName, paid, credit = 0, balance, events, files, token, approved, banner,
+  org, order: o, customerName, paid, credit = 0, balance, events, files, token, approved, banner, journey = 'supplier', proofUrl,
 }: {
+  journey?: Journey;
+  proofUrl?: string | null;
   org: Organisation; order: TrackingOrder; customerName: string; paid: number; credit?: number; balance: number;
   events: TrackingEvent[]; files: { id: string; filename: string }[]; token: string | null; approved?: boolean; banner?: React.ReactNode;
 }) {
   const current = o.status === 'delayed' || o.status === 'place_order' ? 'ordered' : o.status;
+  const w = JOURNEY_WORDS[journey];
+  const STEPS = steps(journey);
   const idx = STEPS.findIndex((s) => s.key === current);
-  const timeline = events.map((e) => ({ text: describe(e, org.storeName), at: e.createdAt })).filter((e) => e.text);
+  const timeline = events.map((e) => ({ text: describe(e, org.storeName, journey), at: e.createdAt })).filter((e) => e.text);
   const d = { paid, balance, files, customerName };
   return (
     <PublicShell org={org}>
@@ -65,20 +75,27 @@ export function TrackingView({
         {o.brand} {o.product}
       </h1>
       <p style={{ whiteSpace: 'pre-line', marginTop: 0 }}>{o.specificationText}</p>
+      {proofUrl ? (
+        <figure className="proof">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={proofUrl} alt={`Your approved design on the ${o.brand} ${o.product}`} width={900} height={900} />
+          <figcaption>Your approved proof</figcaption>
+        </figure>
+      ) : null}
 
       <ol className="steps" aria-label="Order progress">
         {STEPS.map((s, i) => (
           <li key={s.key} className={i < idx ? 'done' : i === idx ? 'current' : ''} aria-current={i === idx ? 'step' : undefined}>
             {s.label}
-            {s.key === 'ordered' && o.status === 'delayed' ? ' — delayed at the manufacturer' : ''}
+            {s.key === 'ordered' && o.status === 'delayed' ? ` — ${w.delayed.toLowerCase()}` : ''}
           </li>
         ))}
       </ol>
 
       <div className="detailgrid">
         <div className="detailbox">
-          <small>{o.status === 'ready' || o.status === 'collected' ? 'Arrived' : 'Estimated arrival'}</small>
-          <b>{o.status === 'ready' || o.status === 'collected' ? 'In store' : o.etaDate ? longDate(o.etaDate) : 'To be confirmed'}</b>
+          <small>{o.status === 'ready' || o.status === 'collected' ? 'Status' : w.etaLabel}</small>
+          <b>{o.status === 'ready' || o.status === 'collected' ? w.doneValue : o.etaDate ? longDate(o.etaDate) : 'To be confirmed'}</b>
           {o.etaReason && o.status === 'delayed' ? <div className="muted">{o.etaReason}</div> : null}
         </div>
         <div className="detailbox">
@@ -92,7 +109,7 @@ export function TrackingView({
       </div>
       {o.status === 'ready' && org.collectionLocation ? (
         <div className="notice">
-          <b>Arrived in store — ready to collect</b>
+          <b>{w.readyLong}</b>
           {org.collectionLocation}
           {org.openingHours ? ` · ${org.openingHours}` : ''}
         </div>
