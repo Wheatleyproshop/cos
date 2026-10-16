@@ -3,7 +3,7 @@
 import { useActionState, useMemo, useState } from 'react';
 import type { Brand, Component, ProductModel } from '@/db/schema';
 import type { FormState } from '@/lib/action-utils';
-import { CLUB_CATEGORIES, validComponentIds } from '@/lib/fitting-rules';
+import { clubsInBuild, CLUB_CATEGORIES, componentPrice, isPerClub, validComponentIds } from '@/lib/fitting-rules';
 import { money } from '@/lib/format';
 import { ClubIcon, PartIcon } from './club-icon';
 import { Field, FormMessage } from './forms';
@@ -47,8 +47,16 @@ export function FittingBuilder({
   const heads = catalog.models.filter((m) => (!brandId || m.brandId === brandId) && m.category === club);
   const clubsAvailable = new Set(catalog.models.filter((m) => !brandId || m.brandId === brandId).map((m) => m.category));
 
-  const upcharge = (c: Component) =>
-    catalog.rules.find((r) => model && r.modelId === model.id && r.componentId === c.id)?.upchargeOverridePence ?? c.upchargePence;
+  const chosenComponents = Object.values(picks)
+    .map((id) => catalog.components.find((x) => x.id === id))
+    .filter((c): c is Component => Boolean(c));
+  const clubs = model ? clubsInBuild(model, chosenComponents) : 1;
+  const upcharge = (c: Component) => (model ? componentPrice(catalog, model, c, chosenComponents) : c.upchargePence);
+  const priceLabel = (c: Component) => {
+    const p = upcharge(c);
+    const each = isPerClub(c) && clubs > 1 ? ` (${money(p / clubs)} × ${clubs} clubs)` : isPerClub(c) ? ' per club' : '';
+    return p > 0 ? `+${money(p)}${each}` : p < 0 ? `−${money(-p)}` : 'No upcharge';
+  };
 
   const lines = useMemo(() => {
     const out: { label: string; name: string; price: number; kind: string }[] = [];
@@ -178,7 +186,7 @@ export function FittingBuilder({
                     >
                       <PartIcon kind={catForStep.key} size={64} />
                       <b>{c.name}</b>
-                      <span className="muted">{upcharge(c) > 0 ? `+${money(upcharge(c))}` : upcharge(c) < 0 ? `−${money(-upcharge(c))}` : 'No upcharge'}</span>
+                      <span className="muted">{priceLabel(c)}</span>
                     </button>
                   ))}
               </div>

@@ -42,3 +42,36 @@ export function validComponentIds(
   const deny = new Set(rules.filter((r) => r.rule === 'excluded').map((r) => r.componentId));
   return new Set(inCat.map((c) => c.id).filter((id) => (allow.length ? allow.includes(id) : true) && !deny.has(id)));
 }
+
+type PricedComponent = ComponentLike & { upchargePence: number };
+type PricedRule = RuleLike & { upchargeOverridePence: number | null };
+type PricedModel = Pick<ProductModel, 'id' | 'category' | 'clubsInSet'>;
+
+export function isPerClub(c: { metadata: unknown }) {
+  return Boolean((c.metadata as { perClub?: boolean } | null)?.perClub);
+}
+
+/**
+ * How many clubs a build contains: an iron set's chosen make-up (or the head's standard set),
+ * otherwise one club.
+ */
+export function clubsInBuild(model: PricedModel, chosen: { metadata: unknown }[]) {
+  if (model.category !== 'irons' || !model.clubsInSet) return 1;
+  const set = chosen.map((c) => (c.metadata as { clubs?: number } | null)?.clubs).find((n) => typeof n === 'number');
+  return set ?? model.clubsInSet;
+}
+
+/**
+ * A component's price on this build: a head-specific override, or its upcharge — multiplied by
+ * the number of clubs when it is charged per club (e.g. a premium iron shaft on a 7-club set).
+ */
+export function componentPrice(
+  catalog: { rules: PricedRule[] },
+  model: PricedModel,
+  component: PricedComponent,
+  chosen: { metadata: unknown }[],
+) {
+  const override = catalog.rules.find((r) => r.modelId === model.id && r.componentId === component.id)?.upchargeOverridePence;
+  const each = override ?? component.upchargePence;
+  return isPerClub(component) ? each * clubsInBuild(model, chosen) : each;
+}

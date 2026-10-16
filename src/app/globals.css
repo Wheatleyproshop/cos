@@ -383,3 +383,4 @@ details.section[open] { padding-bottom: 16px; }
 .attention li > span:first-child { min-width: 0; flex: 1 1 220px; overflow-wrap: anywhere; }
 /* Grid children may shrink below their content so wide tables scroll inside .tablewrap instead of widening the page. */
 .split > * { min-width: 0; }
+.perclub { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; color: #57606d; white-space: nowrap; }

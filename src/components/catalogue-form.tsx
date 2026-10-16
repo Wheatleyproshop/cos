@@ -33,7 +33,8 @@ export function CatalogueForm({
                 <Field state={s} name="category" label="Club type" options={clubTypes} />
                 <Field state={s} name="name" label="Model name" required placeholder="e.g. G440 MAX Driver" />
                 <Field state={s} name="sku" label="SKU" />
-                <Field state={s} name="basePricePence" label="RRP (GBP)" required inputMode="decimal" />
+                <Field state={s} name="basePricePence" label="RRP (GBP)" required inputMode="decimal" hint="Irons: the price of the whole set" />
+                <Field state={s} name="clubsInSet" label="Irons: clubs in that set" type="number" min="0" defaultValue="6" hint="Used to price per-club shaft and grip upcharges" />
                 <Field state={s} name="leadTimeDays" label="Lead time (days)" type="number" min="0" defaultValue="10" />
               </>
             ) : (

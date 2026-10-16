@@ -10,11 +10,12 @@ import {
 /**
  * Loads a manufacturer catalogue (heads, lofts, iron set make-ups, shafts, flexes, grips) into a
  * shop's Custom Fitting catalogue.
- *   npm run catalogue:import -- --shop desirable-golf --file catalogue.json [--dry-run]
+ *   npm run catalogue:import -- --shop desirable-golf --file catalogue.json [--dry-run] [--update-prices]
  *
  * The file is an array of brands in the shape produced by our catalogue research
  * (see docs/CONFIGURE.md). Safe to re-run: everything is matched by name and updated in
- * place, nothing is ever deleted, and items the shop has retired stay retired.
+ * place, nothing is ever deleted, and items the shop has retired stay retired. Prices and upcharges
+ * the shop may have edited are only overwritten with --update-prices.
  */
 
 type Club = 'driver' | 'fairway' | 'hybrid' | 'irons' | 'wedge' | 'putter';
@@ -46,8 +47,9 @@ const SETS = [
 const pence = (gbp: number | null | undefined) => (gbp == null ? null : Math.round(gbp * 100));
 
 async function main() {
-  const { values: a } = parseArgs({ options: { shop: { type: 'string' }, file: { type: 'string' }, 'dry-run': { type: 'boolean', default: false } } });
-  if (!a.shop || !a.file) throw new Error('Usage: --shop <slug> --file <catalogue.json> [--dry-run]');
+  const { values: a } = parseArgs({ options: { shop: { type: 'string' }, file: { type: 'string' }, 'dry-run': { type: 'boolean', default: false }, 'update-prices': { type: 'boolean', default: false } } });
+  if (!a.shop || !a.file) throw new Error('Usage: --shop <slug> --file <catalogue.json> [--dry-run] [--update-prices]');
+  const updatePrices = a['update-prices'];
   const input = JSON.parse(readFileSync(a.file, 'utf8')) as InBrand[];
   const h = createDatabase(process.env.DATABASE_URL_UNPOOLED || process.env.DATABASE_URL);
   const report: string[] = [];
@@ -83,7 +85,14 @@ async function main() {
           const metadata = v.mergeModelIds
             ? { ...v.metadata, modelIds: [...new Set([...(prev.modelIds ?? []), ...((v.metadata.modelIds as string[]) ?? [])])] }
             : v.metadata;
-          await tx.update(components).set({ upchargePence: v.upchargePence, metadata }).where(eq(components.id, found.id));
+          const keepEdited = !updatePrices && v.categoryKey !== 'loft';
+          await tx
+            .update(components)
+            .set({
+              upchargePence: keepEdited ? found.upchargePence : v.upchargePence,
+              metadata: keepEdited ? { ...metadata, perClub: (prev as { perClub?: boolean }).perClub ?? metadata.perClub } : metadata,
+            })
+            .where(eq(components.id, found.id));
           return found.id;
         }
         const [row] = await tx
@@ -115,7 +124,12 @@ async function main() {
             continue;
           }
           const [found] = await tx.select().from(productModels).where(and(eq(productModels.organisationId, orgId), eq(productModels.brandId, brandId), eq(productModels.name, m.name)));
-          const values = { category: m.category, season: m.season ?? '', basePricePence: base, sku: found?.sku ?? '' };
+          const baseClubs = Number(/(\d+) clubs?/.exec(m.setMakeup ?? '')?.[1] ?? 6);
+          const values = {
+            category: m.category, season: m.season ?? '', sku: found?.sku ?? '',
+            basePricePence: found && !updatePrices ? found.basePricePence : base,
+            clubsInSet: isIrons ? baseClubs : null,
+          };
           const modelId = found
             ? (await tx.update(productModels).set(values).where(eq(productModels.id, found.id)).returning())[0].id
             : (await tx.insert(productModels).values({ organisationId: orgId, brandId, name: m.name, ...values, leadTimeDays: 10 }).returning())[0].id;
@@ -128,7 +142,6 @@ async function main() {
 
           // Set make-ups, priced per model from the per-club price.
           if (isIrons && perClub != null) {
-            const baseClubs = Number(/(\d+) clubs?/.exec(m.setMakeup ?? '')?.[1] ?? 6);
             for (const s of SETS) {
               const compId = await upsertComponent({ categoryKey: 'set', brandId: null, name: s.name, upchargePence: 0, metadata: { clubCategories: ['irons'], clubs: s.clubs, modelIds: [modelId] }, mergeModelIds: true });
               const override = (s.clubs - baseClubs) * perClub;
@@ -144,16 +157,18 @@ async function main() {
           const flex = p.flexes?.length ? ` (${p.flexes.join(', ')})` : '';
           const types = p.clubTypes.filter((t) => SHAFTED.includes(t));
           if (!types.length) continue;
-          // Iron shaft upcharges are per club; a flat amount would be wrong for a set, so staff add it.
-          const perClubNote = types.includes('irons') && (p.upchargeGBP ?? 0) > 0 ? ` — +£${p.upchargeGBP} per club` : '';
+          // Shafts that go in irons/wedges are charged per club, so a set's upcharge scales with its size
+          // (a single hybrid or wedge counts as one club).
+          const perClub = types.some((t) => t === 'irons' || t === 'wedge');
           await upsertComponent({
-            categoryKey: 'shaft', brandId, name: `${p.name}${flex}${perClubNote}`, upchargePence: perClubNote ? 0 : (pence(p.upchargeGBP) ?? 0),
-            metadata: { clubCategories: types, stock: p.stock ?? null, priceOnRequest: p.upchargeGBP == null, perClubUpchargePence: perClubNote ? pence(p.upchargeGBP) : null },
+            categoryKey: 'shaft', brandId, name: `${p.name}${flex}`, upchargePence: pence(p.upchargeGBP) ?? 0,
+            metadata: { clubCategories: types, stock: p.stock ?? null, priceOnRequest: p.upchargeGBP == null, perClub },
           });
           counts.shafts++;
         }
         for (const g of b.grips) {
-          await upsertComponent({ categoryKey: 'grip', brandId, name: g.name, upchargePence: pence(g.upchargeGBP) ?? 0, metadata: { clubCategories: g.clubTypes, stock: g.stock ?? null, priceOnRequest: g.upchargeGBP == null } });
+          // Grips are fitted to every club, so their upcharge is per club too (a single club has one).
+          await upsertComponent({ categoryKey: 'grip', brandId, name: g.name, upchargePence: pence(g.upchargeGBP) ?? 0, metadata: { clubCategories: g.clubTypes, stock: g.stock ?? null, priceOnRequest: g.upchargeGBP == null, perClub: !g.clubTypes.includes('putter') } });
           counts.grips++;
         }
         report.push(`${b.brand}: ${b.models.length} heads listed, ${b.shafts.length} shafts, ${b.grips.length} grips`);

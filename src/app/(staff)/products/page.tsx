@@ -49,6 +49,7 @@ export default async function ProductsPage() {
                       <div className="muted">
                         {m.sku || 'No SKU'}
                         {m.leadTimeDays ? ` · ${m.leadTimeDays} day lead time` : ''}
+                        {m.clubsInSet ? ` · ${m.clubsInSet}-club set` : ''}
                       </div>
                     </td>
                     <td>{CLUB_CATEGORIES.find((k) => k.key === m.category)?.label ?? m.category}</td>
@@ -115,7 +116,7 @@ export default async function ProductsPage() {
                         {inCat
                           .filter((x) => (x.brandId ?? '') === g)
                           .map((x) => {
-                            const meta = (x.metadata ?? {}) as { clubCategories?: string[]; modelIds?: string[] };
+                            const meta = (x.metadata ?? {}) as { clubCategories?: string[]; modelIds?: string[]; perClub?: boolean };
                             const fits = meta.modelIds?.length
                               ? c.models.filter((m) => meta.modelIds!.includes(m.id)).map((m) => m.name).join(', ')
                               : meta.clubCategories?.length
@@ -126,12 +127,18 @@ export default async function ProductsPage() {
                                 <span>
                                   {x.name}
                                   <div className="muted">
-                                    {cat.key === 'set' ? 'Priced per head from its per-club price' : x.upchargePence > 0 ? `+${money(x.upchargePence)}` : 'No upcharge'} · {fits}
+                                    {cat.key === 'set' ? 'Priced per head from its per-club price' : x.upchargePence > 0 ? `+${money(x.upchargePence)}${meta.perClub ? ' per club' : ''}` : 'No upcharge'} · {fits}
                                   </div>
                                 </span>
                                 <span className="inlineactions">
                                   {manager && cat.key !== 'set' ? (
-                                    <InlinePriceForm action={componentUpchargeAction.bind(null, x.id)} value={penceToInput(x.upchargePence)} name="upchargePence" label={`Upcharge for ${x.name}`} />
+                                    <InlinePriceForm
+                                      action={componentUpchargeAction.bind(null, x.id)}
+                                      value={penceToInput(x.upchargePence)}
+                                      name="upchargePence"
+                                      label={`Upcharge for ${x.name}`}
+                                      perClub={cat.key === 'shaft' || cat.key === 'grip' ? Boolean(meta.perClub) : undefined}
+                                    />
                                   ) : null}
                                   {retire('component', x.id, x.active)}
                                 </span>

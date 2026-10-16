@@ -431,3 +431,20 @@ describe('catalogue upcharges', () => {
     expect(events.at(-1)?.oldValueJson).toMatchObject({ upchargePence: shaft.upchargePence });
   });
 });
+
+describe('per-club upcharges', () => {
+  it('multiplies a per-club shaft upcharge by the chosen iron set size', async () => {
+    const { clubsInBuild, componentPrice } = await import('@/lib/fitting-rules');
+    const irons = { id: 'm1', category: 'irons', clubsInSet: 7 } as const;
+    const wedge = { id: 'm2', category: 'wedge', clubsInSet: null } as const;
+    const shaft = { id: 'c1', categoryId: 'shaft', metadata: { perClub: true }, upchargePence: 1000 };
+    const flat = { id: 'c2', categoryId: 'shaft', metadata: {}, upchargePence: 1000 };
+    const sixClubs = { id: 'c3', categoryId: 'set', metadata: { clubs: 6 }, upchargePence: 0 };
+    const cat = { rules: [] };
+    expect(clubsInBuild(irons, [shaft])).toBe(7);
+    expect(componentPrice(cat, irons, shaft, [shaft])).toBe(7000);
+    expect(componentPrice(cat, irons, shaft, [shaft, sixClubs])).toBe(6000);
+    expect(componentPrice(cat, irons, flat, [flat, sixClubs])).toBe(1000);
+    expect(componentPrice(cat, wedge, shaft, [shaft])).toBe(1000);
+  });
+});

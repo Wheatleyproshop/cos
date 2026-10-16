@@ -78,6 +78,13 @@
       "when": 1792174598623,
       "tag": "0010_ball_photos",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1792177855180,
+      "tag": "0011_clubs_in_set",
+      "breakpoints": true
     }
   ]
 }

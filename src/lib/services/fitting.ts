@@ -14,7 +14,7 @@ import { recordEvent } from '../audit';
 import { money, parseMoneyToPence } from '../format';
 import { hasFeature } from '../plans';
 import { customerFields, parse } from '../validation';
-import { CLUB_CATEGORIES, validComponentIds } from '../fitting-rules';
+import { clubsInBuild, CLUB_CATEGORIES, componentPrice, isPerClub, validComponentIds } from '../fitting-rules';
 import { requireRole, ServiceError, type Ctx } from './common';
 import { createQuote } from './quotes';
 
@@ -63,9 +63,12 @@ export async function createFittingQuote(ctx: Ctx, raw: unknown, opts: { send: b
     if (!validComponentIds(catalog, model, cat.id).has(c.id)) {
       throw new ServiceError(`${c.name} isn’t available with the ${model.name}.`);
     }
-    const override = catalog.rules.find((r) => r.modelId === model.id && r.componentId === c.id)?.upchargeOverridePence;
-    return { component: c, category: cat, upcharge: override ?? c.upchargePence };
+    return { component: c, category: cat, upcharge: 0 };
   });
+  // Priced once everything is chosen: per-club upcharges depend on the chosen set make-up.
+  const picked = chosen.map((c) => c.component);
+  const clubs = clubsInBuild(model, picked);
+  for (const c of chosen) c.upcharge = componentPrice(catalog, model, c.component, picked);
   for (const cat of catalog.categories) {
     if (!cat.allowMultiple && chosen.filter((c) => c.category.id === cat.id).length > 1) {
       throw new ServiceError(`Choose one ${cat.label.toLowerCase()}.`);
@@ -76,7 +79,10 @@ export async function createFittingQuote(ctx: Ctx, raw: unknown, opts: { send: b
   const leadDays = Math.max(model.leadTimeDays ?? 0, ...chosen.map((c) => c.component.leadTimeDays ?? 0));
   const lines = [
     `Head: ${brand.name} ${model.name} — ${money(model.basePricePence)}`,
-    ...chosen.map((c) => `${c.category.label}: ${c.component.name}${c.upcharge ? ` — ${money(c.upcharge)}` : ''}`),
+    ...chosen.map(
+      (c) =>
+        `${c.category.label}: ${c.component.name}${c.upcharge ? ` — ${money(c.upcharge)}${isPerClub(c.component) && clubs > 1 ? ` (${money(c.upcharge / clubs)} × ${clubs} clubs)` : ''}` : ''}`,
+    ),
     ...(input.buildNotes ? ['', input.buildNotes] : []),
   ];
   const spec = {
@@ -149,6 +155,7 @@ const modelSchema = z.object({
   basePricePence: pence('Price'),
   leadTimeDays: z.coerce.number().int().min(0).max(365).default(0),
   season: z.string().trim().max(20).default(''),
+  clubsInSet: z.coerce.number().int().min(0).max(14).default(0),
 });
 const componentSchema = z.object({
   categoryId: z.string().uuid('Choose a step'),
@@ -173,7 +180,8 @@ export async function addBrand(ctx: Ctx, raw: unknown) {
 export async function addModel(ctx: Ctx, raw: unknown) {
   requireRole(ctx, 'manager', 'edit the product catalogue');
   const v = parse(modelSchema, raw);
-  await withTenant(ctx.org.id, (tx) => tx.insert(productModels).values({ organisationId: ctx.org.id, ...v, leadTimeDays: v.leadTimeDays || null }));
+  const clubsInSet = v.category === 'irons' && v.clubsInSet > 1 ? v.clubsInSet : null;
+  await withTenant(ctx.org.id, (tx) => tx.insert(productModels).values({ organisationId: ctx.org.id, ...v, clubsInSet, leadTimeDays: v.leadTimeDays || null }));
   await audit(ctx, 'model_added', v);
 }
 
@@ -211,7 +219,7 @@ export async function updateModelPrice(ctx: Ctx, id: string, raw: unknown) {
  */
 export async function updateComponentUpcharge(ctx: Ctx, id: string, raw: unknown) {
   requireRole(ctx, 'manager', 'edit the product catalogue');
-  const v = parse(z.object({ upchargePence: pence('Upcharge') }), raw);
+  const v = parse(z.object({ upchargePence: pence('Upcharge'), perClub: z.string().optional().transform((x) => x === 'on' || x === 'true') }), raw);
   const before = await withTenant(ctx.org.id, async (tx) => {
     const [row] = await tx
       .select({ c: components, key: componentCategories.key })
@@ -220,14 +228,18 @@ export async function updateComponentUpcharge(ctx: Ctx, id: string, raw: unknown
       .where(and(eq(components.id, id), eq(components.organisationId, ctx.org.id)));
     if (!row) throw new ServiceError('That option is no longer in the catalogue.');
     if (row.key === 'set') throw new ServiceError('Set make-ups are priced from each head’s per-club price.');
-    if (row.c.upchargePence !== v.upchargePence) await tx.update(components).set(v).where(eq(components.id, id));
-    return row.c;
+    const wasPerClub = isPerClub(row.c);
+    if (row.c.upchargePence !== v.upchargePence || wasPerClub !== v.perClub) {
+      const metadata = { ...((row.c.metadata ?? {}) as Record<string, unknown>), perClub: v.perClub };
+      await tx.update(components).set({ upchargePence: v.upchargePence, metadata }).where(eq(components.id, id));
+    }
+    return { ...row.c, perClub: wasPerClub };
   });
-  if (before.upchargePence === v.upchargePence) return;
+  if (before.upchargePence === v.upchargePence && before.perClub === v.perClub) return;
   await withTenant(ctx.org.id, (tx) =>
     recordEvent(tx, {
       organisationId: ctx.org.id, actor: ctx.actor, eventType: 'settings_changed', entityType: 'organisation', entityId: ctx.org.id,
-      oldValue: { component: before.name, upchargePence: before.upchargePence }, newValue: { component: before.name, ...v },
+      oldValue: { component: before.name, upchargePence: before.upchargePence, perClub: before.perClub }, newValue: { component: before.name, ...v },
       metadata: { section: 'catalogue.component_upcharge' },
     }),
   );

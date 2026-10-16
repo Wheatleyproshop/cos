@@ -34,12 +34,19 @@ export function BallPriceForm({ action, value }: { action: BoundAction; value: s
 }
 
 /** A small "amount + Save" form used in catalogue tables. */
-export function InlinePriceForm({ action, value, name, label }: { action: BoundAction; value: string; name: string; label: string }) {
+export function InlinePriceForm({
+  action, value, name, label, perClub,
+}: { action: BoundAction; value: string; name: string; label: string; perClub?: boolean }) {
   return (
     <ActionForm action={action} className="inlineform">
       {(s) => (
         <>
           <input name={name} defaultValue={s?.values?.[name] ?? value} inputMode="decimal" aria-label={label} style={{ width: 90 }} />
+          {perClub !== undefined ? (
+            <label className="perclub" title="Multiply by the number of clubs in an iron set">
+              <input type="checkbox" name="perClub" defaultChecked={perClub} /> per club
+            </label>
+          ) : null}
           <Submit className="btn small" pendingText="…">Save</Submit>
           {s?.error ? <span className="error">{s.error}</span> : s?.ok ? <span className="muted">Saved</span> : null}
         </>

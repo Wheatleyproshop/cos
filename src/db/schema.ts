@@ -452,6 +452,8 @@ export const productModels = pgTable('product_models', {
   category: text('category').notNull(), // driver, fairway, hybrid, irons, wedge, putter, ...
   season: text('season').notNull().default(''),
   basePricePence: integer('base_price_pence').notNull(),
+  /** Iron sets: clubs included in the base price (per-club upcharges multiply by the chosen set's size). Null = a single club. */
+  clubsInSet: integer('clubs_in_set'),
   leadTimeDays: integer('lead_time_days'),
   imageKey: text('image_key'),
   validFrom: date('valid_from', { mode: 'string' }),
