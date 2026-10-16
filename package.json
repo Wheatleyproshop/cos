@@ -19,7 +19,8 @@
     "setup": "npm run db:migrate && npm run db:seed",
     "vercel-build": "npm run db:migrate && next build",
     "shop:create": "tsx scripts/create-shop.ts",
-    "plan:set": "tsx scripts/set-plan.ts"
+    "plan:set": "tsx scripts/set-plan.ts",
+    "backup:local": "tsx --env-file=.env.production.local scripts/backup-local.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1152.0",

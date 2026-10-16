@@ -126,7 +126,7 @@ export default async function SettingsPage() {
         ) : null}
       </section>
 
-      <section className="panel">
+      <section className="panel" id="backups" style={{ scrollMarginTop: 20 }}>
         <h2>Backups & export</h2>
         <div className="settingsrow">
           <div>
