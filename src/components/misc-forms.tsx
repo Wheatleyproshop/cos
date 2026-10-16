@@ -233,7 +233,10 @@ export function NewUserForm({ action }: { action: BoundAction }) {
                 { value: 'admin', label: 'Owner / Admin — plus settings, team, backups' },
               ]}
             />
-            <Field state={s} name="password" label="Temporary password" type="password" required autoComplete="new-password" hint="At least 10 characters" />
+            <label className="check wide">
+              <input type="checkbox" name="canSignIn" /> Give them their own email &amp; password (leave unticked if they just pick their name on the shared shop login)
+            </label>
+            <Field state={s} name="password" label="Temporary password (only if they have their own login)" type="password" autoComplete="new-password" hint="At least 10 characters" />
           </div>
           <FormMessage state={s} />
           <div className="actions" style={{ marginTop: 10 }}>

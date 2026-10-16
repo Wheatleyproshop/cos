@@ -9,6 +9,8 @@ import { organisations, sessions, users, type Organisation } from '@/db/schema';
 import { hashToken, newToken } from './tokens';
 
 export const SESSION_COOKIE = 'cos_session';
+/** On a shared shop login: which team member is currently working on this device. */
+export const ACTING_COOKIE = 'cos_acting';
 const SESSION_DAYS = 30;
 const MAX_FAILED_LOGINS = 5;
 const LOCKOUT_MINUTES = 15;
@@ -24,6 +26,10 @@ export type Staff = {
   role: Role;
   organisationId: string;
   org: Organisation;
+  /** Set when working through a shared login: that login's name (e.g. "Pro Shop"). */
+  sharedLoginName: string | null;
+  /** A shared login where nobody has picked their name yet. */
+  needsMember: boolean;
 };
 
 export function hasRole(staff: Pick<Staff, 'role'>, min: Role): boolean {
@@ -51,20 +57,53 @@ export const getStaff = cache(async (): Promise<Staff | null> => {
     .where(and(eq(sessions.tokenHash, hashToken(token)), gt(sessions.expiresAt, new Date())))
     .limit(1);
   if (!row || !row.user.active) return null;
-  return {
-    id: row.user.id,
-    name: row.user.name,
-    email: row.user.email,
-    role: row.user.role,
-    organisationId: row.org.id,
-    org: row.org,
-  };
+  const base = { organisationId: row.org.id, org: row.org };
+  if (row.user.sharedLogin) {
+    const actingId = (await cookies()).get(ACTING_COOKIE)?.value;
+    const [member] = actingId && /^[0-9a-f-]{36}$/i.test(actingId)
+      ? await db
+          .select()
+          .from(users)
+          .where(and(eq(users.id, actingId), eq(users.organisationId, row.org.id), eq(users.active, true), eq(users.sharedLogin, false)))
+          .limit(1)
+      : [];
+    if (member) {
+      return { ...base, id: member.id, name: member.name, email: member.email, role: member.role, sharedLoginName: row.user.name, needsMember: false };
+    }
+    return { ...base, id: row.user.id, name: row.user.name, email: row.user.email, role: 'staff', sharedLoginName: row.user.name, needsMember: true };
+  }
+  return { ...base, id: row.user.id, name: row.user.name, email: row.user.email, role: row.user.role, sharedLoginName: null, needsMember: false };
 });
+
+/** Team members who can be picked on a shared login. */
+export async function listPickableMembers(organisationId: string) {
+  return systemDb()
+    .select({ id: users.id, name: users.name, role: users.role })
+    .from(users)
+    .where(and(eq(users.organisationId, organisationId), eq(users.active, true), eq(users.sharedLogin, false)))
+    .orderBy(users.name);
+}
+
+export async function setActingMember(memberId: string | null) {
+  const jar = await cookies();
+  if (!memberId) {
+    jar.delete(ACTING_COOKIE);
+    return;
+  }
+  jar.set(ACTING_COOKIE, memberId, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'lax',
+    path: '/',
+    maxAge: 12 * 60 * 60, // ask again after a shift
+  });
+}
 
 /** Use at the top of every staff page and server action. */
 export async function requireStaff(min: Role = 'staff'): Promise<Staff> {
   const staff = await getStaff();
   if (!staff) redirect('/login');
+  if (staff.needsMember) redirect('/who');
   if (!hasRole(staff, min)) throw new ForbiddenError(`This action needs the ${ROLE_LABELS[min]} role.`);
   return staff;
 }
@@ -86,7 +125,7 @@ export async function login(emailInput: string, password: string): Promise<Login
   if (!email || !password) return { ok: false, error: 'Enter your email and password.' };
   const db = systemDb();
   const [user] = await db.select().from(users).where(sql`lower(${users.email}) = ${email}`).limit(1);
-  if (!user || !user.active) {
+  if (!user || !user.active || !user.loginEnabled) {
     // Spend the same time as a real check so response timing doesn't reveal which emails exist.
     dummyHash ??= bcrypt.hash('cos-timing-equaliser', 12);
     await bcrypt.compare(password, await dummyHash);
@@ -133,6 +172,7 @@ export async function logout() {
   const token = jar.get(SESSION_COOKIE)?.value;
   if (token) await systemDb().delete(sessions).where(eq(sessions.tokenHash, hashToken(token)));
   jar.delete(SESSION_COOKIE);
+  jar.delete(ACTING_COOKIE);
 }
 
 /** Ends every session for a user (deactivation / password reset). */

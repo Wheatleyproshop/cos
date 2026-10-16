@@ -16,7 +16,9 @@ export type FormState = {
 } | null;
 
 export function ctxFor(staff: Staff): Ctx {
-  return { org: staff.org, actor: staffActor(staff), userId: staff.id, role: staff.role };
+  // On a shared counter login, record the person who picked their name, noting the login used.
+  const name = staff.sharedLoginName ? `${staff.name} (${staff.sharedLoginName} login)` : staff.name;
+  return { org: staff.org, actor: staffActor({ id: staff.id, name }), userId: staff.id, role: staff.role };
 }
 
 export function formValues(fd: FormData): Record<string, string> {

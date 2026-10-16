@@ -89,6 +89,10 @@ export const users = pgTable(
     role: text('role', { enum: ['admin', 'manager', 'staff'] }).notNull().default('staff'),
     passwordHash: text('password_hash').notNull(),
     active: boolean('active').notNull().default(true),
+    /** False for team members who only pick their name on a shared shop login. */
+    loginEnabled: boolean('login_enabled').notNull().default(true),
+    /** A shared counter login (e.g. "Pro Shop"): asks who's working, then acts as that member. */
+    sharedLogin: boolean('shared_login').notNull().default(false),
     failedLoginCount: integer('failed_login_count').notNull().default(0),
     lockedUntil: timestamp('locked_until', { withTimezone: true }),
     lastLoginAt: timestamp('last_login_at', { withTimezone: true }),

@@ -36,6 +36,13 @@
       "when": 1792159688044,
       "tag": "0004_brand_theme",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1792171589184,
+      "tag": "0005_shared_login",
+      "breakpoints": true
     }
   ]
 }

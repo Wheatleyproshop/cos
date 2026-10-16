@@ -91,6 +91,7 @@ export default async function SettingsPage() {
               <tr>
                 <th>Name</th>
                 <th>Role</th>
+                <th>Signs in</th>
                 <th>Last sign-in</th>
                 <th>{admin ? 'Manage' : 'Status'}</th>
               </tr>
@@ -102,8 +103,11 @@ export default async function SettingsPage() {
                     <b>{u.name}</b>
                     <div className="muted">{u.email}</div>
                   </td>
-                  <td>{ROLE_LABELS[u.role]}</td>
-                  <td>{u.lastLoginAt ? stamp(u.lastLoginAt, tz) : 'Never'}</td>
+                  <td>{u.sharedLogin ? '—' : ROLE_LABELS[u.role]}</td>
+                  <td>
+                    {u.sharedLogin ? 'Shared counter login' : u.loginEnabled ? 'Own login' : 'Picks name on shared login'}
+                  </td>
+                  <td>{u.sharedLogin || u.loginEnabled ? (u.lastLoginAt ? stamp(u.lastLoginAt, tz) : 'Never') : '—'}</td>
                   <td>
                     {admin ? (
                       <TeamMemberControls role={u.role} active={u.active} isSelf={u.id === staff.id} update={updateUserAction.bind(null, u.id)} />
@@ -212,10 +216,18 @@ export default async function SettingsPage() {
         </section>
         <section className="panel">
           <h2>Your account</h2>
-          <p>
-            Signed in as <b>{staff.name}</b> ({staff.email}) · {ROLE_LABELS[staff.role]}
-          </p>
-          <PasswordForm action={changePasswordAction} />
+          {staff.sharedLoginName ? (
+            <p>
+              Working as <b>{staff.name}</b> on the shared <b>{staff.sharedLoginName}</b> login. The shared login’s password is managed by the owner.
+            </p>
+          ) : (
+            <>
+              <p>
+                Signed in as <b>{staff.name}</b> ({staff.email}) · {ROLE_LABELS[staff.role]}
+              </p>
+              <PasswordForm action={changePasswordAction} />
+            </>
+          )}
         </section>
       </div>
     </>

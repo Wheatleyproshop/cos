@@ -1,5 +1,6 @@
 import { and, eq, ne, sql } from 'drizzle-orm';
 import bcrypt from 'bcryptjs';
+import { randomBytes } from 'node:crypto';
 import { withTenant } from '@/db';
 import { customers, organisations, users, type EmailAutomationKey, type EmailAutomations } from '@/db/schema';
 import { recordEvent } from '../audit';
@@ -137,12 +138,13 @@ export async function createUser(ctx: Ctx, raw: unknown) {
     if (count >= PLANS[ctx.org.plan].staffLimit) {
       throw new ServiceError(`Your ${PLANS[ctx.org.plan].label} plan includes ${PLANS[ctx.org.plan].staffLimit} active staff accounts.`);
     }
-    const passwordHash = await bcrypt.hash(input.password, 12);
+    // Members without their own login get an unusable random password.
+    const passwordHash = await bcrypt.hash(input.canSignIn ? input.password : randomBytes(24).toString('base64url'), 12);
     let created;
     try {
       [created] = await tx
         .insert(users)
-        .values({ organisationId: ctx.org.id, name: input.name, email: input.email, role: input.role, passwordHash })
+        .values({ organisationId: ctx.org.id, name: input.name, email: input.email, role: input.role, passwordHash, loginEnabled: input.canSignIn })
         .returning();
     } catch {
       throw new ServiceError('That email address already has a COS account.', { email: 'Already in use' });
@@ -153,7 +155,7 @@ export async function createUser(ctx: Ctx, raw: unknown) {
       eventType: 'user_created',
       entityType: 'user',
       entityId: created.id,
-      newValue: { name: created.name, email: created.email, role: created.role },
+      newValue: { name: created.name, email: created.email, role: created.role, ownLogin: created.loginEnabled },
     });
   });
 }

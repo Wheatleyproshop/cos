@@ -17,7 +17,7 @@ export default async function StaffLayout({ children }: { children: React.ReactN
       <a href="#content" className="skip">
         Skip to content
       </a>
-      <Sidebar storeName={staff.org.storeName} userName={staff.name} roleLabel={ROLE_LABELS[staff.role]} signOut={logoutAction} />
+      <Sidebar storeName={staff.org.storeName} userName={staff.name} roleLabel={ROLE_LABELS[staff.role]} signOut={logoutAction} sharedLoginName={staff.sharedLoginName} />
       <main id="content">{children}</main>
       <ServiceWorker />
     </>

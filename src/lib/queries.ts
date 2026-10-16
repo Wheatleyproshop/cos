@@ -405,7 +405,10 @@ export async function getSettingsData(org: Organisation) {
   return withTenant(org.id, async (tx) => {
     const [team, destinations, runs] = await Promise.all([
       tx
-        .select({ id: users.id, name: users.name, email: users.email, role: users.role, active: users.active, lastLoginAt: users.lastLoginAt })
+        .select({
+          id: users.id, name: users.name, email: users.email, role: users.role, active: users.active, lastLoginAt: users.lastLoginAt,
+          loginEnabled: users.loginEnabled, sharedLogin: users.sharedLogin,
+        })
         .from(users)
         .orderBy(desc(users.active), asc(users.name)),
       tx.select({ provider: backupDestinations.provider, status: backupDestinations.status }).from(backupDestinations),

@@ -15,7 +15,9 @@ const NAV = [
   { href: '/settings', icon: '⚙', label: 'Store settings' },
 ];
 
-export function Sidebar({ storeName, userName, roleLabel, signOut }: { storeName: string; userName: string; roleLabel: string; signOut: () => Promise<void> }) {
+export function Sidebar({
+  storeName, userName, roleLabel, signOut, sharedLoginName,
+}: { storeName: string; userName: string; roleLabel: string; signOut: () => Promise<void>; sharedLoginName?: string | null }) {
   const path = usePathname();
   const isActive = (href: string) => (href === '/' ? path === '/' : path === href || path.startsWith(href + '/'));
   return (
@@ -46,6 +48,11 @@ export function Sidebar({ storeName, userName, roleLabel, signOut }: { storeName
             {roleLabel}
           </span>
         </div>
+        {sharedLoginName ? (
+          <div className="working">
+            {sharedLoginName} login · <Link href="/who">Change person</Link>
+          </div>
+        ) : null}
         <form action={signOut}>
           <button className="signout" type="submit">
             Sign out

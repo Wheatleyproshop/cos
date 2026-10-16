@@ -279,3 +279,14 @@ details.section[open] { padding-bottom: 16px; }
 @keyframes cos-spin { to { transform: rotate(360deg); } }
 .asidebottom .who { margin-top: 10px; display: flex; align-items: center; }
 @media (max-width: 950px) { .asidebottom .who { display: none; } }
+
+/* ── Shared login: who's working ─────────────────────────────────────── */
+.whogrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 10px; margin-top: 14px; }
+.whogrid form { margin: 0; }
+.whobtn { width: 100%; display: flex; align-items: center; gap: 12px; text-align: left; background: #fff; border: 1px solid var(--line); border-radius: 12px; padding: 14px; }
+.whobtn:hover { border-color: var(--accent); background: #f7faff; }
+.whobtn .avatar { width: 40px; height: 40px; border-radius: 50%; background: var(--green); color: #fff; display: grid; place-items: center; font-weight: 700; font-size: 13px; flex: none; }
+.whobtn b { display: block; }
+.whobtn small { color: var(--muted); }
+.asidebottom .working { margin-top: 8px; font-size: 11px; color: #a7b2c6; }
+.asidebottom .working a { color: #fff; }

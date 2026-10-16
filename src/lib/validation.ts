@@ -139,12 +139,16 @@ export const thresholdsSchema = z.object({
   missingSupplierRefDays: z.coerce.number().int().min(0).max(90),
 });
 
-export const userCreateSchema = z.object({
-  name: required('Name', 120),
-  email: z.string().trim().toLowerCase().email('Enter a valid email address'),
-  role: z.enum(['admin', 'manager', 'staff']),
-  password: z.string().min(10, 'Use at least 10 characters').max(200),
-});
+export const userCreateSchema = z
+  .object({
+    name: required('Name', 120),
+    email: z.string().trim().toLowerCase().email('Enter a valid email address'),
+    role: z.enum(['admin', 'manager', 'staff']),
+    /** Unticked = no password; they pick their name on the shared shop login. */
+    canSignIn: z.union([z.literal('on'), z.undefined()]).transform((v) => v === 'on'),
+    password: z.string().max(200).default(''),
+  })
+  .refine((v) => !v.canSignIn || v.password.length >= 10, { message: 'Use at least 10 characters', path: ['password'] });
 
 export const passwordChangeSchema = z
   .object({
