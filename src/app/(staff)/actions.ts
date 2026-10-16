@@ -27,6 +27,7 @@ import {
   updateUser,
 } from '@/lib/services/admin';
 import { runBackup } from '@/lib/services/backups';
+import { sendTestEmail } from '@/lib/services/test-email';
 import { addBrand, addComponent, addModel, createFittingQuote, setCatalogActive } from '@/lib/services/fitting';
 
 const obj = (fd: FormData) => Object.fromEntries([...fd.entries()].filter(([, v]) => typeof v === 'string'));
@@ -255,4 +256,8 @@ export async function catalogueActiveAction(kind: 'brand' | 'model' | 'component
     await setCatalogActive(ctx, kind, id, active);
     return active ? 'Restored.' : 'Retired.';
   });
+}
+
+export async function sendTestEmailAction(template: string, _: FormState, fd: FormData) {
+  return act('admin', (ctx) => sendTestEmail(ctx, { template, to: fd.get('to') }), fd);
 }

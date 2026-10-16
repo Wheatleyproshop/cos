@@ -4,11 +4,14 @@ import { MessageBadge, PageHeader } from '@/components/views';
 import type { EmailAutomationKey } from '@/db/schema';
 import { requireStaff } from '@/lib/auth';
 import { templateName } from '@/lib/audit';
-import { brandingFor } from '@/lib/email/outbox';
 import { fromHeader } from '@/lib/email/sender';
-import { renderEmail, TEMPLATE_KEYS } from '@/lib/email/templates';
-import { addDays, stamp, todayInTz } from '@/lib/format';
-import { getMessage, listMessages, previewSource } from '@/lib/queries';
+import { TEMPLATE_KEYS } from '@/lib/email/templates';
+import { stamp } from '@/lib/format';
+import { getMessage, listMessages } from '@/lib/queries';
+import { renderSample } from '@/lib/email/preview';
+import { TestEmailForm } from '@/components/test-email-form';
+import { hasRole } from '@/lib/auth';
+import { sendTestEmailAction } from '../actions';
 
 export const metadata: Metadata = { title: 'Email previews' };
 
@@ -18,25 +21,9 @@ export default async function EmailsPage({ searchParams }: { searchParams: Promi
   const tz = staff.org.timezone;
   const template = (TEMPLATE_KEYS as string[]).includes(sp.template ?? '') ? (sp.template as EmailAutomationKey) : 'order_confirmation';
   const viewing = sp.view ? await getMessage(staff.org, sp.view) : null;
-  const [log, src] = await Promise.all([listMessages(staff.org, 60), previewSource(staff.org)]);
+  const log = await listMessages(staff.org, 60);
 
-  const today = todayInTz(tz);
-  const sample = src
-    ? { customerName: src.c.name, reference: src.o.orderNumber, brand: src.o.brand, product: src.o.product, specification: src.o.specificationText, totalPence: src.o.totalGrossPence }
-    : { customerName: 'James Wilson', reference: 'COS-1048', brand: 'PING', product: 'G440 MAX Driver', specification: '10.5° / Alta CB Blue 50 Stiff / Golf Pride MCC +4', totalPence: 52900 };
-  const preview = renderEmail(template, {
-    store: brandingFor(staff.org),
-    ...sample,
-    paidPence: 10000,
-    balancePence: sample.totalPence - 10000,
-    depositRequiredPence: 10000,
-    etaDate: addDays(today, 7),
-    previousEtaDate: addDays(today, 3),
-    etaReason: template === 'eta_revised' ? 'The manufacturer has told us the shaft is on back order.' : '',
-    leadTime: '2–3 weeks',
-    validUntil: addDays(today, 14),
-    actionUrl: '#preview',
-  });
+  const preview = await renderSample(staff.org, template);
 
   return (
     <>
@@ -79,6 +66,7 @@ export default async function EmailsPage({ searchParams }: { searchParams: Promi
             <div className="muted">
               <b>Subject:</b> {preview.subject}
             </div>
+            {hasRole(staff, 'admin') ? <TestEmailForm action={sendTestEmailAction.bind(null, template)} defaultTo={staff.email} /> : null}
           </>
         )}
         <iframe
