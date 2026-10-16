@@ -50,6 +50,9 @@ function BallStage({ look, target, guide, label }: { look: BallLook; target: { q
     },
     [look, guide],
   );
+  // Animations outlive renders: always draw with the latest look (e.g. a photo that loaded mid-spin).
+  const drawRef = useRef(draw);
+  drawRef.current = draw;
 
   // Redraw at full quality whenever the design changes.
   useEffect(() => {
@@ -72,7 +75,7 @@ function BallStage({ look, target, guide, label }: { look: BallLook; target: { q
       const t = Math.min(1, (now - start) / dur);
       const e = 1 - Math.pow(1 - t, 3);
       q.current = qSlerp(from, target.q, e);
-      draw(t < 1 ? 0.5 : 1);
+      drawRef.current(t < 1 ? 0.5 : 1);
       if (t < 1) frame.current = requestAnimationFrame(tick);
     };
     frame.current = requestAnimationFrame(tick);
@@ -105,7 +108,7 @@ function BallStage({ look, target, guide, label }: { look: BallLook; target: { q
     drag.current = { x: e.clientX, y: e.clientY, t: now };
     rotateBy(dx, dy);
     cancelAnimationFrame(frame.current);
-    frame.current = requestAnimationFrame(() => draw(0.45));
+    frame.current = requestAnimationFrame(() => drawRef.current(0.45));
   };
   const up = () => {
     if (!drag.current) return;
@@ -113,9 +116,9 @@ function BallStage({ look, target, guide, label }: { look: BallLook; target: { q
     // Momentum, then a crisp full-quality frame.
     const spin = () => {
       vel.current = { x: vel.current.x * 0.92, y: vel.current.y * 0.92 };
-      if (Math.hypot(vel.current.x, vel.current.y) < 0.3) return draw(1);
+      if (Math.hypot(vel.current.x, vel.current.y) < 0.3) return drawRef.current(1);
       rotateBy(vel.current.x, vel.current.y);
-      draw(0.45);
+      drawRef.current(0.45);
       frame.current = requestAnimationFrame(spin);
     };
     frame.current = requestAnimationFrame(spin);
