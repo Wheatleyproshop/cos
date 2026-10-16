@@ -414,3 +414,20 @@ describe('catalogue prices', () => {
     expect(events.at(-1)?.newValueJson).toMatchObject({ basePricePence: 29800 });
   });
 });
+
+describe('catalogue upcharges', () => {
+  it('lets a manager change a shaft or grip upcharge, audited', async () => {
+    const { getCatalog, updateComponentUpcharge } = await import('@/lib/services/fitting');
+    const c = await getCatalog(org.id);
+    const shaftCat = c.categories.find((k) => k.key === 'shaft')!;
+    const shaft = c.components.find((x) => x.categoryId === shaftCat.id)!;
+    await expect(updateComponentUpcharge(staff, shaft.id, { upchargePence: '5.00' })).rejects.toThrow(/manager/);
+    await updateComponentUpcharge(admin, shaft.id, { upchargePence: '45.00' });
+    const after = (await getCatalog(org.id)).components.find((x) => x.id === shaft.id)!;
+    expect(after.upchargePence).toBe(4500);
+    const events = await withTenant(org.id, (tx) =>
+      tx.select().from(auditEvents).where(sql`${auditEvents.metadataJson}->>'section' = 'catalogue.component_upcharge'`),
+    );
+    expect(events.at(-1)?.oldValueJson).toMatchObject({ upchargePence: shaft.upchargePence });
+  });
+});

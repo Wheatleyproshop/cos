@@ -205,6 +205,34 @@ export async function updateModelPrice(ctx: Ctx, id: string, raw: unknown) {
   );
 }
 
+/**
+ * Changes a shaft/grip/other option's upcharge. Iron set make-ups are priced per head
+ * (from the per-club price), so they aren't edited here.
+ */
+export async function updateComponentUpcharge(ctx: Ctx, id: string, raw: unknown) {
+  requireRole(ctx, 'manager', 'edit the product catalogue');
+  const v = parse(z.object({ upchargePence: pence('Upcharge') }), raw);
+  const before = await withTenant(ctx.org.id, async (tx) => {
+    const [row] = await tx
+      .select({ c: components, key: componentCategories.key })
+      .from(components)
+      .innerJoin(componentCategories, eq(componentCategories.id, components.categoryId))
+      .where(and(eq(components.id, id), eq(components.organisationId, ctx.org.id)));
+    if (!row) throw new ServiceError('That option is no longer in the catalogue.');
+    if (row.key === 'set') throw new ServiceError('Set make-ups are priced from each head’s per-club price.');
+    if (row.c.upchargePence !== v.upchargePence) await tx.update(components).set(v).where(eq(components.id, id));
+    return row.c;
+  });
+  if (before.upchargePence === v.upchargePence) return;
+  await withTenant(ctx.org.id, (tx) =>
+    recordEvent(tx, {
+      organisationId: ctx.org.id, actor: ctx.actor, eventType: 'settings_changed', entityType: 'organisation', entityId: ctx.org.id,
+      oldValue: { component: before.name, upchargePence: before.upchargePence }, newValue: { component: before.name, ...v },
+      metadata: { section: 'catalogue.component_upcharge' },
+    }),
+  );
+}
+
 /** Catalogue items are retired, never deleted, so old quotes keep their references. */
 export async function setCatalogActive(ctx: Ctx, kind: 'brand' | 'model' | 'component', id: string, active: boolean) {
   requireRole(ctx, 'manager', 'edit the product catalogue');

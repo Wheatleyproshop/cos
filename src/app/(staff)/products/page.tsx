@@ -7,7 +7,7 @@ import { hasRole, requireStaff } from '@/lib/auth';
 import { money, penceToInput } from '@/lib/format';
 import { CLUB_CATEGORIES } from '@/lib/fitting-rules';
 import { getCatalog } from '@/lib/services/fitting';
-import { catalogueAction, catalogueActiveAction, modelPriceAction } from '../actions';
+import { catalogueAction, catalogueActiveAction, componentUpchargeAction, modelPriceAction } from '../actions';
 
 export const metadata: Metadata = { title: 'Products' };
 
@@ -126,10 +126,15 @@ export default async function ProductsPage() {
                                 <span>
                                   {x.name}
                                   <div className="muted">
-                                    {x.upchargePence > 0 ? `+${money(x.upchargePence)}` : x.upchargePence < 0 ? `−${money(-x.upchargePence)}` : 'No upcharge'} · {fits}
+                                    {cat.key === 'set' ? 'Priced per head from its per-club price' : x.upchargePence > 0 ? `+${money(x.upchargePence)}` : 'No upcharge'} · {fits}
                                   </div>
                                 </span>
-                                {retire('component', x.id, x.active)}
+                                <span className="inlineactions">
+                                  {manager && cat.key !== 'set' ? (
+                                    <InlinePriceForm action={componentUpchargeAction.bind(null, x.id)} value={penceToInput(x.upchargePence)} name="upchargePence" label={`Upcharge for ${x.name}`} />
+                                  ) : null}
+                                  {retire('component', x.id, x.active)}
+                                </span>
                               </li>
                             );
                           })}

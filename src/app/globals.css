@@ -378,3 +378,8 @@ details.section[open] { padding-bottom: 16px; }
 .bp-photoform { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .bp-photoform img { width: 44px; height: 44px; object-fit: contain; border-radius: 8px; background: #fff; border: 1px solid var(--line); }
 .bp-nophoto { width: 44px; height: 44px; border-radius: 8px; border: 1px dashed #c6d0de; font-size: 9px; color: #8a919c; display: grid; place-items: center; text-align: center; }
+.inlineactions { display: inline-flex; gap: 8px; align-items: center; flex-wrap: wrap; justify-content: flex-end; }
+.attention li { flex-wrap: wrap; }
+.attention li > span:first-child { min-width: 0; flex: 1 1 220px; overflow-wrap: anywhere; }
+/* Grid children may shrink below their content so wide tables scroll inside .tablewrap instead of widening the page. */
+.split > * { min-width: 0; }
