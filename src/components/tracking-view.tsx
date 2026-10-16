@@ -1,11 +1,14 @@
 import type { Organisation, OrderStatus } from '@/db/schema';
 import { longDate, money, niceDate, stamp } from '@/lib/format';
 import { JOURNEY_WORDS, type Journey } from '@/lib/status';
+import { fitSpec } from '@/lib/fit-spec';
 import { PublicShell } from './public-shell';
+import { SpecView } from './spec-view';
 
 export type TrackingOrder = {
   orderNumber: string; status: OrderStatus; brand: string; product: string; specificationText: string;
   totalGrossPence: number; etaDate: string | null; etaReason: string; createdAt: Date;
+  specificationJson?: unknown;
 };
 
 export type TrackingEvent = { eventType: string; oldValueJson: unknown; newValueJson: unknown; createdAt: Date };
@@ -74,7 +77,11 @@ export function TrackingView({
       <h1 style={{ fontSize: 26 }}>
         {o.brand} {o.product}
       </h1>
-      <p style={{ whiteSpace: 'pre-line', marginTop: 0 }}>{o.specificationText}</p>
+      {fitSpec(o.specificationJson) ? (
+        <SpecView json={o.specificationJson} text={o.specificationText} label="Your specification" />
+      ) : (
+        <p style={{ whiteSpace: 'pre-line', marginTop: 0 }}>{o.specificationText}</p>
+      )}
       {proofUrl ? (
         <figure className="proof">
           {/* eslint-disable-next-line @next/next/no-img-element */}

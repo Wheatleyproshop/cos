@@ -28,6 +28,7 @@ import { CloseButton } from './chrome';
 import { ActionButton, LinkGenerator } from './forms';
 import { AcceptInStoreForm, EditQuoteForm } from './misc-forms';
 import { AttachmentForm, CreateRequestForm, EditOrderForm, NoteForm, PaymentForm, ProgressForm, type RequestDefaults } from './order-forms';
+import { SpecView } from './spec-view';
 import { Badge, DetailBox, MessageBadge, Timeline } from './views';
 
 /** Ball Printing proof and the customer's original artwork, for staff. */
@@ -104,8 +105,8 @@ export async function OrderDetail({ staff, number, inModal }: { staff: Staff; nu
       ) : null}
 
       <BallProof quoteId={o.quoteId} spec={o.specificationJson} />
+      <SpecView json={o.specificationJson} text={o.specificationText} label="Custom specification" />
       <div className="detailgrid">
-        <DetailBox label="Custom specification">{o.specificationText}</DetailBox>
         <DetailBox label="Product ID">{o.sku || '—'}</DetailBox>
         <DetailBox label="Order value / Paid" sub={`${d.credit ? `Includes ${money(d.credit)} account credit · ` : ''}Balance due: ${money(d.balance)}`}>
           {money(o.totalGrossPence)} / {money(d.paid)}
@@ -321,8 +322,8 @@ export async function QuoteDetail({ staff, number, inModal }: { staff: Staff; nu
       ) : null}
 
       <BallProof quoteId={q.id} spec={q.specificationJson} />
+      <SpecView json={q.specificationJson} text={q.specificationText} label="Custom specification" />
       <div className="detailgrid">
-        <DetailBox label="Custom specification">{q.specificationText}</DetailBox>
         <DetailBox label="Product ID">{q.sku || '—'}</DetailBox>
         <DetailBox label="Price / Deposit required">
           {money(q.totalGrossPence)} / {money(q.depositRequiredPence)}

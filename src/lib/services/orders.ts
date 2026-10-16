@@ -5,6 +5,7 @@ import { recordEvent } from '../audit';
 import { dispatchMessages, enqueueEmail } from '../email/outbox';
 import type { EmailContext } from '../email/templates';
 import { ALLOWED_UPLOAD_TYPES, MAX_UPLOAD_BYTES, storage } from '../storage';
+import { fitSpec } from '../fit-spec';
 import { canTransition, journeyFor, statusLabel } from '../status';
 import { newToken } from '../tokens';
 import {
@@ -45,6 +46,7 @@ export function orderEmailContext(o: Order, c: Customer, t: PaymentTotals, actio
     etaReason: o.etaReason,
     actionUrl,
     journey: journeyFor(o.specificationJson),
+    fit: fitSpec(o.specificationJson),
   };
 }
 

@@ -227,7 +227,9 @@ describe('custom fitting', () => {
     expect(q.totalGrossPence).toBe(93100); // £529 + £350 + £0 + £52, as in the design mock-up
     expect(q.status).toBe('draft');
     expect(q.specificationText).toContain('Shaft: Fujikura Ventus Blue 6S');
-    expect((q.specificationJson as { items: unknown[] }).items).toHaveLength(3);
+    // Head, Shaft, Grip and Ball each on their own line.
+    const build = (q.specificationJson as { builds: { lines: { label: string }[] }[] }).builds[0];
+    expect(build.lines.map((l) => l.label)).toEqual(['Head', 'Shaft', 'Grip', 'Ball']);
   });
 
   it('rejects components that do not fit the chosen head', async () => {
@@ -446,5 +448,48 @@ describe('per-club upcharges', () => {
     expect(componentPrice(cat, irons, shaft, [shaft, sixClubs])).toBe(6000);
     expect(componentPrice(cat, irons, flat, [flat, sixClubs])).toBe(1000);
     expect(componentPrice(cat, wedge, shaft, [shaft])).toBe(1000);
+  });
+});
+
+describe('multi-club fitting quotes', () => {
+  it('quotes several clubs together, line by line, priced on the server', async () => {
+    const { getCatalog, createFittingQuote } = await import('@/lib/services/fitting');
+    const { fitSpec } = await import('@/lib/fit-spec');
+    const c = await getCatalog(org.id);
+    const [driver, second] = [c.models.find((m) => m.category === 'driver')!, c.models.find((m) => m.category !== 'driver')!];
+    const shaftCat = c.categories.find((k) => k.key === 'shaft')!;
+    const { validComponentIds } = await import('@/lib/fitting-rules');
+    const shaftId = [...validComponentIds(c, driver, shaftCat.id)][0];
+    const q = await createFittingQuote(
+      staff,
+      {
+        customerName: 'Bag Fit', email: 'bag@example.com', phone: '', validUntil: '', buildNotes: 'Standard lengths',
+        builds: [
+          { modelId: driver.id, componentIds: shaftId ? [shaftId] : [], notes: '9° setting' },
+          { modelId: second.id, componentIds: [], notes: '' },
+        ],
+      },
+      { send: true },
+    );
+    const spec = fitSpec(q.specificationJson)!;
+    expect(spec.builds).toHaveLength(2);
+    expect(spec.builds[0].lines[0]).toMatchObject({ label: 'Head', pricePence: driver.basePricePence });
+    expect(q.totalGrossPence).toBe(spec.builds[0].totalPence + spec.builds[1].totalPence);
+    expect(q.product).toBe('Custom fitting — 2 clubs');
+    expect(q.specificationText.split('\n').length).toBeGreaterThan(3);
+    const [msg] = await withTenant(org.id, (tx) => tx.select().from(messages).where(eq(messages.quoteId, q.id)));
+    expect(msg.bodyHtml).toContain('>Head<');
+    expect(msg.bodyHtml).toContain('9° setting');
+  });
+
+  it('rejects an option that does not fit the head', async () => {
+    const { getCatalog, createFittingQuote } = await import('@/lib/services/fitting');
+    const c = await getCatalog(org.id);
+    const putter = c.models.find((m) => m.category === 'putter') ?? c.models.find((m) => m.category === 'irons')!;
+    const woodShaft = c.components.find((x) => ((x.metadata as { clubCategories?: string[] })?.clubCategories ?? []).includes('driver') && !((x.metadata as { clubCategories?: string[] }).clubCategories ?? []).includes(putter.category));
+    if (!woodShaft) return;
+    await expect(
+      createFittingQuote(staff, { customerName: 'X', email: 'x@example.com', builds: [{ modelId: putter.id, componentIds: [woodShaft.id] }] }, { send: false }),
+    ).rejects.toThrow(/isn’t available/);
   });
 });

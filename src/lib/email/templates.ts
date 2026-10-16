@@ -1,5 +1,6 @@
 import type { EmailAutomationKey } from '@/db/schema';
 import { resolveBrand, type BrandTheme } from '../branding';
+import { fitSpecText, priceText, type FitSpec } from '../fit-spec';
 import { longDate, money } from '../format';
 
 /**
@@ -37,6 +38,8 @@ export type EmailContext = {
   actionUrl?: string; // tracking or approval link
   /** A rendered artwork proof (golf ball printing) shown above the specification. */
   previewImageUrl?: string;
+  /** Custom Fitting: each club with its details on separate lines (replaces the plain specification). */
+  fit?: FitSpec | null;
   /** 'print' = personalised balls from stock sent to the printer, not ordered from a manufacturer. */
   journey?: 'supplier' | 'print';
 };
@@ -59,6 +62,23 @@ function firstName(name: string) {
 }
 
 type Block = { label: string; value: string };
+
+/** Each club as a heading row, then one row per detail (label · choice · price). */
+function fitHtml(fit: FitSpec, c: { ink: string; muted: string; font: string }) {
+  const many = fit.builds.length > 1;
+  return fit.builds
+    .map((bld, i) => {
+      const rows = bld.lines
+        .map(
+          (l) =>
+            `<tr><td style="padding:5px 0;color:${c.muted};font-size:12px;width:28%;vertical-align:top">${esc(l.label)}</td><td style="padding:5px 8px 5px 0;color:${c.ink};font-size:13px;vertical-align:top">${esc(l.value)}${l.detail ? `<br><span style="color:${c.muted};font-size:11px">${esc(l.detail)}</span>` : ''}</td><td style="padding:5px 0;color:${c.ink};font-size:13px;text-align:right;white-space:nowrap;vertical-align:top">${esc(priceText(l.pricePence))}</td></tr>`,
+        )
+        .join('');
+      const notes = bld.notes ? `<tr><td style="padding:5px 0;color:${c.muted};font-size:12px;vertical-align:top">Notes</td><td colspan="2" style="padding:5px 0;color:${c.ink};font-size:13px">${esc(bld.notes)}</td></tr>` : '';
+      return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:14px"><tr><td colspan="2" style="font-family:${c.font};font-weight:600;font-size:16px;color:${c.ink};padding-bottom:6px;border-bottom:1px solid #efede8">${many ? `${i + 1}. ` : ''}${esc(bld.title)}</td><td style="font-weight:600;font-size:14px;color:${c.ink};text-align:right;padding-bottom:6px;border-bottom:1px solid #efede8">${esc(money(bld.totalPence))}</td></tr>${rows}${notes}</table>`;
+    })
+    .join('') + (fit.notes ? `<div style="color:${c.muted};font-size:13px;line-height:1.55;margin-bottom:10px;white-space:pre-line">${esc(fit.notes)}</div>` : '');
+}
 
 function layout(ctx: EmailContext, o: {
   preheader: string;
@@ -98,8 +118,8 @@ ${o.intro.map((p) => `<p style="font-size:15px;line-height:1.6;margin:0 0 14px;c
 </td></tr>
 ${ctx.previewImageUrl ? `<tr><td style="padding:6px 32px 14px" align="center"><img src="${esc(ctx.previewImageUrl)}" width="400" alt="Preview of your personalised ${esc(ctx.brand)} ${esc(ctx.product)}" style="display:block;width:100%;max-width:400px;height:auto;border:0;background:#eef0f4"><div style="font-size:11px;color:${muted};margin-top:8px;letter-spacing:0.5px">Preview for approval. Final print colours and position may vary slightly.</div></td></tr>` : ''}
 <tr><td style="padding:6px 32px 8px"><div style="border:1px solid #e6e4df;border-left:4px solid ${b.headerBg};padding:18px 20px">
-<div style="font-family:${b.headingFont};font-weight:600;font-size:17px;margin-bottom:4px;color:${ink}">${esc(ctx.brand)} ${esc(ctx.product)}</div>
-<div style="color:${muted};font-size:13px;line-height:1.55;margin-bottom:10px;white-space:pre-line">${esc(ctx.specification)}</div>
+${ctx.fit ? fitHtml(ctx.fit, { ink, muted, font: b.headingFont }) : `<div style="font-family:${b.headingFont};font-weight:600;font-size:17px;margin-bottom:4px;color:${ink}">${esc(ctx.brand)} ${esc(ctx.product)}</div>
+<div style="color:${muted};font-size:13px;line-height:1.55;margin-bottom:10px;white-space:pre-line">${esc(ctx.specification)}</div>`}
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-top:1px solid #efede8">${rowsHtml}</table></div></td></tr>
 ${o.cta ? `<tr><td style="padding:22px 32px 6px" align="left"><a href="${esc(o.cta.url)}" style="display:inline-block;background:${b.accent};color:${b.accentText};text-decoration:none;padding:14px 24px;border-radius:${b.radius};font-weight:600;font-size:14px;letter-spacing:0.5px">${esc(o.cta.label)}</a></td></tr>` : ''}
 <tr><td style="padding:18px 32px 30px">
@@ -118,8 +138,7 @@ ${(o.outro ?? []).map((p) => `<p style="font-size:14px;line-height:1.6;margin:0 
     `Hi ${firstName(ctx.customerName)},`,
     '',
     ...o.intro.flatMap((p) => [p, '']),
-    `${ctx.brand} ${ctx.product}`,
-    ctx.specification,
+    ...(ctx.fit ? [fitSpecText(ctx.fit)] : [`${ctx.brand} ${ctx.product}`, ctx.specification]),
     '',
     ...o.rows.map((r) => `${r.label}: ${r.value}`),
     '',

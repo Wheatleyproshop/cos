@@ -227,6 +227,16 @@ export async function logoutAction() {
 
 /* ── Custom Fitting & catalogue ─────────────────────────────────────── */
 
+/** The builder posts its clubs as JSON; anything malformed becomes an empty list and fails validation. */
+function parseBuilds(v: FormDataEntryValue | null): unknown[] {
+  try {
+    const parsed = JSON.parse(String(v ?? '[]'));
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
 export async function fittingAction(_: FormState, fd: FormData): Promise<FormState> {
   let target = '';
   const res = await act(
@@ -234,7 +244,7 @@ export async function fittingAction(_: FormState, fd: FormData): Promise<FormSta
     async (ctx) => {
       const q = await createFittingQuote(
         ctx,
-        { ...obj(fd), componentIds: fd.getAll('componentIds').map(String) },
+        { ...obj(fd), builds: parseBuilds(fd.get('builds')) },
         { send: fd.get('intent') === 'send' },
       );
       target = `/quotes/${q.quoteNumber}`;

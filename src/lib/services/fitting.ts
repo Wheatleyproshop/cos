@@ -14,7 +14,8 @@ import { recordEvent } from '../audit';
 import { money, parseMoneyToPence } from '../format';
 import { hasFeature } from '../plans';
 import { customerFields, parse } from '../validation';
-import { clubsInBuild, CLUB_CATEGORIES, componentPrice, isPerClub, validComponentIds } from '../fitting-rules';
+import { fitSpecText, type FitSpec } from '../fit-spec';
+import { CLUB_CATEGORIES, isPerClub, priceBuild, validComponentIds } from '../fitting-rules';
 import { requireRole, ServiceError, type Ctx } from './common';
 import { createQuote } from './quotes';
 
@@ -36,63 +37,55 @@ export async function getCatalog(orgId: string, opts: { includeInactive?: boolea
   });
 }
 
-const fittingSchema = z.object({
-  ...customerFields,
+const buildSchema = z.object({
   modelId: z.string().uuid('Choose a head'),
   componentIds: z.array(z.string().uuid()).max(20).default([]),
+  notes: z.string().trim().max(1000).default(''),
+});
+
+const fittingSchema = z.object({
+  ...customerFields,
+  builds: z.array(buildSchema).min(1, 'Add at least one club to the quote').max(20, 'A quote can hold up to 20 clubs'),
   buildNotes: z.string().trim().max(2000).default(''),
   validUntil: z.string().trim().default(''),
 });
 
 /**
- * Turns a fitting into a normal quote (so approval, conversion and audit are shared),
- * with a structured build in `specification_json` and priced configuration items.
+ * Turns a fitting — one club or a whole bag — into a normal quote (so approval, conversion and
+ * audit are shared). Each club is priced on the server with the same rules as the builder, kept
+ * as structured lines in `specification_json`, and recorded as configuration items.
  */
 export async function createFittingQuote(ctx: Ctx, raw: unknown, opts: { send: boolean }) {
   if (!hasFeature(ctx.org, 'configure')) throw new ServiceError('Custom Fitting is part of the Pro plan.');
-  const input = parse(fittingSchema, raw);
+  // A single club may also be posted the original way (modelId + componentIds).
+  const r = (raw ?? {}) as Record<string, unknown>;
+  const input = parse(fittingSchema, r.builds === undefined && r.modelId ? { ...r, builds: [{ modelId: r.modelId, componentIds: r.componentIds ?? [] }] } : r);
   const catalog = await getCatalog(ctx.org.id);
-  const model = catalog.models.find((m) => m.id === input.modelId);
-  if (!model) throw new ServiceError('That head is no longer available.', { modelId: 'Choose another head' });
-  const brand = catalog.brands.find((b) => b.id === model.brandId)!;
 
-  const chosen = input.componentIds.map((id) => {
-    const c = catalog.components.find((x) => x.id === id);
-    if (!c) throw new ServiceError('One of the selected components is no longer available.');
-    const cat = catalog.categories.find((k) => k.id === c.categoryId)!;
-    if (!validComponentIds(catalog, model, cat.id).has(c.id)) {
-      throw new ServiceError(`${c.name} isn’t available with the ${model.name}.`);
+  const clubs = input.builds.map((b) => {
+    const model = catalog.models.find((m) => m.id === b.modelId);
+    if (!model) throw new ServiceError('One of the heads is no longer available.', { builds: 'Check the clubs in this quote' });
+    const chosen = b.componentIds.map((id) => {
+      const c = catalog.components.find((x) => x.id === id);
+      if (!c) throw new ServiceError('One of the selected options is no longer available.');
+      const cat = catalog.categories.find((k) => k.id === c.categoryId)!;
+      if (!validComponentIds(catalog, model, cat.id).has(c.id)) throw new ServiceError(`${c.name} isn’t available with the ${model.name}.`);
+      return { component: c, category: cat };
+    });
+    for (const cat of catalog.categories) {
+      if (!cat.allowMultiple && chosen.filter((c) => c.category.id === cat.id).length > 1) {
+        throw new ServiceError(`Choose one ${cat.label.toLowerCase()} for the ${model.name}.`);
+      }
     }
-    return { component: c, category: cat, upcharge: 0 };
+    const build = priceBuild(catalog, model, b.componentIds, b.notes);
+    return { model, chosen, build };
   });
-  // Priced once everything is chosen: per-club upcharges depend on the chosen set make-up.
-  const picked = chosen.map((c) => c.component);
-  const clubs = clubsInBuild(model, picked);
-  for (const c of chosen) c.upcharge = componentPrice(catalog, model, c.component, picked);
-  for (const cat of catalog.categories) {
-    if (!cat.allowMultiple && chosen.filter((c) => c.category.id === cat.id).length > 1) {
-      throw new ServiceError(`Choose one ${cat.label.toLowerCase()}.`);
-    }
-  }
 
-  const total = model.basePricePence + chosen.reduce((s, c) => s + c.upcharge, 0);
-  const leadDays = Math.max(model.leadTimeDays ?? 0, ...chosen.map((c) => c.component.leadTimeDays ?? 0));
-  const lines = [
-    `Head: ${brand.name} ${model.name} — ${money(model.basePricePence)}`,
-    ...chosen.map(
-      (c) =>
-        `${c.category.label}: ${c.component.name}${c.upcharge ? ` — ${money(c.upcharge)}${isPerClub(c.component) && clubs > 1 ? ` (${money(c.upcharge / clubs)} × ${clubs} clubs)` : ''}` : ''}`,
-    ),
-    ...(input.buildNotes ? ['', input.buildNotes] : []),
-  ];
-  const spec = {
-    kind: 'cos-configure',
-    version: 1,
-    model: { id: model.id, name: model.name, brand: brand.name, category: model.category, basePricePence: model.basePricePence },
-    items: chosen.map((c) => ({ categoryKey: c.category.key, category: c.category.label, componentId: c.component.id, name: c.component.name, upchargePence: c.upcharge })),
-    notes: input.buildNotes,
-    totalPence: total,
-  };
+  const total = clubs.reduce((s, c) => s + c.build.totalPence, 0);
+  const leadDays = Math.max(0, ...clubs.flatMap((c) => [c.model.leadTimeDays ?? 0, ...c.chosen.map((x) => x.component.leadTimeDays ?? 0)]));
+  const spec: FitSpec = { kind: 'cos-configure', version: 2, builds: clubs.map((c) => c.build), notes: input.buildNotes || undefined, totalPence: total };
+  const brandNames = [...new Set(clubs.map((c) => catalog.brands.find((b) => b.id === c.model.brandId)?.name ?? ''))];
+  const single = clubs.length === 1 ? clubs[0] : null;
 
   return createQuote(
     ctx,
@@ -100,10 +93,11 @@ export async function createFittingQuote(ctx: Ctx, raw: unknown, opts: { send: b
       customerName: input.customerName,
       email: input.email,
       phone: input.phone,
-      brand: brand.name,
-      product: model.name,
-      sku: model.sku,
-      specificationText: lines.join('\n'),
+      customerId: input.customerId ?? '',
+      brand: brandNames.join(' / '),
+      product: single ? single.model.name : `Custom fitting — ${clubs.length} clubs`,
+      sku: single ? single.model.sku : '',
+      specificationText: fitSpecText(spec),
       totalGrossPence: (total / 100).toFixed(2),
       depositRequiredPence: '0',
       estimatedLeadTime: leadDays ? `About ${Math.ceil(leadDays / 7)} week${leadDays > 7 ? 's' : ''}` : '',
@@ -114,20 +108,23 @@ export async function createFittingQuote(ctx: Ctx, raw: unknown, opts: { send: b
       send: opts.send,
       specificationJson: spec,
       afterInsert: async (tx, quote) => {
-        const [cq] = await tx
-          .insert(configurationQuotes)
-          .values({
-            organisationId: ctx.org.id, quoteId: quote.id, modelId: model.id, summaryText: lines.join('\n'),
-            totalPence: total, leadTimeDays: leadDays || null,
-          })
-          .returning();
-        if (chosen.length) {
-          await tx.insert(configurationQuoteItems).values(
-            chosen.map((c) => ({
-              organisationId: ctx.org.id, configurationQuoteId: cq.id, categoryId: c.category.id, componentId: c.component.id,
-              label: c.category.label, value: c.component.name, upchargePence: c.upcharge,
-            })),
-          );
+        for (const c of clubs) {
+          const [cq] = await tx
+            .insert(configurationQuotes)
+            .values({
+              organisationId: ctx.org.id, quoteId: quote.id, modelId: c.model.id, summaryText: fitSpecText({ ...spec, builds: [c.build], notes: undefined }),
+              totalPence: c.build.totalPence, leadTimeDays: c.model.leadTimeDays ?? null,
+            })
+            .returning();
+          if (c.chosen.length) {
+            await tx.insert(configurationQuoteItems).values(
+              c.chosen.map((x) => ({
+                organisationId: ctx.org.id, configurationQuoteId: cq.id, categoryId: x.category.id, componentId: x.component.id,
+                label: x.category.label, value: x.component.name,
+                upchargePence: c.build.lines.find((l) => l.label === x.category.label && l.value === x.component.name)?.pricePence ?? 0,
+              })),
+            );
+          }
         }
       },
     },

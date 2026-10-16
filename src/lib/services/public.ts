@@ -2,6 +2,7 @@ import { and, asc, eq, gt, inArray, isNull } from 'drizzle-orm';
 import { systemDb, withTenant } from '@/db';
 import { attachments, auditEvents, customers, orders, organisations, trackingTokens } from '@/db/schema';
 import { asBallPrintSpec } from '../ball-print';
+import { fitSpec } from '../fit-spec';
 import { journeyFor } from '../status';
 import { hashToken } from '../tokens';
 import { paymentTotals } from './common';
@@ -46,6 +47,8 @@ export async function findOrderByTrackingToken(token: string) {
       order: {
         orderNumber: o.orderNumber, status: o.status, brand: o.brand, product: o.product, specificationText: o.specificationText,
         totalGrossPence: o.totalGrossPence, etaDate: o.etaDate, etaReason: o.etaReason, createdAt: o.createdAt,
+        // Only the customer-facing build lines, never internal catalogue ids.
+        specificationJson: fitSpec(o.specificationJson),
       },
       journey: journeyFor(o.specificationJson),
       proofUrl: o.quoteId && asBallPrintSpec(o.specificationJson) ? proofPathFor(o.quoteId) : null,

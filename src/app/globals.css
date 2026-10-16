@@ -384,3 +384,36 @@ details.section[open] { padding-bottom: 16px; }
 /* Grid children may shrink below their content so wide tables scroll inside .tablewrap instead of widening the page. */
 .split > * { min-width: 0; }
 .perclub { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; color: #57606d; white-space: nowrap; }
+
+/* ── Fitting specification (club by club, line by line) ─────────────── */
+.specview { display: grid; gap: 12px; margin-bottom: 14px; }
+.specbuild { border: 1px solid var(--line); border-radius: 13px; background: #fff; overflow: hidden; }
+.specbuild-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 11px 14px; background: #f7f8fa; border-bottom: 1px solid var(--line); }
+.specbuild-head b { display: flex; align-items: center; gap: 8px; font-size: 15px; }
+.specnum { display: inline-grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; background: var(--green); color: #fff; font-size: 11px; }
+.specbuild-total { font-weight: 700; white-space: nowrap; }
+.spectable { width: 100%; border-collapse: collapse; font-size: 13px; }
+.spectable th { text-align: left; font-weight: 600; color: #7a818c; width: 30%; padding: 8px 14px; vertical-align: top; font-size: 12px; }
+.spectable td { padding: 8px 14px 8px 0; vertical-align: top; overflow-wrap: anywhere; }
+.spectable td small { display: block; color: #7a818c; font-size: 11px; margin-top: 2px; }
+.spectable td.num { text-align: right; white-space: nowrap; padding-right: 14px; }
+.spectable tr + tr { border-top: 1px solid #f0f2f5; }
+.specbuild-actions { display: flex; gap: 8px; flex-wrap: wrap; padding: 10px 14px; border-top: 1px solid #f0f2f5; }
+.specnotes { border: 1px solid var(--line); border-radius: 13px; padding: 12px 14px; background: #fafbfc; }
+.specnotes small { display: block; color: #7a818c; font-size: 11px; text-transform: uppercase; letter-spacing: 1px; }
+.specnotes div { white-space: pre-line; font-size: 13px; margin-top: 4px; }
+.spectotal { display: flex; justify-content: space-between; align-items: center; padding: 14px 16px; border-radius: 13px; background: var(--green); color: #fff; margin-top: 14px; }
+.spectotal b { font-size: 20px; }
+.specplain > div { white-space: pre-line; margin-top: 4px; font-weight: 600; }
+.addclub { border-style: dashed; justify-self: start; }
+.buildsummary h4 { margin: 12px 0 0; font-size: 12px; color: #7a818c; text-transform: uppercase; letter-spacing: 1px; }
+.buildsummary .basket li { font-size: 13px; }
+.buildsummary li small + small { margin-top: 2px; }
+@media (max-width: 560px) {
+  .spectable tr { display: grid; grid-template-columns: 1fr auto; padding: 8px 14px; gap: 2px 12px; }
+  .spectable th { grid-column: 1 / -1; width: auto; padding: 0; font-size: 11px; text-transform: uppercase; letter-spacing: .5px; }
+  .spectable td { padding: 0; }
+  .spectable td.num { padding: 0; }
+  .spectable td[colspan] { grid-column: 1 / -1; }
+}
+.spectable th, .spectable td { border-bottom: 0; }

@@ -38,7 +38,7 @@ export default async function FittingPage({ searchParams }: { searchParams: Prom
         <FittingBuilder
           catalog={catalog}
           action={fittingAction}
-          defaults={cust ? { customerName: cust.customer.name, email: cust.customer.email, phone: cust.customer.phone } : {}}
+          defaults={cust ? { customerId: cust.customer.id, customerName: cust.customer.name, email: cust.customer.email, phone: cust.customer.phone } : {}}
         />
       ) : (
         <div className="panel empty">

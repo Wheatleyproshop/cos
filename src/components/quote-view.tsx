@@ -1,11 +1,14 @@
 import type { ReactNode } from 'react';
 import type { Organisation } from '@/db/schema';
 import { longDate, money } from '@/lib/format';
+import { fitSpec } from '@/lib/fit-spec';
 import { PublicShell } from './public-shell';
+import { SpecView } from './spec-view';
 
 export type QuoteSummary = {
   quoteNumber: string; brand: string; sku: string; product: string; specificationText: string;
   totalGrossPence: number; depositRequiredPence: number; estimatedLeadTime: string; validUntil: string | null;
+  specificationJson?: unknown;
 };
 
 /** The customer-facing quote approval page. `action` is the approve form (or a preview notice). */
@@ -26,13 +29,19 @@ export function QuoteView({ org, quote: q, customerName, action, banner, preview
         </figure>
       ) : null}
 
-      <div className="detailbox" style={{ marginBottom: 14 }}>
-        <small>
-          {q.brand} {q.sku ? `· ${q.sku}` : ''}
-        </small>
-        <b style={{ fontSize: 17 }}>{q.product}</b>
-        <div style={{ whiteSpace: 'pre-line', marginTop: 8 }}>{q.specificationText}</div>
-      </div>
+      {fitSpec(q.specificationJson) ? (
+        <div style={{ marginBottom: 14 }}>
+          <SpecView json={q.specificationJson} text={q.specificationText} label="Your specification" />
+        </div>
+      ) : (
+        <div className="detailbox" style={{ marginBottom: 14 }}>
+          <small>
+            {q.brand} {q.sku ? `· ${q.sku}` : ''}
+          </small>
+          <b style={{ fontSize: 17 }}>{q.product}</b>
+          <div style={{ whiteSpace: 'pre-line', marginTop: 8 }}>{q.specificationText}</div>
+        </div>
+      )}
       <div className="detailgrid">
         <div className="detailbox">
           <small>Price (incl. VAT)</small>

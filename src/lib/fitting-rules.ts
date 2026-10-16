@@ -1,4 +1,6 @@
 import type { ProductModel } from '@/db/schema';
+import type { SpecBuild, SpecLine } from './fit-spec';
+import { money } from './format';
 
 /** Pure fitting rules — shared by the server (validation) and the builder UI. */
 
@@ -74,4 +76,34 @@ export function componentPrice(
   const override = catalog.rules.find((r) => r.modelId === model.id && r.componentId === component.id)?.upchargeOverridePence;
   const each = override ?? component.upchargePence;
   return isPerClub(component) ? each * clubsInBuild(model, chosen) : each;
+}
+
+type BuildCatalog = {
+  brands: { id: string; name: string }[];
+  categories: { id: string; label: string }[];
+  components: (PricedComponent & { name: string })[];
+  rules: PricedRule[];
+};
+type BuildModel = PricedModel & { name: string; brandId: string; basePricePence: number };
+
+/**
+ * Prices one club build into display lines (Head, then each chosen option in step order).
+ * The builder and quote creation both use this, so what staff see is what the customer is quoted.
+ */
+export function priceBuild(catalog: BuildCatalog, model: BuildModel, componentIds: string[], notes = ''): SpecBuild {
+  const chosen = componentIds.map((id) => catalog.components.find((c) => c.id === id)).filter((c): c is BuildCatalog['components'][number] => Boolean(c));
+  const clubs = clubsInBuild(model, chosen);
+  const brand = catalog.brands.find((b) => b.id === model.brandId)?.name ?? '';
+  const title = `${brand} ${model.name}`.trim();
+  const lines: SpecLine[] = [
+    { label: 'Head', value: title, pricePence: model.basePricePence, detail: model.category === 'irons' && model.clubsInSet ? `standard ${model.clubsInSet}-club set` : undefined },
+  ];
+  for (const cat of catalog.categories) {
+    for (const c of chosen.filter((x) => x.categoryId === cat.id)) {
+      const price = componentPrice(catalog, model, c, chosen);
+      const perClub = isPerClub(c) && clubs > 1 && price !== 0;
+      lines.push({ label: cat.label, value: c.name, pricePence: price, detail: perClub ? `${money(price / clubs)} × ${clubs} clubs` : undefined });
+    }
+  }
+  return { title, category: model.category, lines, notes: notes || undefined, totalPence: lines.reduce((s, l) => s + l.pricePence, 0) };
 }

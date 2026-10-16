@@ -4,6 +4,7 @@ import { customers, organisations, orders, quotes, type Customer, type Organisat
 import { recordEvent, type Actor } from '../audit';
 import { dispatchMessages, enqueueEmail } from '../email/outbox';
 import { asBallPrintSpec } from '../ball-print';
+import { fitSpec } from '../fit-spec';
 import { todayInTz } from '../format';
 import { appUrl, hashToken, newToken, signValue } from '../tokens';
 import { parse, quoteCreateSchema, quoteEditSchema } from '../validation';
@@ -31,6 +32,7 @@ function quoteEmailContext(q: Quote, c: Customer, url: string) {
   const isPrint = asBallPrintSpec(q.specificationJson);
   return {
     previewImageUrl: isPrint ? appUrl(proofPathFor(q.id)) : undefined,
+    fit: fitSpec(q.specificationJson),
     customerName: c.name,
     reference: q.quoteNumber,
     brand: q.brand,
