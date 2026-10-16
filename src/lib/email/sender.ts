@@ -29,7 +29,14 @@ export async function checkSenderDomain(email: string): Promise<DomainCheck> {
     return { verified: false, domain, detail: 'No email provider is configured yet, so the COS address is used.' };
   }
   const res = await new Resend(process.env.RESEND_API_KEY).domains.list();
-  if (res.error) return { verified: false, domain, detail: `Couldn’t check with Resend: ${res.error.message}` };
+  if (res.error) {
+    // A "sending access" key may not list domains. Resend still rejects mail from unverified
+    // domains (and COS logs that as a failed email), so accept the address rather than block it.
+    if (/restricted|permission|not allowed|unauthori[sz]ed/i.test(`${res.error.name} ${res.error.message}`)) {
+      return { verified: true, domain, detail: `Using ${email}. (COS’s email key can only send, so Resend confirms the domain when each email goes out.)` };
+    }
+    return { verified: false, domain, detail: `Couldn’t check with Resend: ${res.error.message}` };
+  }
   const match = res.data?.data.find((d) => d.name.toLowerCase() === domain);
   if (!match) {
     return { verified: false, domain, detail: `${domain} hasn’t been added to COS’s email service yet. Ask COS support to set it up.` };
