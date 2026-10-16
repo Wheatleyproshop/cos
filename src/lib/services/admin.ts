@@ -3,6 +3,7 @@ import bcrypt from 'bcryptjs';
 import { withTenant } from '@/db';
 import { customers, organisations, users, type EmailAutomationKey, type EmailAutomations } from '@/db/schema';
 import { recordEvent } from '../audit';
+import { checkSenderDomain } from '../email/sender';
 import { PLANS } from '../plans';
 import {
   customerEditSchema,
@@ -80,9 +81,28 @@ async function updateOrg(ctx: Ctx, section: string, patch: Record<string, unknow
   });
 }
 
-export async function updateStoreSettings(ctx: Ctx, raw: unknown) {
+export async function updateStoreSettings(ctx: Ctx, raw: unknown): Promise<string> {
   requireRole(ctx, 'admin', 'change store settings');
-  await updateOrg(ctx, 'store', parse(storeSettingsSchema, raw));
+  const input = parse(storeSettingsSchema, raw);
+  const changed = input.senderEmail !== ctx.org.senderEmail;
+  const check = input.senderEmail && changed ? await checkSenderDomain(input.senderEmail) : null;
+  await updateOrg(ctx, 'store', {
+    ...input,
+    ...(changed ? { senderVerifiedAt: check?.verified ? new Date() : null } : {}),
+  });
+  if (!check) return 'Store identity saved. Customer emails and pages now use these details.';
+  return check.verified
+    ? `Saved. Customer emails will now come from ${input.senderEmail}.`
+    : `Saved, but ${check.detail} Until then emails come from the COS address.`;
+}
+
+/** Re-checks the retailer's sending domain (e.g. after DNS records were added). */
+export async function recheckSender(ctx: Ctx): Promise<string> {
+  requireRole(ctx, 'admin', 'change store settings');
+  if (!ctx.org.senderEmail) return 'No custom sending address is set.';
+  const check = await checkSenderDomain(ctx.org.senderEmail);
+  await updateOrg(ctx, 'store', { senderVerifiedAt: check.verified ? (ctx.org.senderVerifiedAt ?? new Date()) : null });
+  return check.verified ? `${ctx.org.senderEmail} is verified — customer emails now come from it.` : check.detail;
 }
 
 export async function updateAutomations(ctx: Ctx, enabled: Partial<Record<EmailAutomationKey, boolean>>) {

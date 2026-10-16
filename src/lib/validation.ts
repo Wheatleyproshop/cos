@@ -114,6 +114,7 @@ export const customerEditSchema = z.object({
 export const storeSettingsSchema = z.object({
   storeName: required('Store name', 120),
   replyToEmail: z.string().trim().email('Enter a valid reply-to email'),
+  senderEmail: z.union([z.literal(''), z.string().trim().toLowerCase().email('Enter a valid email address')]).default(''),
   collectionLocation: text(300).default(''),
   storePhone: text(40).default(''),
   openingHours: text(300).default(''),

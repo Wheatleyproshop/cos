@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import { ActionButton } from '@/components/forms';
 import { AutomationsForm, NewUserForm, PasswordForm, StoreForm, TeamMemberControls, ThresholdsForm } from '@/components/misc-forms';
 import { PageHeader } from '@/components/views';
+import { fromHeader } from '@/lib/email/sender';
 import { hasRole, requireStaff, ROLE_LABELS } from '@/lib/auth';
 import { bytes, stamp } from '@/lib/format';
 import { hasFeature, PLANS } from '@/lib/plans';
@@ -10,6 +11,7 @@ import {
   automationsAction,
   backupNowAction,
   changePasswordAction,
+  recheckSenderAction,
   createUserAction,
   storeSettingsAction,
   thresholdsAction,
@@ -34,11 +36,23 @@ export default async function SettingsPage() {
       <section className="panel">
         <h2>Store identity</h2>
         <p>Customise the brand your customers see on emails, quote approvals and tracking pages.</p>
+        {admin && org.senderEmail && !org.senderVerifiedAt ? (
+          <div className="notice warn" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
+            <span>
+              <b>{org.senderEmail} isn’t verified yet</b>
+              Emails go from the COS address until the domain’s DNS records are verified.
+            </span>
+            <ActionButton action={recheckSenderAction} className="btn small">
+              Check again
+            </ActionButton>
+          </div>
+        ) : null}
         <StoreForm
           action={storeSettingsAction}
           disabled={!admin}
           values={{
-            storeName: org.storeName, replyToEmail: org.replyToEmail, collectionLocation: org.collectionLocation, storePhone: org.storePhone,
+            storeName: org.storeName, replyToEmail: org.replyToEmail, senderEmail: org.senderEmail,
+            senderHint: `Customers currently receive emails from “${fromHeader(org)}”.${org.senderEmail && !org.senderVerifiedAt ? ' Your own address will be used once its domain is verified.' : ''}`, collectionLocation: org.collectionLocation, storePhone: org.storePhone,
             openingHours: org.openingHours, brandColor: org.brandColor, quoteTerms: org.quoteTerms,
           }}
         />

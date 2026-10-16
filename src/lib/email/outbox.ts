@@ -3,6 +3,7 @@ import { Resend } from 'resend';
 import { withTenant, type DB } from '@/db';
 import { messages, type EmailAutomationKey, type Organisation } from '@/db/schema';
 import { recordEvent, SYSTEM, type Actor } from '../audit';
+import { fromHeader } from './sender';
 import { renderEmail, type EmailContext, type StoreBranding } from './templates';
 
 export function brandingFor(org: Organisation): StoreBranding {
@@ -74,12 +75,6 @@ export async function enqueueEmail(tx: DB, input: EnqueueInput): Promise<string 
   return reason ? null : msg.id;
 }
 
-function fromAddress(storeName: string) {
-  const from = process.env.EMAIL_FROM || 'orders@example.com';
-  const display = storeName.replace(/["<>\r\n]/g, '').trim() || 'Orders';
-  return `"${display}" <${from}>`;
-}
-
 let resendClient: Resend | null = null;
 function resend(): Resend | null {
   if (!process.env.RESEND_API_KEY) return null;
@@ -106,7 +101,7 @@ export async function dispatchMessages(org: Organisation, ids: (string | null | 
     try {
       if (client) {
         const res = await client.emails.send({
-          from: fromAddress(org.storeName),
+          from: fromHeader(org),
           to: [m.recipient],
           replyTo: org.replyToEmail,
           subject: m.subject,

@@ -45,6 +45,10 @@ export const organisations = pgTable('organisations', {
   // Customer-facing identity (emails, quote approval and tracking pages)
   storeName: text('store_name').notNull(),
   replyToEmail: text('reply_to_email').notNull(),
+  /** Optional "From" address on the retailer's own domain (e.g. orders@shop.co.uk). Used only once
+   *  its domain is verified in COS's Resend account; otherwise mail goes from the COS platform domain. */
+  senderEmail: text('sender_email').notNull().default(''),
+  senderVerifiedAt: timestamp('sender_verified_at', { withTimezone: true }),
   collectionLocation: text('collection_location').notNull().default(''),
   storePhone: text('store_phone').notNull().default(''),
   openingHours: text('opening_hours').notNull().default(''),

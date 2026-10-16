@@ -25,7 +25,7 @@ Stored as integer pence (`*_pence`). Balance = total − Σ(deposits + payments 
 2. After commit, `dispatchMessages` sends through Resend. It updates the row to `sent` or `failed` and logs it with the **system** actor. A provider outage never rolls back an order.
 3. The Resend webhook (`/api/webhooks/resend`, Svix‑signature verified) moves rows to `delivered`, `bounced` or `failed`.
 
-The sender display name is the retailer's store name, and reply‑to is the retailer's address. Templates contain no COS branding. The rendered HTML is stored on the message, so staff can see exactly what was sent.
+The sender display name is the retailer's store name, and reply‑to is the retailer's address. The From address is the retailer's own address, such as `orders@desirablegolf.co.uk`, once that domain is verified in COS's Resend account. Otherwise it's `<slug>@EMAIL_FROM_DOMAIN`, such as `desirable-golf@mail.cosgolf.co.uk`. See `src/lib/email/sender.ts`. Templates contain no COS branding. The rendered HTML is stored on the message, so staff can see exactly what was sent.
 
 ## Customer tokens
 Approval and tracking links use 256‑bit random tokens. Only SHA‑256 hashes are stored, so a token is shown once: staff generate a fresh one each time they need to share it. Approval tokens are single‑use, rotate when re‑sent, and are cleared on accept, decline or cancel. Tracking tokens expire after 365 days and can be revoked.
@@ -58,4 +58,3 @@ Approval and tracking links use 256‑bit random tokens. Only SHA‑256 hashes a
 - Direct‑to‑bucket presigned uploads for attachments larger than 4 MB.
 - Google Drive and Dropbox OAuth connection flow. The upload adapters exist; see `BACKUPS.md`.
 - Billing integration for the plan tiers in `src/lib/plans.ts`.
-- Per‑retailer verified sending domains in Resend, if a shop wants mail from its own domain rather than a COS sending domain.

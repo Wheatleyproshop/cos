@@ -251,3 +251,15 @@ describe('notifications', () => {
     expect(forWill.items.some((n) => n.body.includes('taken by Will Walker'))).toBe(false);
   });
 });
+
+describe('email sender', () => {
+  it('uses the shop’s own address only once its domain is verified', async () => {
+    const { fromHeader, senderAddress } = await import('@/lib/email/sender');
+    const prev = process.env.EMAIL_FROM_DOMAIN;
+    process.env.EMAIL_FROM_DOMAIN = 'mail.cosgolf.co.uk';
+    const shop = { slug: 'desirable-golf', storeName: 'Desirable Golf', senderEmail: 'orders@desirablegolf.co.uk', senderVerifiedAt: null };
+    expect(senderAddress(shop)).toBe('desirable-golf@mail.cosgolf.co.uk');
+    expect(fromHeader({ ...shop, senderVerifiedAt: new Date() })).toBe('"Desirable Golf" <orders@desirablegolf.co.uk>');
+    process.env.EMAIL_FROM_DOMAIN = prev;
+  });
+});

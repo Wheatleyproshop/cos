@@ -51,7 +51,8 @@ To reset local data, run `rm -rf .data && npm run setup`.
 3. **Environment:** set everything in `.env.example`. You need:
    - `AUTH_SECRET`: generate with `openssl rand -base64 32`.
    - `NEXT_PUBLIC_APP_URL`: your production URL, used in customer email links.
-   - `RESEND_API_KEY` and `EMAIL_FROM`: a verified address on your Resend domain.
+   - `RESEND_API_KEY`, and `EMAIL_FROM_DOMAIN=mail.cosgolf.co.uk` (verified in Resend). Each shop then sends as `"Shop Name" <shop-slug@mail.cosgolf.co.uk>`, with replies going to the shop.
+   - `NEXT_PUBLIC_APP_URL=https://cosgolf.co.uk` once the domain is attached in Vercel.
    - `RESEND_WEBHOOK_SECRET`: point a Resend webhook at `/api/webhooks/resend` for the delivered, bounced, failed and complained events.
    - `STORAGE_DRIVER=s3` plus the `S3_*` and `STORAGE_BUCKET` settings. Serverless hosts have no persistent disk, so attachments and backups need S3, R2 or Supabase Storage.
    - `CRON_SECRET`. `vercel.json` schedules `/api/cron/daily` at 07:00 UTC for collection reminders and the nightly backup.
@@ -65,6 +66,7 @@ To reset local data, run `rm -rf .data && npm run setup`.
 - **Quotes:** same specification structure as orders. The customer approves through a secure, single‑use tokenised link with no account needed. Staff can also record an in‑store approval. Approval stores an immutable snapshot of exactly what was accepted, then converts the quote into an order without re‑keying.
 - **Payments:** deposits, payments and refunds are separate append‑only entries, each with an amount, method, reference, staff member and timestamp. Total, paid and balance are always calculated, never typed in. Refunds are manager‑only. Collecting an order with a balance outstanding needs an explicit confirmation.
 - **COS Ledger (audit):** every mutation writes an append‑only event with the actor (user, system or customer), timestamp, old and new values, and metadata. Postgres triggers reject `UPDATE`/`DELETE` on the ledger and payments, even for the owner role.
+- **Sending from the shop's own address:** in **Store settings**, an admin can set *Send customer emails from*, for example `orders@desirablegolf.co.uk`. COS checks with Resend that the domain is verified and switches over only once it is; until then it uses the cosgolf.co.uk address.
 - **Customer emails (Resend):** order confirmation, quote approval, ETA changed or delayed, ready for collection, and a daily collection reminder. Emails are sent as the shop (`"Desirable Golf" <EMAIL_FROM>`, reply‑to the shop) and logged per order through queued, sent, delivered and failed states. Admins can switch each automation on or off. Managers can skip an individual notification, and the skip is recorded.
 - **Attention engine:** flags passed ETAs, delayed orders, orders ready but uncollected after N days, quotes awaiting a response after N days, and orders missing a supplier reference after N days. Thresholds are set per store.
 - **Dashboard and search:** active orders, awaiting supplier, delayed or overdue, ready to collect, open quotes and needs attention. Global search covers customer, email, phone (digits‑insensitive), order ID, brand, product, SKU and supplier reference.

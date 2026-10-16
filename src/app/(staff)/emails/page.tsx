@@ -5,6 +5,7 @@ import type { EmailAutomationKey } from '@/db/schema';
 import { requireStaff } from '@/lib/auth';
 import { templateName } from '@/lib/audit';
 import { brandingFor } from '@/lib/email/outbox';
+import { fromHeader } from '@/lib/email/sender';
 import { renderEmail, TEMPLATE_KEYS } from '@/lib/email/templates';
 import { addDays, stamp, todayInTz } from '@/lib/format';
 import { getMessage, listMessages, previewSource } from '@/lib/queries';
@@ -64,7 +65,7 @@ export default async function EmailsPage({ searchParams }: { searchParams: Promi
         ) : (
           <>
             <p>
-              Preview what customers receive at each step. Emails come from <b>{staff.org.storeName}</b>, and replies go to{' '}
+              Preview what customers receive at each step. Emails come from <b>{fromHeader(staff.org)}</b>, and replies go to{' '}
               <b>{staff.org.replyToEmail}</b>. {process.env.RESEND_API_KEY ? '' : 'No email provider is configured, so sends are simulated and logged.'}
             </p>
             <nav className="pills" aria-label="Email templates">

@@ -18,6 +18,7 @@ import {
 import { acceptQuoteInStore, closeQuote, createApprovalLink, createQuote, editQuote, sendQuote } from '@/lib/services/quotes';
 import {
   changeOwnPassword,
+  recheckSender,
   createUser,
   updateAutomations,
   updateCustomer,
@@ -165,10 +166,11 @@ export async function updateCustomerAction(customerId: string, _: FormState, fd:
 /* ── Settings ────────────────────────────────────────────────────────── */
 
 export async function storeSettingsAction(_: FormState, fd: FormData) {
-  return act('admin', async (ctx) => {
-    await updateStoreSettings(ctx, obj(fd));
-    return 'Store identity saved. Customer emails and pages now use these details.';
-  }, fd);
+  return act('admin', (ctx) => updateStoreSettings(ctx, obj(fd)), fd);
+}
+
+export async function recheckSenderAction() {
+  return act('admin', (ctx) => recheckSender(ctx));
 }
 
 export async function automationsAction(_: FormState, fd: FormData) {

@@ -85,6 +85,16 @@ export function StoreForm({ action, values, disabled }: { action: BoundAction; v
           <div className="fields">
             <Field state={s} name="storeName" label="Store name" required defaultValue={values.storeName} hint="Appears as the email sender name and on customer pages" />
             <Field state={s} name="replyToEmail" label="Reply-to email" type="email" required defaultValue={values.replyToEmail} hint="Customer replies go here" />
+            <Field
+              state={s}
+              name="senderEmail"
+              label="Send customer emails from (optional)"
+              type="email"
+              wide
+              defaultValue={values.senderEmail}
+              placeholder="e.g. orders@yourshop.co.uk"
+              hint={values.senderHint}
+            />
             <Field state={s} name="collectionLocation" label="Collection location" wide defaultValue={values.collectionLocation} />
             <Field state={s} name="storePhone" label="Store phone" type="tel" defaultValue={values.storePhone} />
             <Field state={s} name="openingHours" label="Opening hours" defaultValue={values.openingHours} placeholder="e.g. Mon–Sun 8am–6pm" />
