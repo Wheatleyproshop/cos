@@ -31,6 +31,7 @@ import {
 import { runBackup } from '@/lib/services/backups';
 import { sendTestEmail } from '@/lib/services/test-email';
 import { addBrand, addComponent, addModel, createFittingQuote, setCatalogActive } from '@/lib/services/fitting';
+import { addBall, addStarterBalls, createBallPrintQuote, setBallActive, updateBallPrice, updateSetupFee } from '@/lib/services/ball-printing';
 
 const obj = (fd: FormData) => Object.fromEntries([...fd.entries()].filter(([, v]) => typeof v === 'string'));
 const flag = (fd: FormData, name: string) => fd.get(name) === 'on' || fd.get(name) === 'true';
@@ -277,4 +278,64 @@ export async function paymentTrackingAction(_: FormState, fd: FormData) {
     await updatePaymentTracking(ctx, on);
     return on ? 'Payments section switched on.' : 'Payments section switched off — payments are taken at your till.';
   });
+}
+
+/* ── Ball printing ──────────────────────────────────────────────────── */
+
+export async function ballPrintAction(_: FormState, fd: FormData): Promise<FormState> {
+  let target = '';
+  const file = (name: string) => {
+    const v = fd.get(name);
+    return v instanceof File && v.size ? v : null;
+  };
+  const res = await act(
+    'staff',
+    async (ctx) => {
+      const q = await createBallPrintQuote(
+        ctx,
+        { ...obj(fd), textLines: fd.getAll('textLines').map(String) },
+        { logo: file('logo'), proof: file('proof') },
+        { send: fd.get('intent') === 'send' },
+      );
+      target = `/quotes/${q.quoteNumber}`;
+    },
+    fd,
+  );
+  if (res?.ok && target) redirect(target);
+  return res;
+}
+
+export async function addBallAction(_: FormState, fd: FormData) {
+  return act('manager', async (ctx) => {
+    await addBall(ctx, obj(fd));
+    return 'Ball added to your range.';
+  }, fd);
+}
+
+export async function starterBallsAction() {
+  return act('manager', async (ctx) => {
+    await addStarterBalls(ctx);
+    return 'Starter range added. Check the prices match yours.';
+  });
+}
+
+export async function ballPriceAction(id: string, _: FormState, fd: FormData) {
+  return act('manager', async (ctx) => {
+    await updateBallPrice(ctx, id, obj(fd));
+    return 'Price updated.';
+  }, fd);
+}
+
+export async function ballActiveAction(id: string, active: boolean) {
+  return act('manager', async (ctx) => {
+    await setBallActive(ctx, id, active);
+    return active ? 'Restored.' : 'Retired.';
+  });
+}
+
+export async function setupFeeAction(_: FormState, fd: FormData) {
+  return act('manager', async (ctx) => {
+    await updateSetupFee(ctx, obj(fd));
+    return 'Setup fee saved.';
+  }, fd);
 }

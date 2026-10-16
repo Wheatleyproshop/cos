@@ -1,4 +1,4 @@
-import { createCipheriv, createDecipheriv, createHash, randomBytes, timingSafeEqual } from 'node:crypto';
+import { createCipheriv, createDecipheriv, createHash, createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 
 /** 256-bit, URL-safe random token for customer links and sessions. */
 export function newToken(): string {
@@ -26,6 +26,11 @@ function secretKey(): Buffer {
   const secret = process.env.AUTH_SECRET;
   if (!secret && process.env.NODE_ENV === 'production') throw new Error('AUTH_SECRET is required in production');
   return createHash('sha256').update(secret || 'cos-development-secret').digest();
+}
+
+/** Unforgeable, non-expiring signature for read-only public links (e.g. an artwork proof image in an email). */
+export function signValue(value: string): string {
+  return createHmac('sha256', secretKey()).update(`cos-sign:${value}`).digest('base64url');
 }
 
 /** AES-256-GCM for third-party credentials (e.g. backup OAuth refresh tokens). */

@@ -9,6 +9,7 @@ const NAV = [
   { href: '/orders', icon: '▤', label: 'All orders' },
   { href: '/quotes', icon: '◇', label: 'Quotes' },
   { href: '/fitting', icon: '✎', label: 'Custom Fitting' },
+  { href: '/ball-printing', icon: '◎', label: 'Ball Printing' },
   { href: '/customers', icon: '☺', label: 'Customers' },
   { href: '/products', icon: '▣', label: 'Products' },
   { href: '/emails', icon: '✉', label: 'Email previews' },

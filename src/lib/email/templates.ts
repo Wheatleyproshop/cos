@@ -35,6 +35,8 @@ export type EmailContext = {
   leadTime?: string;
   validUntil?: string | null;
   actionUrl?: string; // tracking or approval link
+  /** A rendered artwork proof (golf ball printing) shown above the specification. */
+  previewImageUrl?: string;
 };
 
 export type RenderedEmail = { subject: string; html: string; text: string };
@@ -92,6 +94,7 @@ ${b.fontsHref ? `<link href="${esc(b.fontsHref)}" rel="stylesheet">` : ''}</head
 <p style="font-size:15px;line-height:1.6;margin:0 0 14px">Hi ${esc(firstName(ctx.customerName))},</p>
 ${o.intro.map((p) => `<p style="font-size:15px;line-height:1.6;margin:0 0 14px;color:#2b2e38">${esc(p)}</p>`).join('')}
 </td></tr>
+${ctx.previewImageUrl ? `<tr><td style="padding:6px 32px 14px" align="center"><img src="${esc(ctx.previewImageUrl)}" width="400" alt="Preview of your personalised ${esc(ctx.brand)} ${esc(ctx.product)}" style="display:block;width:100%;max-width:400px;height:auto;border:0;background:#eef0f4"><div style="font-size:11px;color:${muted};margin-top:8px;letter-spacing:0.5px">Preview for approval. Final print colours and position may vary slightly.</div></td></tr>` : ''}
 <tr><td style="padding:6px 32px 8px"><div style="border:1px solid #e6e4df;border-left:4px solid ${b.headerBg};padding:18px 20px">
 <div style="font-family:${b.headingFont};font-weight:600;font-size:17px;margin-bottom:4px;color:${ink}">${esc(ctx.brand)} ${esc(ctx.product)}</div>
 <div style="color:${muted};font-size:13px;line-height:1.55;margin-bottom:10px;white-space:pre-line">${esc(ctx.specification)}</div>
@@ -157,15 +160,18 @@ export function renderEmail(type: EmailAutomationKey, ctx: EmailContext): Render
       if (ctx.depositRequiredPence) rows.push({ label: 'Deposit to proceed', value: money(ctx.depositRequiredPence) });
       if (ctx.leadTime) rows.push({ label: 'Estimated lead time', value: ctx.leadTime });
       if (ctx.validUntil) rows.push({ label: 'Quote valid until', value: longDate(ctx.validUntil) });
+      const proof = Boolean(ctx.previewImageUrl);
       const r = layout(ctx, {
-        preheader: `Your personalised quotation from ${s}.`,
-        heading: 'Your personalised quotation',
-        intro: ['We have prepared your quote. Please review the specification and price, then approve it online and we will place your order.'],
+        preheader: proof ? `Your personalised golf ball proof from ${s}.` : `Your personalised quotation from ${s}.`,
+        heading: proof ? 'Your personalised golf balls' : 'Your personalised quotation',
+        intro: proof
+          ? ['Here is a preview of your personalised golf balls. Please check the artwork, quantity and price, then approve online and we will send them for printing.']
+          : ['We have prepared your quote. Please review the specification and price, then approve it online and we will place your order.'],
         rows,
-        cta: ctx.actionUrl ? { label: 'Review and approve your quote', url: ctx.actionUrl } : undefined,
+        cta: ctx.actionUrl ? { label: proof ? 'Review and approve your proof' : 'Review and approve your quote', url: ctx.actionUrl } : undefined,
         outro: ['No account is needed. If anything needs changing, just reply to this email.'],
       });
-      return { subject: `Your quote from ${s} — ${ctx.brand} ${ctx.product}`, ...r };
+      return { subject: proof ? `Please approve your golf ball proof — ${s}` : `Your quote from ${s} — ${ctx.brand} ${ctx.product}`, ...r };
     }
     case 'eta_revised': {
       const rows: Block[] = [];

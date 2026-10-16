@@ -10,6 +10,7 @@ import {
   orders,
   organisations,
   payments,
+  printBalls,
   quotes,
   users,
   type BackupProvider,
@@ -41,6 +42,7 @@ export async function buildExport(tx: DB, orgId: string) {
     messages: await tx.select().from(messages),
     attachments: await tx.select().from(attachments), // metadata; files live in object storage
     auditEvents: await tx.select().from(auditEvents),
+    printBalls: await tx.select().from(printBalls),
   };
 }
 

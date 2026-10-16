@@ -9,13 +9,22 @@ export type QuoteSummary = {
 };
 
 /** The customer-facing quote approval page. `action` is the approve form (or a preview notice). */
-export function QuoteView({ org, quote: q, customerName, action, banner }: { org: Organisation; quote: QuoteSummary; customerName: string; action: ReactNode; banner?: ReactNode }) {
+export function QuoteView({ org, quote: q, customerName, action, banner, previewUrl }: { org: Organisation; quote: QuoteSummary; customerName: string; action: ReactNode; banner?: ReactNode; previewUrl?: string | null }) {
   return (
     <PublicShell org={org}>
       {banner}
       <div className="eyebrow">QUOTE {q.quoteNumber}</div>
-      <h1 style={{ fontSize: 26 }}>Your personalised quotation</h1>
-      <p style={{ marginTop: 0 }}>Hi {customerName.split(' ')[0]}, please review the specification below. Approving it places your order with {org.storeName}.</p>
+      <h1 style={{ fontSize: 26 }}>{previewUrl ? 'Your personalised golf balls' : 'Your personalised quotation'}</h1>
+      <p style={{ marginTop: 0 }}>
+        Hi {customerName.split(' ')[0]}, please review {previewUrl ? 'your proof and the details' : 'the specification'} below. Approving it places your order with {org.storeName}.
+      </p>
+      {previewUrl ? (
+        <figure className="proof">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={previewUrl} alt={`Preview of your personalised ${q.brand} ${q.product}`} width={900} height={900} />
+          <figcaption>Preview for approval. Final print colours and position may vary slightly.</figcaption>
+        </figure>
+      ) : null}
 
       <div className="detailbox" style={{ marginBottom: 14 }}>
         <small>

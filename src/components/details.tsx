@@ -19,6 +19,7 @@ import {
 import { hasRole, type Staff } from '@/lib/auth';
 import { templateName } from '@/lib/audit';
 import { PAYMENT_KIND_LABELS } from '@/db/schema';
+import { asBallPrintSpec } from '@/lib/ball-print';
 import { bytes, longDate, money, niceDate, penceToInput, stamp, titleCase } from '@/lib/format';
 import { getCustomerDetail, getOrderDetail, getQuoteDetail } from '@/lib/queries';
 import { canTransition, DEFAULT_WORKFLOW, QUOTE_STATUS_LABELS, statusLabel } from '@/lib/status';
@@ -28,6 +29,37 @@ import { ActionButton, LinkGenerator } from './forms';
 import { AcceptInStoreForm, EditQuoteForm } from './misc-forms';
 import { AttachmentForm, CreateRequestForm, EditOrderForm, NoteForm, PaymentForm, ProgressForm, type RequestDefaults } from './order-forms';
 import { Badge, DetailBox, MessageBadge, Timeline } from './views';
+
+/** Ball Printing proof and the customer's original artwork, for staff. */
+function BallProof({ quoteId, spec }: { quoteId: string | null; spec: unknown }) {
+  const p = asBallPrintSpec(spec);
+  if (!p || !quoteId) return null;
+  return (
+    <div className="bp-proofbox">
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img src={`/api/ball-print/${quoteId}/proof`} alt={`Proof: ${p.ball.brand} ${p.ball.name}`} width={220} height={220} />
+      <div>
+        <small>Ball printing proof</small>
+        <b>
+          {p.ball.brand} {p.ball.name} · {p.dozens} dozen
+        </b>
+        <div className="muted">
+          {p.artwork.type === 'logo' ? 'Customer logo' : `Text: “${p.artwork.lines.join(' / ')}”`}
+        </div>
+        <div className="actions" style={{ marginTop: 10 }}>
+          <a className="btn small" href={`/api/ball-print/${quoteId}/proof`} target="_blank" rel="noreferrer">
+            Open proof
+          </a>
+          {p.artwork.type === 'logo' ? (
+            <a className="btn small" href={`/api/ball-print/${quoteId}/logo`} download={p.artwork.filename}>
+              Download original logo
+            </a>
+          ) : null}
+        </div>
+      </div>
+    </div>
+  );
+}
 
 /* ── Order ───────────────────────────────────────────────────────────── */
 
@@ -71,6 +103,7 @@ export async function OrderDetail({ staff, number, inModal }: { staff: Staff; nu
         </div>
       ) : null}
 
+      <BallProof quoteId={o.quoteId} spec={o.specificationJson} />
       <div className="detailgrid">
         <DetailBox label="Custom specification">{o.specificationText}</DetailBox>
         <DetailBox label="Product ID">{o.sku || '—'}</DetailBox>
@@ -287,6 +320,7 @@ export async function QuoteDetail({ staff, number, inModal }: { staff: Staff; nu
         </div>
       ) : null}
 
+      <BallProof quoteId={q.id} spec={q.specificationJson} />
       <div className="detailgrid">
         <DetailBox label="Custom specification">{q.specificationText}</DetailBox>
         <DetailBox label="Product ID">{q.sku || '—'}</DetailBox>

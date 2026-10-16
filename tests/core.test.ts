@@ -355,3 +355,39 @@ describe('customer import & returning customers', () => {
     expect(updated.email).toBe('now-has-email@example.com');
   });
 });
+
+describe('golf ball printing', () => {
+  // Smallest valid JPEG header / PNG header: enough for the type sniffing that guards uploads.
+  const jpeg = () => new File([new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 0, 16, 74, 70, 73, 70, 0, 1])], 'proof.jpg', { type: 'image/jpeg' });
+
+  it('creates a priced proof quote and emails it with the signed proof image', async () => {
+    const { addStarterBalls, getBallRange, createBallPrintQuote } = await import('@/lib/services/ball-printing');
+    await expect(addStarterBalls(staff)).rejects.toThrow(/manager/);
+    await addStarterBalls(admin);
+    const [ball] = await getBallRange(org.id);
+    const q = await createBallPrintQuote(
+      staff,
+      {
+        customerName: 'Pat Print', email: 'pat@example.com', phone: '', ballId: ball.id, artworkType: 'text',
+        textLines: ['Club Day', '2026', ''], font: 'classic', ink: 'navy', scale: '0.8', dozens: '3',
+        pricePerDozenPence: '50.00', setupFeePence: '15.00', notes: '', validUntil: '',
+      },
+      { logo: null, proof: jpeg() },
+      { send: true },
+    );
+    expect(q.totalGrossPence).toBe(3 * 5000 + 1500);
+    expect(q.specificationText).toContain('“Club Day / 2026”');
+    const [msg] = await withTenant(org.id, (tx) => tx.select().from(messages).where(eq(messages.quoteId, q.id)));
+    expect(msg.subject).toContain('golf ball proof');
+    expect(msg.bodyHtml).toContain(`/api/public/ball-proof/${q.id}/`);
+  });
+
+  it('rejects a proof that is not really an image, and logo jobs without a logo', async () => {
+    const { getBallRange, createBallPrintQuote } = await import('@/lib/services/ball-printing');
+    const [ball] = await getBallRange(org.id);
+    const base = { customerName: 'Pat Print', email: 'pat@example.com', ballId: ball.id, dozens: '1', pricePerDozenPence: '50', setupFeePence: '0' };
+    const fake = new File(['<script>alert(1)</script>'], 'proof.jpg', { type: 'image/jpeg' });
+    await expect(createBallPrintQuote(staff, { ...base, artworkType: 'text', textLines: ['Hi'] }, { logo: null, proof: fake }, { send: false })).rejects.toThrow(/PNG, JPG or WebP/);
+    await expect(createBallPrintQuote(staff, { ...base, artworkType: 'logo' }, { logo: null, proof: jpeg() }, { send: false })).rejects.toThrow(/logo/);
+  });
+});

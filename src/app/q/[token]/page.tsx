@@ -2,7 +2,8 @@ import type { Metadata } from 'next';
 import { InvalidLink } from '@/components/public-shell';
 import { QuoteView } from '@/components/quote-view';
 import { money } from '@/lib/format';
-import { findQuoteByToken, isExpired } from '@/lib/services/quotes';
+import { asBallPrintSpec } from '@/lib/ball-print';
+import { findQuoteByToken, isExpired, proofPathFor } from '@/lib/services/quotes';
 import { AcceptForm } from './accept-form';
 
 // Absolute title: customer pages never mention COS.
@@ -29,5 +30,5 @@ export default async function QuotePage({ params }: { params: Promise<{ token: s
   ) : (
     <AcceptForm token={token} defaultName={c.name} total={money(q.totalGrossPence)} />
   );
-  return <QuoteView org={org} quote={q} customerName={c.name} action={action} />;
+  return <QuoteView org={org} quote={q} customerName={c.name} action={action} previewUrl={asBallPrintSpec(q.specificationJson) ? proofPathFor(q.id) : null} />;
 }

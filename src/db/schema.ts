@@ -71,6 +71,8 @@ export const organisations = pgTable('organisations', {
   }),
   /** Off = payments are taken at the shop's till: no Payments section, no balance check at collection. */
   paymentTracking: boolean('payment_tracking').notNull().default(true),
+  /** Golf ball printing: one-off artwork setup charge added to each print quote. */
+  ballSetupFeePence: integer('ball_setup_fee_pence').notNull().default(0),
   readyUncollectedDays: integer('ready_uncollected_days').notNull().default(7),
   quoteFollowupDays: integer('quote_followup_days').notNull().default(5),
   missingSupplierRefDays: integer('missing_supplier_ref_days').notNull().default(2),
@@ -458,6 +460,22 @@ export const productModels = pgTable('product_models', {
   createdAt: createdAt(),
 });
 
+/** A golf ball the shop offers for logo/text printing, priced per dozen including printing. */
+export const printBalls = pgTable('print_balls', {
+  id: id(),
+  organisationId: orgId(),
+  brand: text('brand').notNull(),
+  name: text('name').notNull(),
+  /** Ball colour used for the rendered preview, e.g. #ffffff or #f4e21b. */
+  colour: text('colour').notNull().default('#ffffff'),
+  pricePerDozenPence: integer('price_per_dozen_pence').notNull(),
+  minDozens: integer('min_dozens').notNull().default(1),
+  leadTimeDays: integer('lead_time_days'),
+  sortOrder: integer('sort_order').notNull().default(0),
+  active: boolean('active').notNull().default(true),
+  createdAt: createdAt(),
+});
+
 /** head/model, loft, set_makeup, shaft, flex, length, lie, grip, grip_size, wraps … */
 export const componentCategories = pgTable('component_categories', {
   id: id(),
@@ -527,5 +545,6 @@ export type AuditEvent = typeof auditEvents.$inferSelect;
 export type Message = typeof messages.$inferSelect;
 export type Attachment = typeof attachments.$inferSelect;
 export type Brand = typeof brands.$inferSelect;
+export type PrintBall = typeof printBalls.$inferSelect;
 export type ProductModel = typeof productModels.$inferSelect;
 export type Component = typeof components.$inferSelect;

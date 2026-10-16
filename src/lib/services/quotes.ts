@@ -3,8 +3,9 @@ import { systemDb, withTenant, type DB } from '@/db';
 import { customers, organisations, orders, quotes, type Customer, type Organisation, type Quote } from '@/db/schema';
 import { recordEvent, type Actor } from '../audit';
 import { dispatchMessages, enqueueEmail } from '../email/outbox';
+import { asBallPrintSpec } from '../ball-print';
 import { todayInTz } from '../format';
-import { appUrl, hashToken, newToken } from '../tokens';
+import { appUrl, hashToken, newToken, signValue } from '../tokens';
 import { parse, quoteCreateSchema, quoteEditSchema } from '../validation';
 import { findOrCreateCustomer, issueTrackingLink, nextNumber, ServiceError, type Ctx } from './common';
 import { orderEmailContext } from './orders';
@@ -21,8 +22,15 @@ async function loadQuote(tx: DB, orgId: string, quoteId: string) {
   return row;
 }
 
+/** Public URL of a ball-printing proof image. Signed per quote, so it keeps working after approval. */
+export function proofPathFor(quoteId: string) {
+  return `/api/public/ball-proof/${quoteId}/${signValue(`ball-proof:${quoteId}`)}`;
+}
+
 function quoteEmailContext(q: Quote, c: Customer, url: string) {
+  const isPrint = asBallPrintSpec(q.specificationJson);
   return {
+    previewImageUrl: isPrint ? appUrl(proofPathFor(q.id)) : undefined,
     customerName: c.name,
     reference: q.quoteNumber,
     brand: q.brand,
