@@ -61,7 +61,12 @@ export type EventType =
   | 'prebook_status_changed'
   | 'prebook_line_added'
   | 'prebook_line_removed'
-  | 'prebook_received';
+  | 'prebook_received'
+  | 'workshop_job_created'
+  | 'workshop_status_changed'
+  | 'workshop_eta_changed'
+  | 'workshop_item_added'
+  | 'workshop_item_removed';
 
 export type EventInput = {
   organisationId: string;
@@ -102,6 +107,9 @@ const TEMPLATE_NAMES: Record<string, string> = {
   eta_revised: 'ETA update',
   ready_for_collection: 'Ready for collection',
   collection_reminder: 'Collection reminder',
+  workshop_checked_in: 'Workshop check-in',
+  workshop_delayed: 'Workshop delay update',
+  workshop_ready: 'Workshop ready to collect',
 };
 
 export function templateName(key: string): string {
@@ -115,7 +123,20 @@ export function describeEvent(e: Pick<AuditEvent, 'eventType' | 'oldValueJson' |
   const o = (e.oldValueJson ?? {}) as Record<string, any>;
   const n = (e.newValueJson ?? {}) as Record<string, any>;
   const m = (e.metadataJson ?? {}) as Record<string, any>;
+  const WS: Record<string, string> = {
+    checked_in: 'Checked in', in_progress: 'In progress', waiting_parts: 'Waiting for parts', ready: 'Ready to collect', collected: 'Collected', cancelled: 'Cancelled',
+  };
   switch (e.eventType) {
+    case 'workshop_job_created':
+      return `Clubs checked in${Array.isArray(n.items) ? `: ${(n.items as string[]).join(', ')}` : ''}`;
+    case 'workshop_status_changed':
+      return `Status changed: ${WS[o.status] ?? o.status} → ${WS[n.status] ?? n.status}${n.delayReason ? ` (${n.delayReason})` : ''}`;
+    case 'workshop_eta_changed':
+      return `Ready date ${o.etaDate ? `changed from ${o.etaDate} ` : 'set '}to ${n.etaDate ?? 'none'}${n.reason ? ` — ${n.reason}` : ''}`;
+    case 'workshop_item_added':
+      return `Added ${n.club}: ${n.work}${n.parts ? ` (${n.parts})` : ''}`;
+    case 'workshop_item_removed':
+      return `Removed ${o.club}: ${o.work}`;
     case 'order_created':
       return m.fromQuote ? `Order created from accepted quote ${m.fromQuote}` : 'Order created';
     case 'status_changed':

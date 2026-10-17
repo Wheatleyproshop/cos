@@ -16,6 +16,8 @@ import {
   quotes,
   supplierAccounts,
   users,
+  workshopItems,
+  workshopJobs,
   type BackupProvider,
   type Organisation,
 } from '@/db/schema';
@@ -49,6 +51,8 @@ export async function buildExport(tx: DB, orgId: string) {
     supplierAccounts: await tx.select().from(supplierAccounts),
     prebooks: await tx.select().from(prebooks),
     prebookLines: await tx.select().from(prebookLines),
+    workshopJobs: await tx.select().from(workshopJobs),
+    workshopItems: await tx.select().from(workshopItems),
   };
 }
 

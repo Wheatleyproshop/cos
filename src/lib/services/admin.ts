@@ -117,6 +117,9 @@ export async function updateAutomations(ctx: Ctx, enabled: Partial<Record<EmailA
     eta_revised: Boolean(enabled.eta_revised),
     ready_for_collection: Boolean(enabled.ready_for_collection),
     collection_reminder: Boolean(enabled.collection_reminder),
+    workshop_checked_in: Boolean(enabled.workshop_checked_in),
+    workshop_delayed: Boolean(enabled.workshop_delayed),
+    workshop_ready: Boolean(enabled.workshop_ready),
   };
   await updateOrg(ctx, 'automations', { emailAutomations: next });
 }

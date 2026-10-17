@@ -33,7 +33,10 @@ export type EmailAutomationKey =
   | 'quote_approval'
   | 'eta_revised'
   | 'ready_for_collection'
-  | 'collection_reminder';
+  | 'collection_reminder'
+  | 'workshop_checked_in'
+  | 'workshop_delayed'
+  | 'workshop_ready';
 
 export type EmailAutomations = Record<EmailAutomationKey, boolean>;
 
@@ -68,6 +71,9 @@ export const organisations = pgTable('organisations', {
     eta_revised: true,
     ready_for_collection: true,
     collection_reminder: true,
+    workshop_checked_in: true,
+    workshop_delayed: true,
+    workshop_ready: true,
   }),
   /** Off = payments are taken at the shop's till: no Payments section, no balance check at collection. */
   paymentTracking: boolean('payment_tracking').notNull().default(true),
@@ -82,6 +88,7 @@ export const organisations = pgTable('organisations', {
   nextOrderNumber: integer('next_order_number').notNull().default(1001),
   nextQuoteNumber: integer('next_quote_number').notNull().default(1001),
   nextPrebookNumber: integer('next_prebook_number').notNull().default(1001),
+  nextWorkshopNumber: integer('next_workshop_number').notNull().default(1001),
   orderPrefix: text('order_prefix').notNull().default('COS'),
   createdAt: createdAt(),
 });
@@ -291,7 +298,7 @@ export const auditEvents = pgTable(
     id: id(),
     organisationId: orgId(),
     entityType: text('entity_type', {
-      enum: ['order', 'quote', 'customer', 'organisation', 'user', 'message', 'backup', 'prebook', 'supplier_account'],
+      enum: ['order', 'quote', 'customer', 'organisation', 'user', 'message', 'backup', 'prebook', 'supplier_account', 'workshop_job'],
     }).notNull(),
     entityId: uuid('entity_id'),
     orderId: uuid('order_id'),
@@ -326,6 +333,7 @@ export const messages = pgTable(
     organisationId: orgId(),
     orderId: uuid('order_id').references(() => orders.id),
     quoteId: uuid('quote_id').references(() => quotes.id),
+    workshopJobId: uuid('workshop_job_id').references(() => workshopJobs.id),
     customerId: uuid('customer_id').references(() => customers.id),
     templateType: text('template_type').$type<EmailAutomationKey>().notNull(),
     recipient: text('recipient').notNull(),
@@ -464,6 +472,51 @@ export const productModels = pgTable('product_models', {
   active: boolean('active').notNull().default(true),
   createdAt: createdAt(),
 });
+
+/* ───────────────────────────────── Workshop ───────────────────────────────── */
+
+export const WORKSHOP_STATUSES = ['checked_in', 'in_progress', 'waiting_parts', 'ready', 'collected', 'cancelled'] as const;
+export type WorkshopStatus = (typeof WORKSHOP_STATUSES)[number];
+
+/** Clubs left with the shop for repair, regripping or adjustment. */
+export const workshopJobs = pgTable(
+  'workshop_jobs',
+  {
+    id: id(),
+    organisationId: orgId(),
+    reference: text('reference').notNull(),
+    customerId: uuid('customer_id').notNull().references(() => customers.id),
+    status: text('status', { enum: WORKSHOP_STATUSES }).notNull().default('checked_in'),
+    etaDate: date('eta_date', { mode: 'string' }),
+    delayReason: text('delay_reason').notNull().default(''),
+    notes: text('notes').notNull().default(''),
+    takenByUserId: uuid('taken_by_user_id').notNull().references(() => users.id),
+    createdAt: createdAt(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+    statusChangedAt: timestamp('status_changed_at', { withTimezone: true }).notNull().defaultNow(),
+    readyAt: timestamp('ready_at', { withTimezone: true }),
+    collectedAt: timestamp('collected_at', { withTimezone: true }),
+    archivedAt: timestamp('archived_at', { withTimezone: true }),
+  },
+  (t) => [uniqueIndex('workshop_org_ref_idx').on(t.organisationId, t.reference), index('workshop_customer_idx').on(t.customerId)],
+);
+
+export const workshopItems = pgTable(
+  'workshop_items',
+  {
+    id: id(),
+    organisationId: orgId(),
+    jobId: uuid('job_id').notNull().references(() => workshopJobs.id),
+    club: text('club').notNull(),
+    work: text('work').notNull(),
+    parts: text('parts').notNull().default(''),
+    quantity: integer('quantity').notNull().default(1),
+    pricePence: integer('price_pence').notNull().default(0),
+    createdAt: createdAt(),
+    removedAt: timestamp('removed_at', { withTimezone: true }),
+  },
+  (t) => [index('workshop_items_job_idx').on(t.jobId)],
+);
 
 /* ─────────────────────────── Supplier accounts & pre-books ─────────────────────────── */
 
@@ -630,6 +683,8 @@ export type Attachment = typeof attachments.$inferSelect;
 export type Brand = typeof brands.$inferSelect;
 export type PrintBall = typeof printBalls.$inferSelect;
 export type SupplierAccount = typeof supplierAccounts.$inferSelect;
+export type WorkshopJob = typeof workshopJobs.$inferSelect;
+export type WorkshopItem = typeof workshopItems.$inferSelect;
 export type Prebook = typeof prebooks.$inferSelect;
 export type PrebookLine = typeof prebookLines.$inferSelect;
 export type ProductModel = typeof productModels.$inferSelect;

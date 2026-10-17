@@ -26,6 +26,7 @@ export type EnqueueInput = {
   customerId: string;
   orderId?: string | null;
   quoteId?: string | null;
+  workshopJobId?: string | null;
   context: Omit<EmailContext, 'store'>;
   actor: Actor;
   /** Staff chose not to notify the customer (manager+ only — enforced by caller). */
@@ -53,6 +54,7 @@ export async function enqueueEmail(tx: DB, input: EnqueueInput): Promise<string 
       organisationId: org.id,
       orderId: input.orderId ?? null,
       quoteId: input.quoteId ?? null,
+      workshopJobId: input.workshopJobId ?? null,
       customerId: input.customerId,
       templateType: template,
       recipient: input.recipient,
@@ -68,7 +70,8 @@ export async function enqueueEmail(tx: DB, input: EnqueueInput): Promise<string 
     organisationId: org.id,
     actor: input.actor,
     eventType: reason ? 'email_suppressed' : 'email_queued',
-    entityType: input.orderId ? 'order' : 'quote',
+    entityType: input.orderId ? 'order' : input.workshopJobId ? 'workshop_job' : 'quote',
+    entityId: input.workshopJobId ?? undefined,
     orderId: input.orderId,
     quoteId: input.quoteId,
     customerId: input.customerId,

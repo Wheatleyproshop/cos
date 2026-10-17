@@ -33,6 +33,7 @@ import { sendTestEmail } from '@/lib/services/test-email';
 import { addBrand, addComponent, addModel, createFittingQuote, setCatalogActive, updateComponentUpcharge, updateModelPrice } from '@/lib/services/fitting';
 import { addAccountsForCatalogueBrands, clearAccountLogo, saveAccount, setAccountActive, setAccountLogo } from '@/lib/services/accounts';
 import { sendReportNow, updatePerformanceReport } from '@/lib/services/performance-report';
+import { addWorkshopItem, checkInClubs, removeWorkshopItem, updateWorkshopProgress } from '@/lib/services/workshop';
 import { addLine, archivePrebook, createPrebook, receiveStock, removeLine, setPrebookStatus, updatePrebook } from '@/lib/services/prebooks';
 import { addBall, addStarterBalls, createBallPrintQuote, setBallActive, setBallPhoto, updateBallPrice, updateSetupFee } from '@/lib/services/ball-printing';
 
@@ -482,5 +483,45 @@ export async function clearAccountLogoAction(id: string) {
   return act('manager', async (ctx) => {
     await clearAccountLogo(ctx, id);
     return 'Logo removed.';
+  });
+}
+
+/* ── Workshop ────────────────────────────────────────────────────────── */
+
+export async function checkInAction(_: FormState, fd: FormData): Promise<FormState> {
+  let target = '';
+  const res = await act('staff', async (ctx) => {
+    let items: unknown[] = [];
+    try {
+      const parsed = JSON.parse(String(fd.get('items') ?? '[]'));
+      if (Array.isArray(parsed)) items = parsed;
+    } catch {
+      items = [];
+    }
+    const job = await checkInClubs(ctx, { ...obj(fd), items }, { notify: !flag(fd, 'skipEmail') });
+    target = `/workshop/${job.reference}`;
+  }, fd);
+  if (res?.ok && target) redirect(target);
+  return res;
+}
+
+export async function workshopProgressAction(id: string, _: FormState, fd: FormData) {
+  return act('staff', async (ctx) => {
+    await updateWorkshopProgress(ctx, id, obj(fd), { notify: !flag(fd, 'skipEmail') });
+    return 'Job updated.';
+  }, fd);
+}
+
+export async function addWorkshopItemAction(id: string, _: FormState, fd: FormData) {
+  return act('staff', async (ctx) => {
+    await addWorkshopItem(ctx, id, obj(fd));
+    return 'Club added.';
+  }, fd);
+}
+
+export async function removeWorkshopItemAction(id: string, itemId: string) {
+  return act('staff', async (ctx) => {
+    await removeWorkshopItem(ctx, id, itemId);
+    return 'Club removed.';
   });
 }

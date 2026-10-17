@@ -648,3 +648,52 @@ describe('account logos', () => {
     expect(accountLogoUrl(after)).toMatch(new RegExp(`^/api/account-logo/${acct.id}\\?v=`));
   });
 });
+
+describe('workshop', () => {
+  it('checks clubs in, emails the customer, handles a parts delay, and emails when ready', async () => {
+    const ws = await import('@/lib/services/workshop');
+    const job = await ws.checkInClubs(staff, {
+      customerName: 'Rita Regrip', email: 'rita@example.com', phone: '07700 111999', etaDate: '2026-10-24', notes: 'Bag tag 12',
+      items: [
+        { club: 'Irons 5-PW', work: 'Regrip', parts: 'Golf Pride MCC midsize', quantity: '6', pricePence: '78.00' },
+        { club: 'Driver', work: 'Loft & lie adjustment', pricePence: '10' },
+      ],
+    });
+    expect(job.reference).toMatch(/^WS-\d+$/);
+    const sent = async (template: string) =>
+      withTenant(org.id, (tx) => tx.select().from(messages).where(and(eq(messages.workshopJobId, job.id), eq(messages.templateType, template as never))));
+    const [checkIn] = await sent('workshop_checked_in');
+    expect(checkIn.subject).toContain(job.reference);
+    expect(checkIn.bodyHtml).toContain('Golf Pride MCC midsize');
+    expect(checkIn.bodyHtml).toContain('£88.00');
+
+    // Waiting for parts needs a reason the customer will see.
+    await expect(ws.updateWorkshopProgress(staff, job.id, { status: 'waiting_parts', etaDate: '2026-10-28' })).rejects.toThrow(/waiting for/);
+    await ws.updateWorkshopProgress(staff, job.id, { status: 'waiting_parts', etaDate: '2026-10-28', delayReason: 'Waiting for midsize grips to arrive' });
+    const [delay] = await sent('workshop_delayed');
+    expect(delay.bodyHtml).toContain('Waiting for midsize grips to arrive');
+    expect(delay.bodyHtml).toContain('28 October 2026');
+
+    // Staff can't cancel; managers can.
+    await expect(ws.updateWorkshopProgress(staff, job.id, { status: 'cancelled' })).rejects.toThrow(/manager/);
+
+    await ws.updateWorkshopProgress(staff, job.id, { status: 'ready', etaDate: '2026-10-28' });
+    const [ready] = await sent('workshop_ready');
+    expect(ready.subject).toContain('ready to collect');
+    const d = (await ws.getJob(org.id, job.reference))!;
+    expect(d.job.status).toBe('ready');
+    expect(d.job.readyAt).toBeTruthy();
+    expect(d.events.map((e) => e.eventType)).toEqual(expect.arrayContaining(['workshop_job_created', 'workshop_status_changed', 'workshop_eta_changed']));
+    // Other shops never see it.
+    expect((await ws.listJobs(other.id)).some((j) => j.id === job.id)).toBe(false);
+  });
+
+  it('notifies other staff about check-ins and ready jobs', async () => {
+    const { listNotifications } = await import('@/lib/services/notifications');
+    const n = await listNotifications(org.id, admin.userId!);
+    const titles = n.items.map((i) => i.title);
+    expect(titles).toContain('Clubs checked in to the workshop');
+    expect(titles).toContain('Workshop job ready');
+    expect(n.items.find((i) => i.title === 'Workshop job ready')!.href).toMatch(/^\/workshop\/WS-/);
+  });
+});

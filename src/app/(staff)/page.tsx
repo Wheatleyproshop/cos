@@ -8,6 +8,7 @@ import { getPerformance, parsePeriod } from '@/lib/analytics';
 import { shortDate } from '@/lib/short-date';
 import { listWork, metrics } from '@/lib/queries';
 import { upcomingLines } from '@/lib/services/prebooks';
+import { listJobs } from '@/lib/services/workshop';
 
 type SP = Promise<{ q?: string; filter?: string; view?: string; period?: string }>;
 
@@ -56,8 +57,17 @@ export default async function Overview({ searchParams }: { searchParams: SP }) {
   }
   const filter = parseFilter(sp.filter);
   const q = sp.q ?? '';
-  const [{ rows, all }, upcoming] = await Promise.all([listWork(staff.org, { q, filter, scope: 'overview' }), upcomingLines(staff.organisationId)]);
+  const [{ rows, all }, upcoming, jobs] = await Promise.all([
+    listWork(staff.org, { q, filter, scope: 'overview' }),
+    upcomingLines(staff.organisationId),
+    listJobs(staff.organisationId),
+  ]);
   const arrivals = prebookArrivals(upcoming, staff.org.timezone);
+  const today = todayInTz(staff.org.timezone);
+  // Workshop jobs that need someone today: overdue, due today, or waiting on the customer to collect.
+  const workshop = jobs
+    .filter((j) => (['checked_in', 'in_progress', 'waiting_parts'].includes(j.status) && j.etaDate && j.etaDate <= today) || j.status === 'ready')
+    .sort((a, b) => Number(b.status !== 'ready') - Number(a.status !== 'ready') || (a.etaDate ?? '').localeCompare(b.etaDate ?? ''));
   const m = metrics(q ? (await listWork(staff.org, { scope: 'overview' })).all : all);
   const attention = all.filter((r) => r.flags.length).slice(0, 6);
 
@@ -111,6 +121,36 @@ export default async function Overview({ searchParams }: { searchParams: SP }) {
                 </span>
               </li>
             ))}
+          </ul>
+        </section>
+      ) : null}
+      {workshop.length && filter === 'all' && !q ? (
+        <section className="panel" style={{ marginBottom: 22 }} aria-labelledby="workshop">
+          <div className="panel-head">
+            <h2 id="workshop">Workshop</h2>
+            <Link href="/workshop" className="muted">
+              All workshop jobs
+            </Link>
+          </div>
+          <ul className="attention">
+            {workshop.slice(0, 8).map((j) => {
+              const late = j.status !== 'ready' && j.etaDate && j.etaDate < today;
+              return (
+                <li key={j.id}>
+                  <span>
+                    <Link href={`/workshop/${j.reference}`} className="rowtitle" scroll={false}>
+                      {j.reference} · {j.customerName}
+                    </Link>
+                    <span className="muted" style={{ marginLeft: 8 }}>
+                      {j.summary}
+                    </span>
+                  </span>
+                  <span className={j.status === 'ready' ? 'muted' : late ? 'flag' : 'muted'}>
+                    {j.status === 'ready' ? 'Ready to collect' : late ? `Overdue · was due ${shortDate(j.etaDate!)}` : 'Due today'}
+                  </span>
+                </li>
+              );
+            })}
           </ul>
         </section>
       ) : null}

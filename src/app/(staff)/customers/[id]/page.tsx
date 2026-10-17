@@ -51,6 +51,9 @@ export default async function CustomerPage({ params }: { params: Promise<{ id: s
         sub={`Customer since ${stamp(c.createdAt, tz).split(' · ')[0]}`}
         actions={
           <>
+            <Link href={`/workshop?customer=${c.id}#checkin`} className="btn">
+              Check in clubs
+            </Link>
             <Link href={`/orders/new?customer=${c.id}&mode=quote`} className="btn" scroll={false}>
               New quote
             </Link>

@@ -52,6 +52,9 @@ export const TEMPLATE_KEYS: EmailAutomationKey[] = [
   'eta_revised',
   'ready_for_collection',
   'collection_reminder',
+  'workshop_checked_in',
+  'workshop_delayed',
+  'workshop_ready',
 ];
 
 const esc = (s: unknown) =>
@@ -211,6 +214,38 @@ export function renderEmail(type: EmailAutomationKey, ctx: EmailContext): Render
         cta: ctx.actionUrl ? { label: 'Track your order', url: ctx.actionUrl } : undefined,
       });
       return { subject: `Update on your order ${ctx.reference} — new estimated ${print ? 'ready date' : 'arrival'}`, ...r };
+    }
+    case 'workshop_checked_in': {
+      const rows: Block[] = [{ label: 'Estimated ready', value: ctx.etaDate ? longDate(ctx.etaDate) : 'We’ll confirm shortly' }];
+      if (ctx.totalPence) rows.push({ label: 'Price (pay on collection)', value: money(ctx.totalPence) });
+      const r = layout(ctx, {
+        preheader: 'Your clubs are with our workshop.',
+        heading: 'We’ve checked in your clubs',
+        intro: ['Thanks for leaving your clubs with us. Here’s the work we’ll be doing — we’ll email you as soon as they’re ready to collect.'],
+        rows,
+      });
+      return { subject: `Your clubs are in our workshop (${ctx.reference})`, ...r };
+    }
+    case 'workshop_delayed': {
+      const rows: Block[] = [];
+      if (ctx.previousEtaDate) rows.push({ label: 'Previous estimate', value: longDate(ctx.previousEtaDate) });
+      rows.push({ label: 'New estimated ready date', value: ctx.etaDate ? longDate(ctx.etaDate) : 'We’ll confirm as soon as we can' });
+      const intro = ['Your workshop job is taking a little longer than planned. We’re sorry for the wait and will let you know as soon as your clubs are ready.'];
+      if (ctx.etaReason) intro.push(ctx.etaReason);
+      const r = layout(ctx, { preheader: 'An update on your workshop job.', heading: 'An update on your clubs', intro, rows });
+      return { subject: `Update on your workshop job ${ctx.reference}`, ...r };
+    }
+    case 'workshop_ready': {
+      const rows: Block[] = [{ label: 'Collect from', value: ctx.store.collectionLocation || s }];
+      if (ctx.store.openingHours) rows.push({ label: 'Opening hours', value: ctx.store.openingHours });
+      if (ctx.totalPence) rows.push({ label: 'To pay on collection', value: money(ctx.totalPence) });
+      const r = layout(ctx, {
+        preheader: 'Your clubs are ready to collect.',
+        heading: 'Your clubs are ready to collect',
+        intro: ['Good news — the work on your clubs is finished and they’re ready to collect from the shop.'],
+        rows,
+      });
+      return { subject: `Your clubs are ready to collect — ${ctx.reference}`, ...r };
     }
     case 'ready_for_collection':
     case 'collection_reminder': {

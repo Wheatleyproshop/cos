@@ -163,6 +163,9 @@ const AUTOMATIONS: { key: string; label: string; detail: string }[] = [
   { key: 'eta_revised', label: 'ETA changed / delayed', detail: 'When the estimated arrival changes or an order is delayed' },
   { key: 'ready_for_collection', label: 'Ready for collection', detail: 'When an order is marked ready' },
   { key: 'collection_reminder', label: 'Collection reminder', detail: 'Daily check for orders ready but not collected' },
+  { key: 'workshop_checked_in', label: 'Workshop: clubs checked in', detail: 'When clubs are checked in for repair or regripping' },
+  { key: 'workshop_delayed', label: 'Workshop: delay update', detail: 'When a workshop job is waiting for parts or its ready date changes' },
+  { key: 'workshop_ready', label: 'Workshop: ready to collect', detail: 'When a workshop job is marked ready' },
 ];
 
 export function AutomationsForm({ action, enabled, disabled }: { action: BoundAction; enabled: Record<string, boolean>; disabled: boolean }) {
