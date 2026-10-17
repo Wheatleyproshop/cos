@@ -3,11 +3,30 @@ import { PerformanceView } from '@/components/performance';
 import { PageHeader } from '@/components/views';
 import { parseFilter, WorkList } from '@/components/work-list';
 import { hasRole, requireStaff } from '@/lib/auth';
-import { greeting } from '@/lib/format';
+import { greeting, todayInTz } from '@/lib/format';
 import { getPerformance, parsePeriod } from '@/lib/analytics';
+import { shortDate } from '@/lib/short-date';
 import { listWork, metrics } from '@/lib/queries';
+import { upcomingLines } from '@/lib/services/prebooks';
 
 type SP = Promise<{ q?: string; filter?: string; view?: string; period?: string }>;
+
+/** Pre-book lines still to arrive that are overdue or due within 30 days, overdue first. */
+function prebookArrivals(upcoming: Awaited<ReturnType<typeof upcomingLines>>, tz: string) {
+  const today = todayInTz(tz);
+  const in30 = new Date(Date.now() + 30 * 86_400_000).toISOString().slice(0, 10);
+  return upcoming
+    .map(({ line, prebook }) => {
+      const when = line.expectedDate ?? prebook.expectedFrom ?? prebook.expectedTo;
+      const by = line.expectedDate ?? prebook.expectedTo ?? prebook.expectedFrom;
+      return {
+        id: line.id, reference: prebook.reference, brand: prebook.brand, product: line.product, variant: line.variant,
+        forCustomer: line.forCustomer, due: line.quantity - line.quantityReceived, when, overdue: Boolean(by && by < today),
+      };
+    })
+    .filter((a): a is typeof a & { when: string } => Boolean(a.when) && (a.overdue || a.when! <= in30))
+    .sort((a, b) => Number(b.overdue) - Number(a.overdue) || a.when.localeCompare(b.when));
+}
 
 function ViewTabs({ view }: { view: 'orders' | 'performance' }) {
   return (
@@ -37,7 +56,8 @@ export default async function Overview({ searchParams }: { searchParams: SP }) {
   }
   const filter = parseFilter(sp.filter);
   const q = sp.q ?? '';
-  const { rows, all } = await listWork(staff.org, { q, filter, scope: 'overview' });
+  const [{ rows, all }, upcoming] = await Promise.all([listWork(staff.org, { q, filter, scope: 'overview' }), upcomingLines(staff.organisationId)]);
+  const arrivals = prebookArrivals(upcoming, staff.org.timezone);
   const m = metrics(q ? (await listWork(staff.org, { scope: 'overview' })).all : all);
   const attention = all.filter((r) => r.flags.length).slice(0, 6);
 
@@ -92,6 +112,47 @@ export default async function Overview({ searchParams }: { searchParams: SP }) {
               </li>
             ))}
           </ul>
+        </section>
+      ) : null}
+      {arrivals.length && filter === 'all' && !q ? (
+        <section className="panel" style={{ marginBottom: 22 }} aria-labelledby="arrivals">
+          <div className="panel-head">
+            <h2 id="arrivals">Pre-book arrivals</h2>
+            <Link href="/prebook" className="muted">
+              All pre-books
+            </Link>
+          </div>
+          <ul className="attention">
+            {arrivals.slice(0, 8).map((a) => (
+              <li key={a.id}>
+                <span>
+                  <Link href={`/prebook/${a.reference}`} className="rowtitle" scroll={false}>
+                    {a.brand} · {a.product}
+                  </Link>
+                  {a.variant ? (
+                    <span className="muted" style={{ marginLeft: 8 }}>
+                      {a.variant}
+                    </span>
+                  ) : null}
+                  {a.forCustomer ? (
+                    <span className="pb-for" style={{ marginLeft: 8 }}>
+                      For: {a.forCustomer}
+                    </span>
+                  ) : null}
+                </span>
+                <span>
+                  <span className={a.overdue ? 'flag' : 'muted'}>
+                    {a.due} due · {a.overdue ? `overdue since ${shortDate(a.when)}` : shortDate(a.when)}
+                  </span>
+                </span>
+              </li>
+            ))}
+          </ul>
+          {arrivals.length > 8 ? (
+            <p className="muted" style={{ marginTop: 8 }}>
+              and {arrivals.length - 8} more on the <Link href="/prebook">Pre-book page</Link>.
+            </p>
+          ) : null}
         </section>
       ) : null}
       <WorkList base="/" rows={rows} filter={filter} q={q} viewAll />
