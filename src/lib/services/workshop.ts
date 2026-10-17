@@ -3,13 +3,14 @@ import { z } from 'zod';
 import { withTenant, type DB } from '@/db';
 import type { Organisation } from '@/db/schema';
 import {
-  auditEvents, customers, messages, organisations, users, workshopItems, workshopJobs,
+  auditEvents, customers, messages, organisations, trackingTokens, users, workshopItems, workshopJobs,
   type Customer, type WorkshopItem, type WorkshopJob, type WorkshopStatus,
 } from '@/db/schema';
 import { recordEvent, SYSTEM } from '../audit';
 import { dispatchMessages, enqueueEmail } from '../email/outbox';
 import type { FitSpec } from '../fit-spec';
 import { money, parseMoneyToPence } from '../format';
+import { appUrl, hashToken, newToken } from '../tokens';
 import { customerFields, parse } from '../validation';
 import { WORKSHOP_STATUS_LABELS } from '../workshop-constants';
 import { atLeast, findOrCreateCustomer, requireRole, ServiceError, type Ctx } from './common';
@@ -82,7 +83,14 @@ export function jobSpec(job: Pick<WorkshopJob, 'reference'>, items: Pick<Worksho
   };
 }
 
-function emailContext(job: WorkshopJob, c: Customer, items: WorkshopItem[], extra: { previousEtaDate?: string | null } = {}) {
+/** A private, revocable customer link to the job's progress page (only its hash is stored). */
+export async function issueWorkshopLink(tx: DB, orgId: string, jobId: string): Promise<string> {
+  const token = newToken();
+  await tx.insert(trackingTokens).values({ organisationId: orgId, workshopJobId: jobId, tokenHash: hashToken(token), expiresAt: new Date(Date.now() + 365 * 86_400_000) });
+  return appUrl(`/w/${token}`);
+}
+
+function emailContext(job: WorkshopJob, c: Customer, items: WorkshopItem[], extra: { previousEtaDate?: string | null; link?: string } = {}) {
   const spec = jobSpec(job, items);
   return {
     customerName: c.name,
@@ -95,6 +103,7 @@ function emailContext(job: WorkshopJob, c: Customer, items: WorkshopItem[], extr
     previousEtaDate: extra.previousEtaDate ?? null,
     etaReason: job.delayReason,
     fit: spec,
+    actionUrl: extra.link,
   };
 }
 
@@ -141,7 +150,8 @@ export async function checkInClubs(ctx: Ctx, raw: unknown, opts: { notify?: bool
     });
     const messageId = await enqueueEmail(tx, {
       org: ctx.org, template: 'workshop_checked_in', recipient: customer.email, customerId: customer.id, workshopJobId: job.id,
-      context: emailContext(job, customer, items), actor: ctx.actor, suppressedBy: notify ? null : ctx.actor.type === 'user' ? ctx.actor.name : 'COS',
+      context: emailContext(job, customer, items, { link: await issueWorkshopLink(tx, ctx.org.id, job.id) }), actor: ctx.actor,
+      suppressedBy: notify ? null : ctx.actor.type === 'user' ? ctx.actor.name : 'COS',
     });
     return { job, messageId };
   });
@@ -199,14 +209,15 @@ export async function updateWorkshopProgress(ctx: Ctx, id: string, raw: unknown,
     if (statusChanged && input.status === 'ready') {
       return enqueueEmail(tx, {
         org: ctx.org, template: 'workshop_ready', recipient: customer.email, customerId: customer.id, workshopJobId: id,
-        context: emailContext(updated, customer, items), actor: ctx.actor, suppressedBy,
+        context: emailContext(updated, customer, items, { link: await issueWorkshopLink(tx, ctx.org.id, id) }), actor: ctx.actor, suppressedBy,
       });
     }
     const delayed = (statusChanged && input.status === 'waiting_parts') || (etaChanged && OPEN.includes(updated.status) && job.etaDate !== null);
     if (delayed) {
       return enqueueEmail(tx, {
         org: ctx.org, template: 'workshop_delayed', recipient: customer.email, customerId: customer.id, workshopJobId: id,
-        context: emailContext(updated, customer, items, { previousEtaDate: etaChanged ? job.etaDate : null }), actor: ctx.actor, suppressedBy,
+        context: emailContext(updated, customer, items, { previousEtaDate: etaChanged ? job.etaDate : null, link: await issueWorkshopLink(tx, ctx.org.id, id) }),
+        actor: ctx.actor, suppressedBy,
       });
     }
     return null;
@@ -315,7 +326,7 @@ export async function sendWorkshopReminders(org: Organisation, now = new Date())
       out.push(
         await enqueueEmail(tx, {
           org, template: 'workshop_reminder', recipient: customer.email, customerId: customer.id, workshopJobId: job.id,
-          context: emailContext(job, customer, items), actor: SYSTEM,
+          context: emailContext(job, customer, items, { link: await issueWorkshopLink(tx, org.id, job.id) }), actor: SYSTEM,
         }),
       );
       await tx.update(workshopJobs).set({ lastReminderAt: now }).where(eq(workshopJobs.id, job.id));

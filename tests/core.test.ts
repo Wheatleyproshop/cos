@@ -723,3 +723,30 @@ describe('workshop collection reminders', () => {
     expect(await remindersForJob()).toBe(1);
   });
 });
+
+describe('workshop customer link', () => {
+  it('puts a private progress link in workshop emails that shows only customer-safe details', async () => {
+    const ws = await import('@/lib/services/workshop');
+    const { findWorkshopByToken, findOrderByTrackingToken } = await import('@/lib/services/public');
+    const job = await ws.checkInClubs(staff, {
+      customerName: 'Lena Link', email: 'lena@example.com', notes: 'INTERNAL: bag tag 7',
+      items: [{ club: 'Driver', work: 'Reshaft', parts: 'Ventus Blue 6S', pricePence: '45' }],
+    });
+    const [m] = await withTenant(org.id, (tx) => tx.select().from(messages).where(eq(messages.workshopJobId, job.id)));
+    const token = /\/w\/([\w-]+)/.exec(m.bodyHtml)?.[1];
+    expect(token).toBeTruthy();
+    expect(m.bodyHtml).toContain('Check your clubs');
+    const d = (await findWorkshopByToken(token!))!;
+    expect(d.job.reference).toBe(job.reference);
+    expect(d.items[0]).toMatchObject({ club: 'Driver', work: 'Reshaft' });
+    expect(JSON.stringify(d)).not.toContain('INTERNAL');
+    // A workshop link never opens an order, and nonsense tokens open nothing.
+    expect(await findOrderByTrackingToken(token!)).toBeNull();
+    expect(await findWorkshopByToken('x'.repeat(43))).toBeNull();
+    // The delay reason is shown only while waiting for parts.
+    await ws.updateWorkshopProgress(staff, job.id, { status: 'waiting_parts', delayReason: 'Shaft on back order' });
+    expect((await findWorkshopByToken(token!))!.job.delayReason).toBe('Shaft on back order');
+    await ws.updateWorkshopProgress(staff, job.id, { status: 'ready' });
+    expect((await findWorkshopByToken(token!))!.job.delayReason).toBe('');
+  });
+});

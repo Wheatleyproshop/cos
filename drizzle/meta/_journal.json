@@ -120,6 +120,13 @@
       "when": 1792246723076,
       "tag": "0016_workshop_reminder",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1792246935170,
+      "tag": "0017_workshop_tracking",
+      "breakpoints": true
     }
   ]
 }

@@ -396,7 +396,9 @@ export const trackingTokens = pgTable(
   {
     id: id(),
     organisationId: orgId(),
-    orderId: uuid('order_id').notNull().references(() => orders.id),
+    /** Exactly one of order / workshop job (enforced by a check constraint). */
+    orderId: uuid('order_id').references(() => orders.id),
+    workshopJobId: uuid('workshop_job_id').references(() => workshopJobs.id),
     tokenHash: text('token_hash').notNull().unique(),
     expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
     revokedAt: timestamp('revoked_at', { withTimezone: true }),

@@ -224,6 +224,7 @@ export function renderEmail(type: EmailAutomationKey, ctx: EmailContext): Render
         heading: 'We’ve checked in your clubs',
         intro: ['Thanks for leaving your clubs with us. Here’s the work we’ll be doing — we’ll email you as soon as they’re ready to collect.'],
         rows,
+        cta: ctx.actionUrl ? { label: 'Check your clubs', url: ctx.actionUrl } : undefined,
       });
       return { subject: `Your clubs are in our workshop (${ctx.reference})`, ...r };
     }
@@ -233,7 +234,9 @@ export function renderEmail(type: EmailAutomationKey, ctx: EmailContext): Render
       rows.push({ label: 'New estimated ready date', value: ctx.etaDate ? longDate(ctx.etaDate) : 'We’ll confirm as soon as we can' });
       const intro = ['Your workshop job is taking a little longer than planned. We’re sorry for the wait and will let you know as soon as your clubs are ready.'];
       if (ctx.etaReason) intro.push(ctx.etaReason);
-      const r = layout(ctx, { preheader: 'An update on your workshop job.', heading: 'An update on your clubs', intro, rows });
+      const r = layout(ctx, { preheader: 'An update on your workshop job.', heading: 'An update on your clubs', intro, rows,
+        cta: ctx.actionUrl ? { label: 'Check your clubs', url: ctx.actionUrl } : undefined,
+      });
       return { subject: `Update on your workshop job ${ctx.reference}`, ...r };
     }
     case 'workshop_reminder': {
@@ -245,6 +248,7 @@ export function renderEmail(type: EmailAutomationKey, ctx: EmailContext): Render
         heading: 'A friendly reminder — your clubs are ready',
         intro: ['Your clubs are finished and waiting for you in the shop. Pop in whenever suits you — just reply if you’d like us to hold them a little longer.'],
         rows,
+        cta: ctx.actionUrl ? { label: 'Check your clubs', url: ctx.actionUrl } : undefined,
       });
       return { subject: `Reminder: your clubs are ready to collect — ${ctx.reference}`, ...r };
     }
@@ -257,6 +261,7 @@ export function renderEmail(type: EmailAutomationKey, ctx: EmailContext): Render
         heading: 'Your clubs are ready to collect',
         intro: ['Good news — the work on your clubs is finished and they’re ready to collect from the shop.'],
         rows,
+        cta: ctx.actionUrl ? { label: 'Check your clubs', url: ctx.actionUrl } : undefined,
       });
       return { subject: `Your clubs are ready to collect — ${ctx.reference}`, ...r };
     }

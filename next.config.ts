@@ -19,7 +19,7 @@ const nextConfig: NextConfig = {
       },
       {
         // Customer token links must never leak via referrer or be indexed.
-        source: '/(q|t)/:token*',
+        source: '/(q|t|w)/:token*',
         headers: [
           { key: 'Referrer-Policy', value: 'no-referrer' },
           { key: 'X-Robots-Tag', value: 'noindex, nofollow' },
