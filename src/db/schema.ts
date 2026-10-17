@@ -483,6 +483,9 @@ export const supplierAccounts = pgTable('supplier_accounts', {
   portalUsername: text('portal_username').notNull().default(''),
   paymentTerms: text('payment_terms').notNull().default(''),
   notes: text('notes').notNull().default(''),
+  /** Brand logo (private storage), shown on the account card and its pre-books. */
+  logoKey: text('logo_key'),
+  logoMime: text('logo_mime'),
   active: boolean('active').notNull().default(true),
   createdAt: createdAt(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),

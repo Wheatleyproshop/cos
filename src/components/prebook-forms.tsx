@@ -177,3 +177,20 @@ export function ReceiveForm({
     </ActionForm>
   );
 }
+
+/** Upload or replace a brand logo; submits as soon as a file is picked. */
+export function AccountLogoForm({ action, hasLogo }: { action: BoundAction; hasLogo: boolean }) {
+  return (
+    <ActionForm action={action} className="inlineform" encType="multipart/form-data">
+      {(s) => (
+        <>
+          <label className="btn small">
+            {hasLogo ? 'Replace logo' : 'Add logo'}
+            <input type="file" name="logo" accept="image/png,image/jpeg,image/webp" hidden onChange={(e) => e.currentTarget.form?.requestSubmit()} />
+          </label>
+          {s?.error ? <span className="error">{s.error}</span> : null}
+        </>
+      )}
+    </ActionForm>
+  );
+}

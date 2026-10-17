@@ -31,7 +31,7 @@ import {
 import { runBackup } from '@/lib/services/backups';
 import { sendTestEmail } from '@/lib/services/test-email';
 import { addBrand, addComponent, addModel, createFittingQuote, setCatalogActive, updateComponentUpcharge, updateModelPrice } from '@/lib/services/fitting';
-import { addAccountsForCatalogueBrands, saveAccount, setAccountActive } from '@/lib/services/accounts';
+import { addAccountsForCatalogueBrands, clearAccountLogo, saveAccount, setAccountActive, setAccountLogo } from '@/lib/services/accounts';
 import { sendReportNow, updatePerformanceReport } from '@/lib/services/performance-report';
 import { addLine, archivePrebook, createPrebook, receiveStock, removeLine, setPrebookStatus, updatePrebook } from '@/lib/services/prebooks';
 import { addBall, addStarterBalls, createBallPrintQuote, setBallActive, setBallPhoto, updateBallPrice, updateSetupFee } from '@/lib/services/ball-printing';
@@ -467,5 +467,20 @@ export async function archivePrebookAction(id: string, archived: boolean) {
   return act('manager', async (ctx) => {
     await archivePrebook(ctx, id, archived);
     return archived ? 'Pre-book archived.' : 'Pre-book restored.';
+  });
+}
+
+export async function accountLogoAction(id: string, _: FormState, fd: FormData) {
+  return act('manager', async (ctx) => {
+    const f = fd.get('logo');
+    await setAccountLogo(ctx, id, f instanceof File && f.size ? f : null);
+    return 'Logo saved.';
+  });
+}
+
+export async function clearAccountLogoAction(id: string) {
+  return act('manager', async (ctx) => {
+    await clearAccountLogo(ctx, id);
+    return 'Logo removed.';
   });
 }

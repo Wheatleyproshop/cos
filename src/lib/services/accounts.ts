@@ -3,6 +3,9 @@ import { z } from 'zod';
 import { withTenant } from '@/db';
 import { brands, prebookLines, prebooks, supplierAccounts } from '@/db/schema';
 import { recordEvent } from '../audit';
+import { LOGO_TYPES, MAX_LOGO_BYTES, sniffImage } from '../ball-print';
+import { storage } from '../storage';
+import { newToken } from '../tokens';
 import { parse } from '../validation';
 import { requireRole, ServiceError, type Ctx } from './common';
 
@@ -117,4 +120,41 @@ export async function addAccountsForCatalogueBrands(ctx: Ctx) {
     });
     return missing.length;
   });
+}
+
+/** Stores a brand logo for an account (PNG, JPG or WebP; the file's real type is checked). */
+export async function setAccountLogo(ctx: Ctx, id: string, file: File | null) {
+  requireRole(ctx, 'manager', 'edit supplier accounts');
+  if (!file || !file.size) throw new ServiceError('Choose a logo image.', { logo: 'Required' });
+  if (file.size > MAX_LOGO_BYTES) throw new ServiceError('The logo must be 3 MB or smaller.');
+  const buf = Buffer.from(await file.arrayBuffer());
+  const mime = sniffImage(buf);
+  if (!mime || !LOGO_TYPES[mime]) throw new ServiceError('The logo must be a PNG, JPG or WebP image.');
+  const [account] = await withTenant(ctx.org.id, (tx) => tx.select().from(supplierAccounts).where(eq(supplierAccounts.id, id)).limit(1));
+  if (!account) throw new ServiceError('Account not found.');
+  const key = `orgs/${ctx.org.id}/account-logos/${id}-${newToken().slice(0, 10)}.${LOGO_TYPES[mime]}`;
+  await storage().put(key, buf, mime);
+  await withTenant(ctx.org.id, async (tx) => {
+    await tx.update(supplierAccounts).set({ logoKey: key, logoMime: mime, updatedAt: new Date() }).where(eq(supplierAccounts.id, id));
+    await recordEvent(tx, {
+      organisationId: ctx.org.id, actor: ctx.actor, eventType: 'supplier_account_saved', entityType: 'supplier_account', entityId: id,
+      newValue: { brand: account.brand, logo: account.logoKey ? 'replaced' : 'added' },
+    });
+  });
+}
+
+export async function clearAccountLogo(ctx: Ctx, id: string) {
+  requireRole(ctx, 'manager', 'edit supplier accounts');
+  await withTenant(ctx.org.id, async (tx) => {
+    await tx.update(supplierAccounts).set({ logoKey: null, logoMime: null, updatedAt: new Date() }).where(eq(supplierAccounts.id, id));
+    await recordEvent(tx, {
+      organisationId: ctx.org.id, actor: ctx.actor, eventType: 'supplier_account_saved', entityType: 'supplier_account', entityId: id,
+      newValue: { logo: 'removed' },
+    });
+  });
+}
+
+/** Cache-busting URL for an account's logo (staff-only route), or null. */
+export function accountLogoUrl(a: { id: string; logoKey: string | null }) {
+  return a.logoKey ? `/api/account-logo/${a.id}?v=${a.logoKey.slice(-14)}` : null;
 }

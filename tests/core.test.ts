@@ -633,3 +633,18 @@ describe('monthly report: pre-book arrivals', () => {
     expect(quiet.html).not.toContain('Pre-book arrivals');
   });
 });
+
+describe('account logos', () => {
+  it('stores a real image for a manager and rejects anything else', async () => {
+    const { listAccounts, setAccountLogo, accountLogoUrl } = await import('@/lib/services/accounts');
+    const acct = (await listAccounts(org.id)).find((x) => x.brand === 'Titleist')!;
+    const png = new File([new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0])], 'logo.png', { type: 'image/png' });
+    const fake = new File(['<svg onload=alert(1)>'], 'logo.png', { type: 'image/png' });
+    await expect(setAccountLogo(staff, acct.id, png)).rejects.toThrow(/manager/);
+    await expect(setAccountLogo(admin, acct.id, fake)).rejects.toThrow(/PNG, JPG or WebP/);
+    await setAccountLogo(admin, acct.id, png);
+    const after = (await listAccounts(org.id)).find((x) => x.id === acct.id)!;
+    expect(after.logoMime).toBe('image/png');
+    expect(accountLogoUrl(after)).toMatch(new RegExp(`^/api/account-logo/${acct.id}\\?v=`));
+  });
+});

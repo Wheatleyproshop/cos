@@ -6,7 +6,7 @@ import { PrebookDetailsForm, PrebookLineForm, ReceiveForm } from '@/components/p
 import { PageHeader } from '@/components/views';
 import { hasRole, requireStaff } from '@/lib/auth';
 import { money } from '@/lib/format';
-import { listAccounts } from '@/lib/services/accounts';
+import { accountLogoUrl, listAccounts } from '@/lib/services/accounts';
 import { getPrebook, PREBOOK_STATUS_LABELS } from '@/lib/services/prebooks';
 import {
   addPrebookLineAction, archivePrebookAction, prebookStatusAction, receivePrebookAction, removePrebookLineAction, updatePrebookAction,
@@ -84,6 +84,10 @@ export default async function PrebookDetail({ params }: { params: Promise<{ ref:
           {p.placedOn ? <div className="muted">Placed {day(p.placedOn)}</div> : null}
         </div>
         <div className="detailbox">
+          {a && accountLogoUrl(a) ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={accountLogoUrl(a)!} alt={`${a.brand} logo`} className="acct-logo small" />
+          ) : null}
           <small>{a ? `${a.brand} account` : 'Account'}</small>
           {a ? (
             <>

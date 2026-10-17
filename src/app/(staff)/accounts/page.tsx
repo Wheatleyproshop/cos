@@ -1,12 +1,12 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { ActionButton } from '@/components/forms';
-import { AccountForm } from '@/components/prebook-forms';
+import { AccountForm, AccountLogoForm } from '@/components/prebook-forms';
 import { PageHeader } from '@/components/views';
 import { hasRole, requireStaff } from '@/lib/auth';
 import { money } from '@/lib/format';
-import { listAccounts, type AccountRow } from '@/lib/services/accounts';
-import { accountActiveAction, catalogueAccountsAction, saveAccountAction } from '../actions';
+import { accountLogoUrl, listAccounts, type AccountRow } from '@/lib/services/accounts';
+import { accountActiveAction, accountLogoAction, catalogueAccountsAction, clearAccountLogoAction, saveAccountAction } from '../actions';
 
 export const metadata: Metadata = { title: 'Accounts' };
 
@@ -29,6 +29,7 @@ function Contact({ label, value, href }: { label: string; value: string; href?: 
 }
 
 function AccountCard({ a, manager }: { a: AccountRow; manager: boolean }) {
+  const logo = accountLogoUrl(a);
   const empty = !a.accountNumber && !a.repName && !a.repPhone && !a.repEmail && !a.headOfficePhone && !a.headOfficeEmail;
   return (
     <article className="panel acct" id={`acct-${a.id}`} style={a.active ? undefined : { opacity: 0.6 }}>
@@ -36,11 +37,15 @@ function AccountCard({ a, manager }: { a: AccountRow; manager: boolean }) {
         <div>
           <h2>{a.brand}</h2>
           <div className="muted">{a.accountNumber ? `Account ${a.accountNumber}` : 'No account number yet'}</div>
+          {a.openPrebooks ? (
+            <Link href={`/prebook?brand=${encodeURIComponent(a.brand)}`} className="pill" style={{ marginTop: 8, display: 'inline-block' }}>
+              {a.openPrebooks} open pre-book{a.openPrebooks === 1 ? '' : 's'} · {money(a.openValuePence)}
+            </Link>
+          ) : null}
         </div>
-        {a.openPrebooks ? (
-          <Link href={`/prebook?brand=${encodeURIComponent(a.brand)}`} className="pill">
-            {a.openPrebooks} open pre-book{a.openPrebooks === 1 ? '' : 's'} · {money(a.openValuePence)}
-          </Link>
+        {logo ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={logo} alt={`${a.brand} logo`} className="acct-logo" />
         ) : null}
       </header>
 
@@ -80,9 +85,17 @@ function AccountCard({ a, manager }: { a: AccountRow; manager: boolean }) {
             <summary>Edit details</summary>
             <AccountForm action={saveAccountAction.bind(null, a.id)} values={a} />
           </details>
-          <ActionButton action={accountActiveAction.bind(null, a.id, !a.active)} className="btn small">
-            {a.active ? 'Hide account' : 'Restore'}
-          </ActionButton>
+          <span className="acct-buttons">
+            <AccountLogoForm action={accountLogoAction.bind(null, a.id)} hasLogo={Boolean(logo)} />
+            {logo ? (
+              <ActionButton action={clearAccountLogoAction.bind(null, a.id)} className="btn small">
+                Remove logo
+              </ActionButton>
+            ) : null}
+            <ActionButton action={accountActiveAction.bind(null, a.id, !a.active)} className="btn small">
+              {a.active ? 'Hide account' : 'Restore'}
+            </ActionButton>
+          </span>
         </div>
       ) : null}
     </article>

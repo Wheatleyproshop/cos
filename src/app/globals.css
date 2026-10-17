@@ -518,3 +518,6 @@ details.section[open] { padding-bottom: 16px; }
 .arr-kpis span { color: #8a919c; font-size: 12px; }
 .arr-kpis > .alert { border-color: #f2c79a; background: #fff8f0; }
 .perf h3 { margin: 0 0 10px; font-size: 14px; }
+.acct-logo { max-height: 52px; max-width: 150px; width: auto; height: auto; object-fit: contain; margin-left: auto; flex: none; }
+.acct-logo.small { float: right; max-height: 34px; max-width: 110px; margin: 0 0 6px 10px; }
+.acct-buttons { display: inline-flex; gap: 8px; flex-wrap: wrap; align-items: center; }
