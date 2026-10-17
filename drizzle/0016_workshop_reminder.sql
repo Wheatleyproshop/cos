@@ -1,0 +1,2 @@
+ALTER TABLE "organisations" ALTER COLUMN "email_automations" SET DEFAULT '{"order_confirmation":true,"quote_approval":true,"eta_revised":true,"ready_for_collection":true,"collection_reminder":true,"workshop_checked_in":true,"workshop_delayed":true,"workshop_ready":true,"workshop_reminder":true}'::jsonb;--> statement-breakpoint
+ALTER TABLE "workshop_jobs" ADD COLUMN "last_reminder_at" timestamp with time zone;

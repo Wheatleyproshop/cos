@@ -36,7 +36,8 @@ export type EmailAutomationKey =
   | 'collection_reminder'
   | 'workshop_checked_in'
   | 'workshop_delayed'
-  | 'workshop_ready';
+  | 'workshop_ready'
+  | 'workshop_reminder';
 
 export type EmailAutomations = Record<EmailAutomationKey, boolean>;
 
@@ -74,6 +75,7 @@ export const organisations = pgTable('organisations', {
     workshop_checked_in: true,
     workshop_delayed: true,
     workshop_ready: true,
+    workshop_reminder: true,
   }),
   /** Off = payments are taken at the shop's till: no Payments section, no balance check at collection. */
   paymentTracking: boolean('payment_tracking').notNull().default(true),
@@ -496,6 +498,7 @@ export const workshopJobs = pgTable(
     statusChangedAt: timestamp('status_changed_at', { withTimezone: true }).notNull().defaultNow(),
     readyAt: timestamp('ready_at', { withTimezone: true }),
     collectedAt: timestamp('collected_at', { withTimezone: true }),
+    lastReminderAt: timestamp('last_reminder_at', { withTimezone: true }),
     archivedAt: timestamp('archived_at', { withTimezone: true }),
   },
   (t) => [uniqueIndex('workshop_org_ref_idx').on(t.organisationId, t.reference), index('workshop_customer_idx').on(t.customerId)],

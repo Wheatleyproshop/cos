@@ -1,11 +1,12 @@
-import { and, asc, desc, eq, isNull, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, isNull, lt, or, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import { withTenant, type DB } from '@/db';
+import type { Organisation } from '@/db/schema';
 import {
   auditEvents, customers, messages, organisations, users, workshopItems, workshopJobs,
   type Customer, type WorkshopItem, type WorkshopJob, type WorkshopStatus,
 } from '@/db/schema';
-import { recordEvent } from '../audit';
+import { recordEvent, SYSTEM } from '../audit';
 import { dispatchMessages, enqueueEmail } from '../email/outbox';
 import type { FitSpec } from '../fit-spec';
 import { money, parseMoneyToPence } from '../format';
@@ -287,4 +288,40 @@ export async function getJob(orgId: string, reference: string) {
 
 export function formatJobTotal(items: Pick<WorkshopItem, 'pricePence'>[]) {
   return money(items.reduce((s, i) => s + i.pricePence, 0));
+}
+
+/**
+ * Daily: a friendly reminder for jobs ready but not collected after the shop's "ready but
+ * uncollected" days — at most once per that many days per job.
+ */
+export async function sendWorkshopReminders(org: Organisation, now = new Date()) {
+  const cutoff = new Date(now.getTime() - org.readyUncollectedDays * 86_400_000);
+  const ids = await withTenant(org.id, async (tx) => {
+    const due = await tx
+      .select({ job: workshopJobs, customer: customers })
+      .from(workshopJobs)
+      .innerJoin(customers, eq(customers.id, workshopJobs.customerId))
+      .where(
+        and(
+          eq(workshopJobs.status, 'ready'),
+          isNull(workshopJobs.archivedAt),
+          lt(workshopJobs.readyAt, cutoff),
+          or(isNull(workshopJobs.lastReminderAt), lt(workshopJobs.lastReminderAt, cutoff)),
+        ),
+      );
+    const out: (string | null)[] = [];
+    for (const { job, customer } of due) {
+      const items = await liveItems(tx, job.id);
+      out.push(
+        await enqueueEmail(tx, {
+          org, template: 'workshop_reminder', recipient: customer.email, customerId: customer.id, workshopJobId: job.id,
+          context: emailContext(job, customer, items), actor: SYSTEM,
+        }),
+      );
+      await tx.update(workshopJobs).set({ lastReminderAt: now }).where(eq(workshopJobs.id, job.id));
+    }
+    return out;
+  });
+  await dispatchMessages(org, ids);
+  return ids.length;
 }

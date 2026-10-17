@@ -697,3 +697,29 @@ describe('workshop', () => {
     expect(n.items.find((i) => i.title === 'Workshop job ready')!.href).toMatch(/^\/workshop\/WS-/);
   });
 });
+
+describe('workshop collection reminders', () => {
+  it('reminds once a ready job has waited past the threshold, and not again until the next period', async () => {
+    const ws = await import('@/lib/services/workshop');
+    const job = await ws.checkInClubs(staff, { customerName: 'Uma Uncollected', email: 'uma@example.com', items: [{ club: 'Putter', work: 'Regrip', pricePence: '15' }] });
+    await ws.updateWorkshopProgress(staff, job.id, { status: 'ready' });
+    const fresh = (await systemDb().select().from(organisations).where(eq(organisations.id, org.id)))[0];
+    const later = new Date(Date.now() + (fresh.readyUncollectedDays + 1) * 86_400_000);
+    expect(await ws.sendWorkshopReminders(fresh, new Date())).toBe(0); // not waited long enough
+    expect(await ws.sendWorkshopReminders(fresh, later)).toBeGreaterThanOrEqual(1);
+    const [m] = await withTenant(org.id, (tx) =>
+      tx.select().from(messages).where(and(eq(messages.workshopJobId, job.id), eq(messages.templateType, 'workshop_reminder'))),
+    );
+    expect(m.subject).toContain('Reminder');
+    const remindersForJob = async () =>
+      (await withTenant(org.id, (tx) =>
+        tx.select().from(messages).where(and(eq(messages.workshopJobId, job.id), eq(messages.templateType, 'workshop_reminder'))),
+      )).length;
+    await ws.sendWorkshopReminders(fresh, new Date(later.getTime() + 86_400_000));
+    expect(await remindersForJob()).toBe(1); // once per period
+    // Collected jobs are never reminded.
+    await ws.updateWorkshopProgress(staff, job.id, { status: 'collected' });
+    await ws.sendWorkshopReminders(fresh, new Date(later.getTime() + 30 * 86_400_000));
+    expect(await remindersForJob()).toBe(1);
+  });
+});

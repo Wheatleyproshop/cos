@@ -8,16 +8,17 @@ import { issueTrackingLink, paymentTotals } from './common';
 import { orderEmailContext } from './orders';
 import { runBackup } from './backups';
 import { runMonthlyReport } from './performance-report';
+import { sendWorkshopReminders } from './workshop';
 
 /**
  * Daily scheduled work (Vercel Cron → /api/cron/daily):
- * - collection reminders for orders ready but uncollected beyond the org threshold
+ * - collection reminders for orders and workshop jobs ready but uncollected beyond the org threshold
  * - nightly COS-hosted backup for plans that include it
  * - the monthly performance report, once each month has finished
  */
 export async function runDailyJobs(now = new Date()) {
   const orgs = await systemDb().select().from(organisations);
-  const summary: Record<string, { reminders: number; backup: string; report: string }> = {};
+  const summary: Record<string, { reminders: number; workshopReminders: number; backup: string; report: string }> = {};
 
   for (const org of orgs) {
     const cutoff = new Date(now.getTime() - org.readyUncollectedDays * 86_400_000);
@@ -55,6 +56,7 @@ export async function runDailyJobs(now = new Date()) {
       return out;
     });
     await dispatchMessages(org, ids);
+    const workshopReminders = await sendWorkshopReminders(org, now);
 
     let backup = 'skipped (plan)';
     if (hasFeature(org, 'backup.cos_hosted')) {
@@ -71,7 +73,7 @@ export async function runDailyJobs(now = new Date()) {
     } catch (e) {
       report = `failed: ${e instanceof Error ? e.message : e}`;
     }
-    summary[org.slug] = { reminders: ids.length, backup, report };
+    summary[org.slug] = { reminders: ids.length, workshopReminders, backup, report };
   }
   return summary;
 }

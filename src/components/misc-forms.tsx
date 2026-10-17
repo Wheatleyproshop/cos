@@ -166,6 +166,7 @@ const AUTOMATIONS: { key: string; label: string; detail: string }[] = [
   { key: 'workshop_checked_in', label: 'Workshop: clubs checked in', detail: 'When clubs are checked in for repair or regripping' },
   { key: 'workshop_delayed', label: 'Workshop: delay update', detail: 'When a workshop job is waiting for parts or its ready date changes' },
   { key: 'workshop_ready', label: 'Workshop: ready to collect', detail: 'When a workshop job is marked ready' },
+  { key: 'workshop_reminder', label: 'Workshop: collection reminder', detail: 'Daily check for workshop jobs ready but not collected' },
 ];
 
 export function AutomationsForm({ action, enabled, disabled }: { action: BoundAction; enabled: Record<string, boolean>; disabled: boolean }) {
@@ -202,7 +203,7 @@ export function ThresholdsForm({ action, values, disabled }: { action: BoundActi
       {(s) => (
         <fieldset disabled={disabled} style={{ border: 0, padding: 0, margin: 0 }}>
           <div className="fields three">
-            <Field state={s} name="readyUncollectedDays" label="Ready but uncollected after (days)" type="number" min="1" defaultValue={values.readyUncollectedDays} hint="Also when collection reminders are sent" />
+            <Field state={s} name="readyUncollectedDays" label="Ready but uncollected after (days)" type="number" min="1" defaultValue={values.readyUncollectedDays} hint="Also when collection reminders are sent, for orders and workshop jobs" />
             <Field state={s} name="quoteFollowupDays" label="Quote awaiting response after (days)" type="number" min="1" defaultValue={values.quoteFollowupDays} />
             <Field state={s} name="missingSupplierRefDays" label="No supplier reference after (days)" type="number" min="0" defaultValue={values.missingSupplierRefDays} />
           </div>

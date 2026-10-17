@@ -55,6 +55,7 @@ export const TEMPLATE_KEYS: EmailAutomationKey[] = [
   'workshop_checked_in',
   'workshop_delayed',
   'workshop_ready',
+  'workshop_reminder',
 ];
 
 const esc = (s: unknown) =>
@@ -234,6 +235,18 @@ export function renderEmail(type: EmailAutomationKey, ctx: EmailContext): Render
       if (ctx.etaReason) intro.push(ctx.etaReason);
       const r = layout(ctx, { preheader: 'An update on your workshop job.', heading: 'An update on your clubs', intro, rows });
       return { subject: `Update on your workshop job ${ctx.reference}`, ...r };
+    }
+    case 'workshop_reminder': {
+      const rows: Block[] = [{ label: 'Collect from', value: ctx.store.collectionLocation || s }];
+      if (ctx.store.openingHours) rows.push({ label: 'Opening hours', value: ctx.store.openingHours });
+      if (ctx.totalPence) rows.push({ label: 'To pay on collection', value: money(ctx.totalPence) });
+      const r = layout(ctx, {
+        preheader: 'Your clubs are still waiting for you.',
+        heading: 'A friendly reminder — your clubs are ready',
+        intro: ['Your clubs are finished and waiting for you in the shop. Pop in whenever suits you — just reply if you’d like us to hold them a little longer.'],
+        rows,
+      });
+      return { subject: `Reminder: your clubs are ready to collect — ${ctx.reference}`, ...r };
     }
     case 'workshop_ready': {
       const rows: Block[] = [{ label: 'Collect from', value: ctx.store.collectionLocation || s }];
