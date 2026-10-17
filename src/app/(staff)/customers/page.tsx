@@ -3,7 +3,7 @@ import Link from 'next/link';
 import { Suspense } from 'react';
 import { RowLink, SearchBox } from '@/components/chrome';
 import { PageHeader } from '@/components/views';
-import { requireStaff } from '@/lib/auth';
+import { hasRole, requireStaff } from '@/lib/auth';
 import { money, stamp } from '@/lib/format';
 import { listCustomers } from '@/lib/queries';
 
@@ -21,6 +21,11 @@ export default async function CustomersPage({ searchParams }: { searchParams: Pr
         sub="Every customer, their orders and the builds they love."
         actions={
           <>
+            {hasRole(staff, 'admin') ? (
+              <a href="/api/export/customers" className="btn" download>
+                ⤓ Export CSV
+              </a>
+            ) : null}
             <Link href="/customers/import" className="btn">
               Import customers
             </Link>
