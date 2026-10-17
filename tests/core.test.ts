@@ -605,3 +605,19 @@ describe('supplier accounts and pre-books', () => {
     expect(events.map((e) => e.eventType)).toEqual(expect.arrayContaining(['prebook_created', 'prebook_line_added', 'prebook_status_changed', 'prebook_received']));
   });
 });
+
+describe('performance: pre-book arrivals', () => {
+  it('values stock booked in during the period and checks it against the expected date', async () => {
+    const { getPerformance } = await import('@/lib/analytics');
+    const a = (await getPerformance(org, 'all')).arrivals;
+    // From the Titleist pre-book delivered earlier: 4 drivers at £310 and 2 iron sets at £780, due by Feb 2027.
+    const titleist = a.byBrand.find((b) => b.brand === 'Titleist')!;
+    expect(titleist.items).toBe(6);
+    expect(titleist.valuePence).toBe(4 * 31000 + 2 * 78000);
+    expect(titleist.onTimePct).toBe(100);
+    expect(a.receivedValuePence).toBeGreaterThanOrEqual(titleist.valuePence);
+    const csv = (await import('@/lib/performance-report')).performanceCsv(org, await getPerformance(org, 'all'), '2026-10-17');
+    expect(csv).toContain('Pre-book stock received by brand');
+    expect(csv).toContain('Titleist,6,2800.00,100,');
+  });
+});

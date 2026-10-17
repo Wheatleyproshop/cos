@@ -67,6 +67,17 @@ export function performanceCsv(org: Pick<Organisation, 'storeName'>, p: Performa
     ['Manufacturer', 'Orders arrived', 'Average days', 'Median days', 'Fastest days', 'Slowest days', 'Supplier lead days', 'Delayed (%)'],
     p.turnaround.map((t) => [t.brand, t.orders, t.avgDays, t.medianDays, t.minDays, t.maxDays, t.supplierAvgDays ?? '', t.delayedPct]),
   );
+  const a = p.arrivals;
+  section('Pre-book arrivals', ['Measure', 'Value'], [
+    ['Stock received in period (items)', a.receivedItems],
+    ['Stock received in period (GBP at cost)', gbp(a.receivedValuePence)],
+    ['Arrived by expected date (%)', a.onTimePct ?? ''],
+    ['Still to arrive (items, now)', a.outstandingItems],
+    ['Still to arrive (GBP at cost, now)', gbp(a.outstandingValuePence)],
+    ['Overdue lines (now)', a.overdueLines],
+  ]);
+  section('Pre-book stock received by brand', ['Brand', 'Items', 'Value at cost (GBP)', 'On time (%)', 'Average days late'], a.byBrand.map((b) => [b.brand, b.items, gbp(b.valuePence), b.onTimePct ?? '', b.avgDaysLate ?? '']));
+  section('Pre-book stock due in', ['Month', 'Items', 'Value at cost (GBP)'], a.upcoming.map((m) => [m.label, m.items, gbp(m.valuePence)]));
   section('Order mix', ['Type', 'Orders', 'Value (GBP)'], p.mix.map((r) => [r.name, r.count, gbp(r.valuePence)]));
   section('Sales by team member', ['Team member', 'Orders', 'Value (GBP)'], p.team.map((r) => [r.name, r.count, gbp(r.valuePence)]));
   // BOM so Excel opens £ signs and accents correctly.

@@ -249,7 +249,8 @@ export async function receiveStock(ctx: Ctx, id: string, received: Record<string
     const p = await load(tx, ctx, id);
     if (p.status === 'draft' || p.status === 'cancelled') throw new ServiceError('Place the pre-book before booking stock in.');
     const lines: PrebookLine[] = await tx.select().from(prebookLines).where(and(eq(prebookLines.prebookId, id), isNull(prebookLines.removedAt)));
-    const changes: { product: string; from: number; to: number }[] = [];
+    // Each change carries its cost and due date so Performance can value arrivals and measure lateness later.
+    const changes: { lineId: string; product: string; from: number; to: number; unitCostPence: number; expected: string | null }[] = [];
     for (const l of lines) {
       if (!(l.id in received)) continue;
       const to = Math.trunc(received[l.id]);
@@ -258,7 +259,10 @@ export async function receiveStock(ctx: Ctx, id: string, received: Record<string
       }
       if (to !== l.quantityReceived) {
         await tx.update(prebookLines).set({ quantityReceived: to }).where(eq(prebookLines.id, l.id));
-        changes.push({ product: [l.product, l.variant].filter(Boolean).join(' — '), from: l.quantityReceived, to });
+        changes.push({
+          lineId: l.id, product: [l.product, l.variant].filter(Boolean).join(' — '), from: l.quantityReceived, to,
+          unitCostPence: l.unitCostPence, expected: l.expectedDate ?? p.expectedTo ?? p.expectedFrom,
+        });
         l.quantityReceived = to;
       }
     }

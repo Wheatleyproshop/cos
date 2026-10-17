@@ -1,6 +1,6 @@
-import { and, eq, inArray } from 'drizzle-orm';
+import { and, eq, gte, inArray, isNull, lt, sql } from 'drizzle-orm';
 import { withTenant } from '@/db';
-import { auditEvents, orders, quotes, users, type Organisation } from '@/db/schema';
+import { auditEvents, orders, prebookLines, prebooks, quotes, users, type Organisation } from '@/db/schema';
 import { asBallPrintSpec } from './ball-print';
 import { fitSpec } from './fit-spec';
 import { CLUB_CATEGORIES } from './fitting-rules';
@@ -29,6 +29,116 @@ export type Turnaround = {
   supplierAvgDays: number | null; delayedPct: number;
 };
 export type Bucket = { label: string; start: Date; valuePence: number; count: number };
+export type ArrivalBrand = { brand: string; items: number; valuePence: number; onTimePct: number | null; avgDaysLate: number | null };
+export type Arrivals = {
+  receivedItems: number;
+  receivedValuePence: number;
+  onTimePct: number | null;
+  byBrand: ArrivalBrand[];
+  outstandingItems: number;
+  outstandingValuePence: number;
+  overdueLines: number;
+  upcoming: { month: string; label: string; items: number; valuePence: number }[];
+};
+
+type ReceivedChange = { lineId?: string; from: number; to: number; unitCostPence?: number; expected?: string | null };
+
+/**
+ * Pre-book stock booked in during the period (valued at trade cost and checked against each line's
+ * expected date), plus what is still to arrive as of now.
+ */
+async function prebookArrivals(orgId: string, from: Date, end: Date, inclusiveEnd: boolean, tz: string, now: Date): Promise<Arrivals> {
+  return withTenant(orgId, async (tx) => {
+    const events = await tx
+      .select({ createdAt: auditEvents.createdAt, newValueJson: auditEvents.newValueJson, brand: prebooks.brand, prebookId: prebooks.id, p: prebooks })
+      .from(auditEvents)
+      .innerJoin(prebooks, eq(prebooks.id, auditEvents.entityId))
+      .where(
+        and(
+          eq(auditEvents.eventType, 'prebook_received'),
+          gte(auditEvents.createdAt, from),
+          inclusiveEnd ? sql`${auditEvents.createdAt} <= ${end}` : lt(auditEvents.createdAt, end),
+        ),
+      );
+    // Older booking-in entries didn't record the line, cost or due date: look the line up by id or by name.
+    const allLines = await tx.select().from(prebookLines);
+    const byId = new Map(allLines.map((l) => [l.id, l]));
+    const byName = new Map(allLines.map((l) => [`${l.prebookId}|${[l.product, l.variant].filter(Boolean).join(' — ')}`, l]));
+    const byBrand = new Map<string, { brand: string; items: number; value: number; onTime: number; dated: number; lateDays: number[] }>();
+    for (const e of events) {
+      const day = e.createdAt.toLocaleDateString('en-CA', { timeZone: tz });
+      for (const c of ((e.newValueJson as { lines?: (ReceivedChange & { product?: string })[] } | null)?.lines ?? [])) {
+        const qty = c.to - c.from;
+        if (qty <= 0) continue;
+        const line = (c.lineId && byId.get(c.lineId)) || byName.get(`${e.prebookId}|${c.product ?? ''}`);
+        const expected = c.expected !== undefined ? c.expected : line ? (line.expectedDate ?? e.p.expectedTo ?? e.p.expectedFrom) : null;
+        const key = e.brand.trim().toLowerCase();
+        const g = byBrand.get(key) ?? { brand: e.brand.trim(), items: 0, value: 0, onTime: 0, dated: 0, lateDays: [] };
+        g.items += qty;
+        g.value += qty * (c.unitCostPence ?? line?.unitCostPence ?? 0);
+        if (expected) {
+          g.dated += qty;
+          if (day <= expected) g.onTime += qty;
+          else g.lateDays.push(days(new Date(`${expected}T12:00:00Z`), new Date(`${day}T12:00:00Z`)));
+        }
+        byBrand.set(key, g);
+      }
+    }
+    const brandsOut: ArrivalBrand[] = [...byBrand.values()]
+      .map((g) => ({
+        brand: g.brand, items: g.items, valuePence: g.value,
+        onTimePct: g.dated ? Math.round((g.onTime / g.dated) * 100) : null,
+        avgDaysLate: g.lateDays.length ? round1(g.lateDays.reduce((s, x) => s + x, 0) / g.lateDays.length) : null,
+      }))
+      .sort((a, b) => b.valuePence - a.valuePence);
+    const dated = [...byBrand.values()].reduce((s, g) => s + g.dated, 0);
+    const onTime = [...byBrand.values()].reduce((s, g) => s + g.onTime, 0);
+
+    const open = await tx
+      .select({ line: prebookLines, prebook: prebooks })
+      .from(prebookLines)
+      .innerJoin(prebooks, eq(prebooks.id, prebookLines.prebookId))
+      .where(
+        and(
+          isNull(prebookLines.removedAt), isNull(prebooks.archivedAt),
+          sql`${prebooks.status} not in ('draft', 'cancelled', 'delivered')`,
+          sql`${prebookLines.quantityReceived} < ${prebookLines.quantity}`,
+        ),
+      );
+    const today = now.toLocaleDateString('en-CA', { timeZone: tz });
+    const months = new Map<string, { items: number; valuePence: number }>();
+    let overdueLines = 0;
+    for (const { line, prebook } of open) {
+      const left = line.quantity - line.quantityReceived;
+      const when = line.expectedDate ?? prebook.expectedFrom ?? prebook.expectedTo;
+      const by = line.expectedDate ?? prebook.expectedTo ?? prebook.expectedFrom;
+      if (by && by < today) overdueLines += 1;
+      const key = when ? when.slice(0, 7) : 'unscheduled';
+      const m = months.get(key) ?? { items: 0, valuePence: 0 };
+      m.items += left;
+      m.valuePence += left * line.unitCostPence;
+      months.set(key, m);
+    }
+    const upcoming = [...months.entries()]
+      .sort(([a], [b]) => (a === 'unscheduled' ? 1 : b === 'unscheduled' ? -1 : a.localeCompare(b)))
+      .map(([month, m]) => ({
+        month,
+        label: month === 'unscheduled' ? 'No date yet' : new Date(`${month}-01T12:00:00Z`).toLocaleDateString('en-GB', { month: 'long', year: 'numeric', timeZone: 'UTC' }),
+        ...m,
+      }));
+
+    return {
+      receivedItems: brandsOut.reduce((s, b) => s + b.items, 0),
+      receivedValuePence: brandsOut.reduce((s, b) => s + b.valuePence, 0),
+      onTimePct: dated ? Math.round((onTime / dated) * 100) : null,
+      byBrand: brandsOut,
+      outstandingItems: upcoming.reduce((s, m) => s + m.items, 0),
+      outstandingValuePence: upcoming.reduce((s, m) => s + m.valuePence, 0),
+      overdueLines,
+      upcoming,
+    };
+  });
+}
 
 const DAY = 86_400_000;
 const days = (a: Date, b: Date) => (b.getTime() - a.getTime()) / DAY;
@@ -227,9 +337,12 @@ export async function getPerformance(org: Organisation, period: PeriodKey | Repo
     }))
     .sort((a, b) => b.orders - a.orders || a.avgDays - b.avgDays);
 
+  const arrivals = await prebookArrivals(org.id, from, end, !range, org.timezone, now);
+
   return {
     period: p,
     from,
+    arrivals,
     kpis: {
       valuePence: value,
       valueChange: change(value, prevValue),

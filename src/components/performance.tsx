@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { PERIODS, type Bucket, type Performance, type Ranked, type Turnaround } from '@/lib/analytics';
+import { PERIODS, type Arrivals, type Bucket, type Performance, type Ranked, type Turnaround } from '@/lib/analytics';
 import { money } from '@/lib/format';
 
 const short = (pence: number) =>
@@ -187,6 +187,107 @@ function Change({ pct, period }: { pct: number | null; period: string }) {
   );
 }
 
+function PrebookArrivals({ a, period }: { a: Arrivals; period: string }) {
+  const max = Math.max(1, ...a.upcoming.map((m) => m.valuePence));
+  const nothing = !a.receivedItems && !a.outstandingItems;
+  return (
+    <section className="panel">
+      <div className="panel-head">
+        <h2>Pre-book arrivals</h2>
+        <Link href="/prebook" className="muted">
+          Pre-book page
+        </Link>
+      </div>
+      {nothing ? (
+        <p className="muted">No pre-book stock arrived in this period and nothing is on order. Pre-books appear here once they’re placed.</p>
+      ) : (
+        <>
+          <div className="arr-kpis">
+            <div>
+              <small>Received ({period})</small>
+              <b>{money(a.receivedValuePence)}</b>
+              <span>{a.receivedItems} items at cost</span>
+            </div>
+            <div>
+              <small>Arrived on time</small>
+              <b>{a.onTimePct === null ? '—' : `${a.onTimePct}%`}</b>
+              <span>by the expected date</span>
+            </div>
+            <div>
+              <small>Still to arrive</small>
+              <b>{money(a.outstandingValuePence)}</b>
+              <span>{a.outstandingItems} items</span>
+            </div>
+            <div className={a.overdueLines ? 'alert' : ''}>
+              <small>Overdue now</small>
+              <b>{a.overdueLines}</b>
+              <span>line{a.overdueLines === 1 ? '' : 's'} past their date</span>
+            </div>
+          </div>
+          <div className="perf-grid" style={{ marginTop: 16 }}>
+            <div>
+              <h3>Received by brand</h3>
+              {a.byBrand.length ? (
+                <div className="tablewrap">
+                  <table className="compact">
+                    <thead>
+                      <tr>
+                        <th>Brand</th>
+                        <th className="num">Items</th>
+                        <th className="num">Value</th>
+                        <th className="num">On time</th>
+                        <th className="num">Avg late</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {a.byBrand.map((b) => (
+                        <tr key={b.brand}>
+                          <td>
+                            <b>{b.brand}</b>
+                          </td>
+                          <td className="num">{b.items}</td>
+                          <td className="num">{money(b.valuePence)}</td>
+                          <td className="num">
+                            <span className={b.onTimePct !== null && b.onTimePct < 75 ? 'flag' : ''}>{b.onTimePct === null ? '—' : `${b.onTimePct}%`}</span>
+                          </td>
+                          <td className="num">{b.avgDaysLate === null ? '—' : `${b.avgDaysLate} days`}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <p className="muted">Nothing booked in during this period.</p>
+              )}
+            </div>
+            <div>
+              <h3>Due in</h3>
+              {a.upcoming.length ? (
+                <ol className="rankbars">
+                  {a.upcoming.slice(0, 6).map((m) => (
+                    <li key={m.month}>
+                      <div className="rb-top">
+                        <span>{m.label}</span>
+                        <b>{money(m.valuePence)}</b>
+                      </div>
+                      <div className="rb-track">
+                        <div className="rb-fill" style={{ width: `${Math.max(3, (m.valuePence / max) * 100)}%` }} />
+                      </div>
+                      <small>{m.items} items</small>
+                    </li>
+                  ))}
+                </ol>
+              ) : (
+                <p className="muted">Nothing on order.</p>
+              )}
+            </div>
+          </div>
+        </>
+      )}
+    </section>
+  );
+}
+
 export function PerformanceView({ data, canExport }: { data: Performance; canExport?: boolean }) {
   const k = data.kpis;
   const per = data.period.label.toLowerCase();
@@ -273,6 +374,8 @@ export function PerformanceView({ data, canExport }: { data: Performance; canExp
         </div>
         <TurnaroundTable rows={data.turnaround} />
       </section>
+
+      <PrebookArrivals a={data.arrivals} period={per} />
 
       <div className="perf-grid">
         <section className="panel">

@@ -511,3 +511,10 @@ details.section[open] { padding-bottom: 16px; }
 .pblines tr.pb-done td { color: #57606d; }
 .pblines tr.pb-done .pb-recv { background: #e6f4ea; border-color: #b9dcc3; }
 .pblines tfoot th { padding-top: 10px; border-top: 1px solid var(--line); }
+.arr-kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; }
+.arr-kpis > div { border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; display: grid; gap: 2px; min-width: 0; }
+.arr-kpis small { color: #7a818c; font-size: 12px; }
+.arr-kpis b { font-size: 20px; letter-spacing: -0.3px; }
+.arr-kpis span { color: #8a919c; font-size: 12px; }
+.arr-kpis > .alert { border-color: #f2c79a; background: #fff8f0; }
+.perf h3 { margin: 0 0 10px; font-size: 14px; }
