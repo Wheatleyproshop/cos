@@ -31,7 +31,9 @@ import {
 import { runBackup } from '@/lib/services/backups';
 import { sendTestEmail } from '@/lib/services/test-email';
 import { addBrand, addComponent, addModel, createFittingQuote, setCatalogActive, updateComponentUpcharge, updateModelPrice } from '@/lib/services/fitting';
+import { addAccountsForCatalogueBrands, saveAccount, setAccountActive } from '@/lib/services/accounts';
 import { sendReportNow, updatePerformanceReport } from '@/lib/services/performance-report';
+import { addLine, archivePrebook, createPrebook, receiveStock, removeLine, setPrebookStatus, updatePrebook } from '@/lib/services/prebooks';
 import { addBall, addStarterBalls, createBallPrintQuote, setBallActive, setBallPhoto, updateBallPrice, updateSetupFee } from '@/lib/services/ball-printing';
 
 const obj = (fd: FormData) => Object.fromEntries([...fd.entries()].filter(([, v]) => typeof v === 'string'));
@@ -384,5 +386,86 @@ export async function sendReportNowAction() {
   return act('admin', async (ctx) => {
     const r = await sendReportNow(ctx);
     return `Sent the ${r.month} report to ${r.recipients.join(', ')}${r.simulated ? ' (simulated — no email provider configured)' : ''}.`;
+  });
+}
+
+/* ── Supplier accounts ──────────────────────────────────────────────── */
+
+export async function saveAccountAction(id: string | null, _: FormState, fd: FormData) {
+  return act('manager', async (ctx) => {
+    await saveAccount(ctx, id, obj(fd));
+    return id ? 'Account updated.' : 'Account added.';
+  }, fd);
+}
+
+export async function accountActiveAction(id: string, active: boolean) {
+  return act('manager', async (ctx) => {
+    await setAccountActive(ctx, id, active);
+    return active ? 'Account restored.' : 'Account hidden.';
+  });
+}
+
+export async function catalogueAccountsAction() {
+  return act('manager', async (ctx) => {
+    const n = await addAccountsForCatalogueBrands(ctx);
+    return n ? `Added ${n} account card${n === 1 ? '' : 's'} — fill in the details for each.` : 'Every catalogue brand already has an account.';
+  });
+}
+
+/* ── Pre-books ───────────────────────────────────────────────────────── */
+
+export async function createPrebookAction(_: FormState, fd: FormData): Promise<FormState> {
+  let target = '';
+  const res = await act('manager', async (ctx) => {
+    const p = await createPrebook(ctx, obj(fd));
+    target = `/prebook/${p.reference}`;
+  }, fd);
+  if (res?.ok && target) redirect(target);
+  return res;
+}
+
+export async function updatePrebookAction(id: string, _: FormState, fd: FormData) {
+  return act('manager', async (ctx) => {
+    await updatePrebook(ctx, id, obj(fd));
+    return 'Pre-book updated.';
+  }, fd);
+}
+
+export async function addPrebookLineAction(id: string, _: FormState, fd: FormData) {
+  return act('manager', async (ctx) => {
+    await addLine(ctx, id, obj(fd));
+    return 'Line added.';
+  }, fd);
+}
+
+export async function removePrebookLineAction(id: string, lineId: string) {
+  return act('manager', async (ctx) => {
+    await removeLine(ctx, id, lineId);
+    return 'Line removed.';
+  });
+}
+
+export async function prebookStatusAction(id: string, status: 'draft' | 'placed' | 'confirmed' | 'cancelled') {
+  return act('manager', async (ctx) => {
+    await setPrebookStatus(ctx, id, status);
+    return 'Pre-book updated.';
+  });
+}
+
+export async function receivePrebookAction(id: string, _: FormState, fd: FormData) {
+  return act('staff', async (ctx) => {
+    const received: Record<string, number> = {};
+    for (const [k, v] of fd.entries()) {
+      if (k.startsWith('received:') && typeof v === 'string' && v.trim() !== '') received[k.slice(9)] = Number(v);
+    }
+    const status = await receiveStock(ctx, id, received);
+    return status === 'delivered' ? 'Everything has arrived — pre-book delivered.' : 'Deliveries booked in.';
+  }, fd);
+}
+
+export async function archivePrebookAction(id: string, archived: boolean) {
+  return act('manager', async (ctx) => {
+    await archivePrebook(ctx, id, archived);
+    return archived ? 'Pre-book archived.' : 'Pre-book restored.';
   });
 }

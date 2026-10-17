@@ -562,3 +562,46 @@ describe('monthly performance report', () => {
     expect(after.performanceReport).toMatchObject({ enabled: true, recipients: ['aaron@example.com', 'will@example.com'] });
   });
 });
+
+describe('supplier accounts and pre-books', () => {
+  it('keeps one account per brand, manager-only, with no password field', async () => {
+    const { saveAccount, listAccounts } = await import('@/lib/services/accounts');
+    await expect(saveAccount(staff, null, { brand: 'Titleist' })).rejects.toThrow(/manager/);
+    await saveAccount(admin, null, {
+      brand: 'Titleist', accountNumber: 'DG-10442', repName: 'Sam Rep', repPhone: '07700 900123', repEmail: 'sam@example.com',
+      headOfficePhone: '0345 000 0000', portalUrl: 'b2b.example.com', password: 'should-be-ignored',
+    });
+    await expect(saveAccount(admin, null, { brand: 'titleist' })).rejects.toThrow(/already/);
+    const [a] = (await listAccounts(org.id)).filter((x) => x.brand === 'Titleist');
+    expect(a).toMatchObject({ accountNumber: 'DG-10442', portalUrl: 'https://b2b.example.com' });
+    expect(a).not.toHaveProperty('password');
+    await expect(saveAccount(admin, null, { brand: 'Bad', repEmail: 'nope' })).rejects.toThrow();
+    // Other shops can't see it.
+    expect((await listAccounts(other.id)).some((x) => x.accountNumber === 'DG-10442')).toBe(false);
+  });
+
+  it('runs a pre-book from draft to delivered as stock is booked in', async () => {
+    const { listAccounts } = await import('@/lib/services/accounts');
+    const p = await import('@/lib/services/prebooks');
+    const acct = (await listAccounts(org.id)).find((x) => x.brand === 'Titleist')!;
+    await expect(p.createPrebook(staff, { supplierAccountId: acct.id })).rejects.toThrow(/manager/);
+    const pb = await p.createPrebook(admin, { supplierAccountId: acct.id, season: '2027', expectedFrom: '2027-01-10', expectedTo: '2027-02-28' });
+    expect(pb.reference).toMatch(/^PB-\d+$/);
+    expect(pb.brand).toBe('Titleist');
+    await expect(p.setPrebookStatus(admin, pb.id, 'placed')).rejects.toThrow(/at least one line/);
+    await p.addLine(admin, pb.id, { product: 'GTS2 Driver', variant: '9° Stiff', quantity: '4', unitCostPence: '310.00' });
+    await p.addLine(admin, pb.id, { product: 'T150 Irons 5-PW', quantity: '2', unitCostPence: '780', forCustomer: 'J. Smith' });
+    await expect(p.receiveStock(staff, pb.id, {})).rejects.toThrow(/Place the pre-book/);
+    await p.setPrebookStatus(admin, pb.id, 'placed');
+    const { lines } = (await p.getPrebook(org.id, pb.reference))!;
+    // Any staff member can book stock in.
+    expect(await p.receiveStock(staff, pb.id, { [lines[0].id]: 2 })).toBe('part_delivered');
+    await expect(p.receiveStock(staff, pb.id, { [lines[0].id]: 9 })).rejects.toThrow(/between 0 and 4/);
+    await expect(p.removeLine(admin, pb.id, lines[0].id)).rejects.toThrow(/already arrived/);
+    expect(await p.receiveStock(staff, pb.id, { [lines[0].id]: 4, [lines[1].id]: 2 })).toBe('delivered');
+    const [row] = (await p.listPrebooks(org.id)).filter((x) => x.id === pb.id);
+    expect(row).toMatchObject({ quantity: 6, received: 6, valuePence: 4 * 31000 + 2 * 78000, placedOn: expect.any(String) });
+    const events = await withTenant(org.id, (tx) => tx.select().from(auditEvents).where(eq(auditEvents.entityId, pb.id)));
+    expect(events.map((e) => e.eventType)).toEqual(expect.arrayContaining(['prebook_created', 'prebook_line_added', 'prebook_status_changed', 'prebook_received']));
+  });
+});

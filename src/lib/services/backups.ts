@@ -10,8 +10,11 @@ import {
   orders,
   organisations,
   payments,
+  prebookLines,
+  prebooks,
   printBalls,
   quotes,
+  supplierAccounts,
   users,
   type BackupProvider,
   type Organisation,
@@ -43,6 +46,9 @@ export async function buildExport(tx: DB, orgId: string) {
     attachments: await tx.select().from(attachments), // metadata; files live in object storage
     auditEvents: await tx.select().from(auditEvents),
     printBalls: await tx.select().from(printBalls),
+    supplierAccounts: await tx.select().from(supplierAccounts),
+    prebooks: await tx.select().from(prebooks),
+    prebookLines: await tx.select().from(prebookLines),
   };
 }
 

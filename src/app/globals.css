@@ -482,3 +482,32 @@ details.section[open] { padding-bottom: 16px; }
   .logo { margin: 6px 0 26px; }
 }
 @keyframes scrim-in { from { opacity: 0; } to { opacity: 1; } }
+
+/* ── Accounts & pre-book ─────────────────────────────────────────────── */
+.grid.four { grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); }
+.acct-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 420px), 1fr)); gap: 18px; align-items: start; }
+.acct-list > .panel { margin: 0; min-width: 0; }
+.acct-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; flex-wrap: wrap; margin-bottom: 8px; }
+.acct-head h2 { margin: 0; }
+.acct-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 14px 18px; }
+.acct-grid h3 { margin: 6px 0 6px; font-size: 12px; text-transform: uppercase; letter-spacing: 1px; color: #7a818c; }
+.acct-row { display: grid; gap: 1px; margin-bottom: 8px; min-width: 0; }
+.acct-row small { color: #8a919c; font-size: 11px; }
+.acct-row a, .acct-row span { font-weight: 600; overflow-wrap: anywhere; }
+.acct-row a { color: #1f4a8f; text-decoration: none; }
+.acct-notes { white-space: pre-line; font-size: 13px; background: #fafbfc; border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; }
+.acct-actions { display: flex; gap: 10px; align-items: flex-start; flex-wrap: wrap; justify-content: space-between; margin-top: 8px; }
+.acct-actions details { flex: 1; min-width: 220px; }
+.pb-status { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin: 0 0 16px; }
+.pb-buttons { display: inline-flex; gap: 8px; flex-wrap: wrap; margin-left: auto; }
+.badge.pb-draft { background: #f0f2f5; color: #57606d; }
+.badge.pb-placed { background: #e5eefc; color: #1f4a8f; }
+.badge.pb-confirmed { background: #e8eaf8; color: #3a3f9a; }
+.badge.pb-part_delivered { background: #fff0e0; color: #8a5716; }
+.badge.pb-delivered { background: #e6f4ea; color: #1b6b35; }
+.badge.pb-cancelled { background: #fdecea; color: #a3322a; }
+.pb-for { display: inline-block; font-size: 11px; background: #eef4ff; color: #1f4a8f; border-radius: 8px; padding: 2px 7px; margin-top: 3px; }
+.pb-recv { width: 70px; padding: 6px 8px; border: 1px solid #d5dbe3; border-radius: 8px; text-align: right; }
+.pblines tr.pb-done td { color: #57606d; }
+.pblines tr.pb-done .pb-recv { background: #e6f4ea; border-color: #b9dcc3; }
+.pblines tfoot th { padding-top: 10px; border-top: 1px solid var(--line); }

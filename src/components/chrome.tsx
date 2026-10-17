@@ -10,8 +10,10 @@ const NAV = [
   { href: '/quotes', icon: '◇', label: 'Quotes' },
   { href: '/fitting', icon: '✎', label: 'Custom Fitting' },
   { href: '/ball-printing', icon: '◎', label: 'Ball Printing' },
+  { href: '/prebook', icon: '◷', label: 'Pre-book' },
   { href: '/customers', icon: '☺', label: 'Customers' },
   { href: '/products', icon: '▣', label: 'Products' },
+  { href: '/accounts', icon: '☏', label: 'Accounts' },
   { href: '/emails', icon: '✉', label: 'Email previews' },
   { href: '/settings', icon: '⚙', label: 'Store settings' },
 ];

@@ -54,7 +54,14 @@ export type EventType =
   | 'backup_completed'
   | 'backup_failed'
   | 'performance_report_sent'
-  | 'performance_report_failed';
+  | 'performance_report_failed'
+  | 'supplier_account_saved'
+  | 'prebook_created'
+  | 'prebook_updated'
+  | 'prebook_status_changed'
+  | 'prebook_line_added'
+  | 'prebook_line_removed'
+  | 'prebook_received';
 
 export type EventInput = {
   organisationId: string;

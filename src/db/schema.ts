@@ -81,6 +81,7 @@ export const organisations = pgTable('organisations', {
   // Per-organisation human-friendly numbering
   nextOrderNumber: integer('next_order_number').notNull().default(1001),
   nextQuoteNumber: integer('next_quote_number').notNull().default(1001),
+  nextPrebookNumber: integer('next_prebook_number').notNull().default(1001),
   orderPrefix: text('order_prefix').notNull().default('COS'),
   createdAt: createdAt(),
 });
@@ -290,7 +291,7 @@ export const auditEvents = pgTable(
     id: id(),
     organisationId: orgId(),
     entityType: text('entity_type', {
-      enum: ['order', 'quote', 'customer', 'organisation', 'user', 'message', 'backup'],
+      enum: ['order', 'quote', 'customer', 'organisation', 'user', 'message', 'backup', 'prebook', 'supplier_account'],
     }).notNull(),
     entityId: uuid('entity_id'),
     orderId: uuid('order_id'),
@@ -464,6 +465,77 @@ export const productModels = pgTable('product_models', {
   createdAt: createdAt(),
 });
 
+/* ─────────────────────────── Supplier accounts & pre-books ─────────────────────────── */
+
+/** The shop's trade account with a brand: account number, rep and head office contacts. No passwords are stored. */
+export const supplierAccounts = pgTable('supplier_accounts', {
+  id: id(),
+  organisationId: orgId(),
+  brand: text('brand').notNull(),
+  accountNumber: text('account_number').notNull().default(''),
+  repName: text('rep_name').notNull().default(''),
+  repPhone: text('rep_phone').notNull().default(''),
+  repEmail: text('rep_email').notNull().default(''),
+  headOfficePhone: text('head_office_phone').notNull().default(''),
+  headOfficeEmail: text('head_office_email').notNull().default(''),
+  ordersEmail: text('orders_email').notNull().default(''),
+  portalUrl: text('portal_url').notNull().default(''),
+  portalUsername: text('portal_username').notNull().default(''),
+  paymentTerms: text('payment_terms').notNull().default(''),
+  notes: text('notes').notNull().default(''),
+  active: boolean('active').notNull().default(true),
+  createdAt: createdAt(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const PREBOOK_STATUSES = ['draft', 'placed', 'confirmed', 'part_delivered', 'delivered', 'cancelled'] as const;
+export type PrebookStatus = (typeof PREBOOK_STATUSES)[number];
+
+/** A seasonal stock order placed with a brand for future delivery. */
+export const prebooks = pgTable(
+  'prebooks',
+  {
+    id: id(),
+    organisationId: orgId(),
+    reference: text('reference').notNull(),
+    supplierAccountId: uuid('supplier_account_id').references(() => supplierAccounts.id),
+    brand: text('brand').notNull(),
+    season: text('season').notNull().default(''),
+    title: text('title').notNull().default(''),
+    status: text('status', { enum: PREBOOK_STATUSES }).notNull().default('draft'),
+    supplierReference: text('supplier_reference').notNull().default(''),
+    placedOn: date('placed_on', { mode: 'string' }),
+    expectedFrom: date('expected_from', { mode: 'string' }),
+    expectedTo: date('expected_to', { mode: 'string' }),
+    notes: text('notes').notNull().default(''),
+    createdByUserId: uuid('created_by_user_id').notNull().references(() => users.id),
+    createdAt: createdAt(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+    archivedAt: timestamp('archived_at', { withTimezone: true }),
+  },
+  (t) => [uniqueIndex('prebooks_org_ref_idx').on(t.organisationId, t.reference)],
+);
+
+export const prebookLines = pgTable(
+  'prebook_lines',
+  {
+    id: id(),
+    organisationId: orgId(),
+    prebookId: uuid('prebook_id').notNull().references(() => prebooks.id),
+    product: text('product').notNull(),
+    sku: text('sku').notNull().default(''),
+    variant: text('variant').notNull().default(''),
+    quantity: integer('quantity').notNull(),
+    quantityReceived: integer('quantity_received').notNull().default(0),
+    unitCostPence: integer('unit_cost_pence').notNull().default(0),
+    expectedDate: date('expected_date', { mode: 'string' }),
+    forCustomer: text('for_customer').notNull().default(''),
+    createdAt: createdAt(),
+    removedAt: timestamp('removed_at', { withTimezone: true }),
+  },
+  (t) => [index('prebook_lines_prebook_idx').on(t.prebookId)],
+);
+
 /** A golf ball the shop offers for logo/text printing, priced per dozen including printing. */
 export const printBalls = pgTable('print_balls', {
   id: id(),
@@ -554,5 +626,8 @@ export type Message = typeof messages.$inferSelect;
 export type Attachment = typeof attachments.$inferSelect;
 export type Brand = typeof brands.$inferSelect;
 export type PrintBall = typeof printBalls.$inferSelect;
+export type SupplierAccount = typeof supplierAccounts.$inferSelect;
+export type Prebook = typeof prebooks.$inferSelect;
+export type PrebookLine = typeof prebookLines.$inferSelect;
 export type ProductModel = typeof productModels.$inferSelect;
 export type Component = typeof components.$inferSelect;
