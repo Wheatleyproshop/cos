@@ -8,7 +8,7 @@ import { getPerformance, parsePeriod } from '@/lib/analytics';
 import { shortDate } from '@/lib/short-date';
 import { listWork, metrics } from '@/lib/queries';
 import { upcomingLines } from '@/lib/services/prebooks';
-import { listJobs } from '@/lib/services/workshop';
+import { listJobs, WORKSHOP_STATUS_LABELS } from '@/lib/services/workshop';
 
 type SP = Promise<{ q?: string; filter?: string; view?: string; period?: string }>;
 
@@ -57,10 +57,11 @@ export default async function Overview({ searchParams }: { searchParams: SP }) {
   }
   const filter = parseFilter(sp.filter);
   const q = sp.q ?? '';
-  const [{ rows, all }, upcoming, jobs] = await Promise.all([
+  const [{ rows, all }, upcoming, jobs, jobHits] = await Promise.all([
     listWork(staff.org, { q, filter, scope: 'overview' }),
     upcomingLines(staff.organisationId),
     listJobs(staff.organisationId),
+    q ? listJobs(staff.organisationId, { q }) : Promise.resolve([]),
   ]);
   const arrivals = prebookArrivals(upcoming, staff.org.timezone);
   const today = todayInTz(staff.org.timezone);
@@ -191,6 +192,39 @@ export default async function Overview({ searchParams }: { searchParams: SP }) {
           {arrivals.length > 8 ? (
             <p className="muted" style={{ marginTop: 8 }}>
               and {arrivals.length - 8} more on the <Link href="/prebook">Pre-book page</Link>.
+            </p>
+          ) : null}
+        </section>
+      ) : null}
+      {q && jobHits.length ? (
+        <section className="panel" style={{ marginBottom: 22 }} aria-labelledby="ws-hits">
+          <div className="panel-head">
+            <h2 id="ws-hits">Workshop jobs matching “{q}”</h2>
+            <span className="muted">{jobHits.length}</span>
+          </div>
+          <ul className="attention">
+            {jobHits
+              .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
+              .slice(0, 10)
+              .map((j) => (
+                <li key={j.id}>
+                  <span>
+                    <Link href={`/workshop/${j.reference}`} className="rowtitle" scroll={false}>
+                      {j.reference} · {j.customerName}
+                    </Link>
+                    <span className="muted" style={{ marginLeft: 8 }}>
+                      {j.summary}
+                    </span>
+                  </span>
+                  <span style={{ textAlign: 'right' }}>
+                    <span className={`badge ws-${j.status}`}>{WORKSHOP_STATUS_LABELS[j.status]}</span>
+                  </span>
+                </li>
+              ))}
+          </ul>
+          {jobHits.length > 10 ? (
+            <p className="muted" style={{ marginTop: 8 }}>
+              Showing the 10 most recent of {jobHits.length}.
             </p>
           ) : null}
         </section>

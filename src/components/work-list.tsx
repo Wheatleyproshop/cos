@@ -40,7 +40,7 @@ export function WorkList({
     <>
       <div className="toolbar">
         <Suspense>
-          <SearchBox placeholder="Search customer, email, phone, order ID, brand, product, SKU or supplier ref…" />
+          <SearchBox placeholder="Search customer, email, phone, order or workshop ID, brand, product, SKU, clubs…" />
         </Suspense>
         {viewAll ? (
           <Link className="btn" href="/orders">

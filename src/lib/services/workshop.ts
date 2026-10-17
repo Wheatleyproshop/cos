@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, isNull, lt, or, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, ilike, isNull, lt, or, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import { withTenant, type DB } from '@/db';
 import type { Organisation } from '@/db/schema';
@@ -11,6 +11,7 @@ import { dispatchMessages, enqueueEmail } from '../email/outbox';
 import type { FitSpec } from '../fit-spec';
 import { money, parseMoneyToPence } from '../format';
 import { appUrl, hashToken, newToken } from '../tokens';
+import { likeTerm } from '../like-term';
 import { customerFields, parse } from '../validation';
 import { WORKSHOP_STATUS_LABELS } from '../workshop-constants';
 import { atLeast, findOrCreateCustomer, requireRole, ServiceError, type Ctx } from './common';
@@ -257,7 +258,24 @@ export async function removeWorkshopItem(ctx: Ctx, id: string, itemId: string) {
 
 export type JobRow = WorkshopJob & { customerName: string; customerEmail: string; items: number; summary: string; totalPence: number };
 
-export async function listJobs(orgId: string, opts: { customerId?: string } = {}): Promise<JobRow[]> {
+/** Matches the job number, customer name/email/phone (digits too), or any club, work or parts on the job. */
+function jobSearch(q: string) {
+  if (!q) return undefined;
+  const t = likeTerm(q);
+  const digits = q.replace(/\D/g, '');
+  return or(
+    ilike(workshopJobs.reference, t),
+    ilike(customers.name, t),
+    ilike(customers.email, t),
+    ilike(customers.phone, t),
+    digits.length >= 4 ? sql`regexp_replace(${customers.phone}, '\\D', '', 'g') like ${'%' + digits + '%'}` : undefined,
+    sql`exists (select 1 from ${workshopItems} wi where wi.job_id = ${workshopJobs.id} and wi.removed_at is null
+      and (wi.club ilike ${t} or wi.work ilike ${t} or wi.parts ilike ${t}))`,
+  );
+}
+
+export async function listJobs(orgId: string, opts: { customerId?: string; q?: string } = {}): Promise<JobRow[]> {
+  const q = (opts.q ?? '').trim().slice(0, 100);
   return withTenant(orgId, async (tx) => {
     const rows = await tx
       .select({
@@ -271,7 +289,7 @@ export async function listJobs(orgId: string, opts: { customerId?: string } = {}
       .from(workshopJobs)
       .innerJoin(customers, eq(customers.id, workshopJobs.customerId))
       .leftJoin(workshopItems, and(eq(workshopItems.jobId, workshopJobs.id), isNull(workshopItems.removedAt)))
-      .where(and(isNull(workshopJobs.archivedAt), opts.customerId ? eq(workshopJobs.customerId, opts.customerId) : undefined))
+      .where(and(isNull(workshopJobs.archivedAt), opts.customerId ? eq(workshopJobs.customerId, opts.customerId) : undefined, jobSearch(q)))
       .groupBy(workshopJobs.id, customers.name, customers.email)
       .orderBy(asc(sql`coalesce(${workshopJobs.etaDate}, '9999-12-31')`), desc(workshopJobs.createdAt));
     return rows.map(({ job, ...r }) => ({ ...job, ...r }));

@@ -1,4 +1,5 @@
 import 'server-only';
+import { likeTerm } from './like-term';
 import { and, asc, desc, eq, ilike, inArray, isNull, or, sql, type SQL } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/pg-core';
 import { withTenant } from '@/db';
@@ -53,9 +54,6 @@ export const FILTERS = [
 
 export type FilterKey = (typeof FILTERS)[number]['key'] | 'active' | 'awaiting' | 'overdue' | 'archived';
 
-function likeTerm(q: string) {
-  return `%${q.replace(/[\\%_]/g, (c) => '\\' + c)}%`;
-}
 
 function orderSearch(q: string): SQL | undefined {
   if (!q) return undefined;

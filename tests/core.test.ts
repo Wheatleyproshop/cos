@@ -793,3 +793,20 @@ describe('customer page: workshop jobs', () => {
     expect(mine.length).toBeLessThan(all.length);
   });
 });
+
+describe('workshop search', () => {
+  it('finds jobs by reference, customer, phone digits and club work or parts', async () => {
+    const ws = await import('@/lib/services/workshop');
+    const job = await ws.checkInClubs(staff, {
+      customerName: 'Sid Search', email: 'sid@example.com', phone: '07700 123 456',
+      items: [{ club: 'Putter', work: 'Regrip', parts: 'SuperStroke Zenergy', pricePence: '25' }],
+    });
+    for (const q of [job.reference, 'Sid Sea', 'sid@example', '07700123456', 'zenergy', 'PUTTER']) {
+      const hits = await ws.listJobs(org.id, { q });
+      expect(hits.map((h) => h.id), `search "${q}"`).toContain(job.id);
+    }
+    expect((await ws.listJobs(org.id, { q: 'no-such-thing-xyz' })).length).toBe(0);
+    // Wildcards in the search are taken literally.
+    expect((await ws.listJobs(org.id, { q: '%' })).length).toBe(0);
+  });
+});
