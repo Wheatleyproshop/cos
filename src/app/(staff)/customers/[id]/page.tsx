@@ -4,7 +4,9 @@ import { notFound } from 'next/navigation';
 import { CustomerForm } from '@/components/misc-forms';
 import { Badge, DetailBox, PageHeader } from '@/components/views';
 import { requireStaff } from '@/lib/auth';
-import { money, niceDate, stamp } from '@/lib/format';
+import { listJobs, WORKSHOP_STATUS_LABELS } from '@/lib/services/workshop';
+import { shortDate } from '@/lib/short-date';
+import { money, niceDate, stamp, todayInTz } from '@/lib/format';
 import { getCustomerDetail } from '@/lib/queries';
 import { QUOTE_STATUS_LABELS, statusLabel } from '@/lib/status';
 import type { Order } from '@/db/schema';
@@ -43,6 +45,8 @@ export default async function CustomerPage({ params }: { params: Promise<{ id: s
   if (!d) notFound();
   const { customer: c } = d;
   const tz = staff.org.timezone;
+  const jobs = (await listJobs(staff.organisationId, { customerId: c.id })).sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+  const today = todayInTz(tz);
   return (
     <>
       <PageHeader
@@ -101,6 +105,47 @@ export default async function CustomerPage({ params }: { params: Promise<{ id: s
               </ul>
             ) : (
               <p className="muted">None.</p>
+            )}
+          </section>
+          <section className="panel">
+            <div className="panel-head">
+              <h2>Workshop jobs</h2>
+              <Link href={`/workshop?customer=${c.id}#checkin`} className="muted">
+                Check in clubs
+              </Link>
+            </div>
+            {jobs.length ? (
+              <ul className="attention">
+                {jobs.map((j) => {
+                  const open = ['checked_in', 'in_progress', 'waiting_parts'].includes(j.status);
+                  const late = open && j.etaDate && j.etaDate < today;
+                  return (
+                    <li key={j.id}>
+                      <span>
+                        <Link href={`/workshop/${j.reference}`} className="rowtitle" scroll={false}>
+                          {j.summary || 'Workshop job'}
+                        </Link>
+                        <div className="muted">
+                          {j.reference} · checked in {stamp(j.createdAt, tz)}
+                          {open && j.etaDate ? (
+                            <>
+                              {' · '}
+                              <span className={late ? 'flag' : ''}>{late ? `overdue, was due ${shortDate(j.etaDate)}` : `ready by ${shortDate(j.etaDate)}`}</span>
+                            </>
+                          ) : null}
+                          {j.status === 'collected' && j.collectedAt ? ` · collected ${stamp(j.collectedAt, tz)}` : ''}
+                        </div>
+                      </span>
+                      <span style={{ textAlign: 'right' }}>
+                        <span className={`badge ws-${j.status}`}>{WORKSHOP_STATUS_LABELS[j.status]}</span>
+                        <div className="muted">{money(j.totalPence)}</div>
+                      </span>
+                    </li>
+                  );
+                })}
+              </ul>
+            ) : (
+              <p className="muted">None yet.</p>
             )}
           </section>
           <section className="panel">

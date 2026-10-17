@@ -257,7 +257,7 @@ export async function removeWorkshopItem(ctx: Ctx, id: string, itemId: string) {
 
 export type JobRow = WorkshopJob & { customerName: string; customerEmail: string; items: number; summary: string; totalPence: number };
 
-export async function listJobs(orgId: string): Promise<JobRow[]> {
+export async function listJobs(orgId: string, opts: { customerId?: string } = {}): Promise<JobRow[]> {
   return withTenant(orgId, async (tx) => {
     const rows = await tx
       .select({
@@ -271,7 +271,7 @@ export async function listJobs(orgId: string): Promise<JobRow[]> {
       .from(workshopJobs)
       .innerJoin(customers, eq(customers.id, workshopJobs.customerId))
       .leftJoin(workshopItems, and(eq(workshopItems.jobId, workshopJobs.id), isNull(workshopItems.removedAt)))
-      .where(isNull(workshopJobs.archivedAt))
+      .where(and(isNull(workshopJobs.archivedAt), opts.customerId ? eq(workshopJobs.customerId, opts.customerId) : undefined))
       .groupBy(workshopJobs.id, customers.name, customers.email)
       .orderBy(asc(sql`coalesce(${workshopJobs.etaDate}, '9999-12-31')`), desc(workshopJobs.createdAt));
     return rows.map(({ job, ...r }) => ({ ...job, ...r }));

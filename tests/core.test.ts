@@ -781,3 +781,15 @@ describe('monthly report: workshop', () => {
     expect(quiet.html).not.toContain('>Workshop<');
   });
 });
+
+describe('customer page: workshop jobs', () => {
+  it('lists only that customer’s workshop jobs', async () => {
+    const ws = await import('@/lib/services/workshop');
+    const all = await ws.listJobs(org.id);
+    const one = all[0];
+    const mine = await ws.listJobs(org.id, { customerId: one.customerId });
+    expect(mine.length).toBeGreaterThan(0);
+    expect(mine.every((j) => j.customerId === one.customerId)).toBe(true);
+    expect(mine.length).toBeLessThan(all.length);
+  });
+});
