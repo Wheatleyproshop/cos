@@ -30,7 +30,7 @@ function kpi(label: string, value: string, note: string) {
 <div style="font-size:12px;color:${MUTED}">${note}</div></div></div>`;
 }
 
-function rankRows(rows: Ranked[], accent: string, by: 'value' | 'count') {
+function rankRows(rows: Ranked[], accent: string, by: 'value' | 'count', unit = 'sold') {
   if (!rows.length) return `<p style="font-size:13px;color:${MUTED};margin:0">No sales this month.</p>`;
   const max = Math.max(...rows.map((r) => (by === 'value' ? r.valuePence : r.count)), 1);
   return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0">${rows
@@ -39,7 +39,7 @@ function rankRows(rows: Ranked[], accent: string, by: 'value' | 'count') {
       const v = by === 'value' ? r.valuePence : r.count;
       const pct = Math.max(3, Math.round((v / max) * 100));
       return `<tr><td style="padding:6px 0;font-size:13px;color:${INK}">${i + 1}. ${esc(r.name)}<div style="height:6px;background:#f0f2f5;border-radius:4px;margin-top:5px"><div style="height:6px;width:${pct}%;background:${accent};border-radius:4px"></div></div></td>
-<td style="padding:6px 0 6px 12px;font-size:13px;color:${INK};text-align:right;white-space:nowrap;vertical-align:top"><b>${by === 'value' ? esc(money(r.valuePence)) : r.count}</b><div style="font-size:11px;color:${MUTED}">${r.count} sold</div></td></tr>`;
+<td style="padding:6px 0 6px 12px;font-size:13px;color:${INK};text-align:right;white-space:nowrap;vertical-align:top"><b>${by === 'value' ? esc(money(r.valuePence)) : r.count}</b><div style="font-size:11px;color:${MUTED}">${r.count} ${unit}</div></td></tr>`;
     })
     .join('')}</table>`;
 }
@@ -78,6 +78,37 @@ ${a.byBrand
   );
 }
 
+/** Workshop jobs in the month: checked in, finished, on time, and the work done. Omitted when there's nothing to show. */
+function workshopHtml(p: Performance, accent: string) {
+  const w = p.workshop;
+  if (!w.checkedIn && !w.finished && !w.openNow && !w.readyUncollectedNow) return '';
+  const cell = (label: string, value: string, note: string, alert = false) =>
+    `<div style="display:inline-block;vertical-align:top;width:50%;max-width:147px;min-width:130px;box-sizing:border-box;padding:4px;text-align:left"><div style="border:1px solid ${alert ? '#f2c79a' : LINE};background:${alert ? '#fff8f0' : '#fff'};border-radius:10px;padding:10px 12px">
+<div style="font-size:11px;color:${MUTED}">${esc(label)}</div><div style="font-size:17px;font-weight:700;color:${INK};margin:2px 0">${esc(value)}</div><div style="font-size:11px;color:${MUTED}">${esc(note)}</div></div></div>`;
+  const work = w.byWork.length
+    ? `<div style="margin-top:12px">${rankRows(w.byWork, accent, 'count', 'clubs')}</div>`
+    : '';
+  const who = w.byStaff.length
+    ? `<div style="font-size:12px;color:${MUTED};margin-top:8px">Checked in by: ${w.byStaff
+        .slice(0, 5)
+        .map((r) => `<b style="color:${INK}">${esc(r.name)}</b> ${r.count}`)
+        .join(' · ')}</div>`
+    : '';
+  return section(
+    'Workshop',
+    `<div style="font-size:0;margin:0 -4px">${cell('Checked in', String(w.checkedIn), `${w.clubs} clubs · ${money(w.valuePence)}`)}${cell(
+      'Finished',
+      String(w.finished),
+      w.avgTurnaroundDays === null ? 'none this month' : `${w.avgTurnaroundDays} days average`,
+    )}${cell('Ready on time', w.onTimePct === null ? '—' : `${w.onTimePct}%`, w.waitedForPartsPct ? `${w.waitedForPartsPct}% waited for parts` : 'by the date promised')}${cell(
+      'In workshop now',
+      String(w.openNow),
+      `${w.overdueNow} overdue · ${w.readyUncollectedNow} to collect`,
+      w.overdueNow > 0,
+    )}</div>${work}${who}`,
+  );
+}
+
 export function renderPerformanceEmail(org: Organisation, p: Performance, link: string) {
   const b = resolveBrand(org);
   const k = p.kpis;
@@ -108,6 +139,7 @@ ${section('Best-selling brands', rankRows(p.brands, accent, 'value'))}
 ${section('Best-selling products', rankRows(p.products, accent, 'count'))}
 ${section('Manufacturer turnaround', `<div style="font-size:12px;color:${MUTED};margin:-6px 0 8px">Days from order taken to arriving in store</div>${turnaround}`)}
 ${arrivalsHtml(p)}
+${workshopHtml(p, accent)}
 ${section('Sales by team member', rankRows(p.team, accent, 'value'))}
 <tr><td style="padding:22px 26px 8px"><a href="${esc(link)}" style="display:inline-block;background:${accent};color:${b.accentText};text-decoration:none;padding:12px 20px;border-radius:${b.radius};font-weight:600;font-size:14px">Open Performance in COS</a></td></tr>
 <tr><td style="padding:8px 26px 24px;font-size:12px;color:${MUTED};line-height:1.6">The full figures are attached as a spreadsheet (CSV). You receive this because you're on the monthly report list in Store settings.</td></tr>
@@ -135,6 +167,16 @@ ${section('Sales by team member', rankRows(p.team, accent, 'value'))}
           `  Received: ${money(p.arrivals.receivedValuePence)} (${p.arrivals.receivedItems} items at cost)${p.arrivals.onTimePct !== null ? `, ${p.arrivals.onTimePct}% on time` : ''}`,
           `  Still to arrive: ${money(p.arrivals.outstandingValuePence)} (${p.arrivals.outstandingItems} items), ${p.arrivals.overdueLines} overdue line${p.arrivals.overdueLines === 1 ? '' : 's'}`,
           ...p.arrivals.byBrand.slice(0, 8).map((b) => `  ${b.brand}: ${b.items} items, ${money(b.valuePence)}${b.onTimePct !== null ? `, ${b.onTimePct}% on time` : ''}`),
+        ]
+      : []),
+    ...(p.workshop.checkedIn || p.workshop.finished || p.workshop.openNow || p.workshop.readyUncollectedNow
+      ? [
+          '',
+          'Workshop:',
+          `  Checked in: ${p.workshop.checkedIn} jobs, ${p.workshop.clubs} clubs, ${money(p.workshop.valuePence)}`,
+          `  Finished: ${p.workshop.finished}${p.workshop.avgTurnaroundDays !== null ? ` (${p.workshop.avgTurnaroundDays} days average)` : ''}${p.workshop.onTimePct !== null ? `, ${p.workshop.onTimePct}% on time` : ''}`,
+          `  Now: ${p.workshop.openNow} in the workshop, ${p.workshop.overdueNow} overdue, ${p.workshop.readyUncollectedNow} ready to collect`,
+          ...p.workshop.byWork.slice(0, 5).map((r) => `  ${r.name}: ${r.count} clubs, ${money(r.valuePence)}`),
         ]
       : []),
     '',

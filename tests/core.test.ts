@@ -767,3 +767,17 @@ describe('performance: workshop', () => {
     expect(csv).toContain('Workshop work done');
   });
 });
+
+describe('monthly report: workshop', () => {
+  it('includes the workshop section when there is activity, and leaves it out otherwise', async () => {
+    const { getPerformance } = await import('@/lib/analytics');
+    const { renderPerformanceEmail } = await import('@/lib/email/performance-email');
+    const busy = renderPerformanceEmail(org, await getPerformance(org, 'all'), 'https://example.com');
+    expect(busy.html).toContain('>Workshop<');
+    expect(busy.html).toContain('Regrip');
+    expect(busy.html).not.toContain(' sold<span'); // workshop work is counted in clubs
+    expect(busy.text).toContain('Workshop:');
+    const quiet = renderPerformanceEmail(other, await getPerformance(other, 'all'), 'https://example.com');
+    expect(quiet.html).not.toContain('>Workshop<');
+  });
+});
