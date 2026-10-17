@@ -21,48 +21,111 @@ export function Sidebar({
 }: { storeName: string; userName: string; roleLabel: string; signOut: () => Promise<void>; sharedLoginName?: string | null }) {
   const path = usePathname();
   const isActive = (href: string) => (href === '/' ? path === '/' : path === href || path.startsWith(href + '/'));
+  // Phones and small tablets: the sidebar is a drawer opened from the ☰ button.
+  const [open, setOpen] = useState(false);
+  const [compact, setCompact] = useState(false);
+  const menuButton = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    const mq = window.matchMedia('(max-width: 950px)');
+    const update = () => {
+      setCompact(mq.matches);
+      if (!mq.matches) setOpen(false);
+    };
+    update();
+    mq.addEventListener('change', update);
+    return () => mq.removeEventListener('change', update);
+  }, []);
+
+  // Close after navigating.
+  useEffect(() => setOpen(false), [path]);
+
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setOpen(false);
+        menuButton.current?.focus();
+      }
+    };
+    document.addEventListener('keydown', onKey);
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.removeEventListener('keydown', onKey);
+      document.body.style.overflow = '';
+    };
+  }, [open]);
+
+  const hidden = compact && !open;
   return (
-    <aside aria-label="Main navigation">
-      <Link href="/" className="logo" aria-label="COS Golf overview">
-        <span className="logo-mark">
+    <>
+      <header className="mobilebar">
+        <button
+          ref={menuButton}
+          type="button"
+          className="menubtn"
+          aria-label="Open menu"
+          aria-expanded={open}
+          aria-controls="sidenav"
+          onClick={() => setOpen(true)}
+        >
+          <span aria-hidden="true" />
+          <span aria-hidden="true" />
+          <span aria-hidden="true" />
+        </button>
+        <Link href="/" className="mobilelogo" aria-label="COS Golf overview">
           COS<span className="logo-dot" aria-hidden="true" />
-        </span>
-        <span className="logo-sub">GOLF</span>
-      </Link>
-      <nav>
-        {NAV.map((n) => (
-          <Link key={n.href} href={n.href} className={`nav${isActive(n.href) ? ' active' : ''}`} aria-current={isActive(n.href) ? 'page' : undefined} title={n.label}>
-            <span className="icon" aria-hidden="true">
-              {n.icon}
-            </span>
-            <span className="navtext">{n.label}</span>
-          </Link>
-        ))}
-      </nav>
-      <div className="asidebottom">
-        <div className="org">{storeName.toUpperCase()}</div>
-        <div className="who">
-          <span className="avatar" aria-hidden="true">
-            {userName.split(/\s+/).map((p) => p[0]).slice(0, 2).join('').toUpperCase()}
-          </span>
-          <span>
-            <b>{userName}</b>
-            <br />
-            {roleLabel}
-          </span>
-        </div>
-        {sharedLoginName ? (
-          <div className="working">
-            {sharedLoginName} login · <Link href="/who">Change person</Link>
-          </div>
-        ) : null}
-        <form action={signOut}>
-          <button className="signout" type="submit">
-            Sign out
+        </Link>
+        <span className="mobilebar-store">{storeName}</span>
+      </header>
+      {open ? <div className="navscrim" onClick={() => setOpen(false)} aria-hidden="true" /> : null}
+      <aside id="sidenav" aria-label="Main navigation" className={open ? 'open' : ''} inert={hidden || undefined} aria-hidden={hidden || undefined}>
+        {compact ? (
+          <button type="button" className="navclose" aria-label="Close menu" onClick={() => setOpen(false)}>
+            ✕
           </button>
-        </form>
-      </div>
-    </aside>
+        ) : null}
+        <Link href="/" className="logo" aria-label="COS Golf overview">
+          <span className="logo-mark">
+            COS<span className="logo-dot" aria-hidden="true" />
+          </span>
+          <span className="logo-sub">GOLF</span>
+        </Link>
+        <nav>
+          {NAV.map((n) => (
+            <Link key={n.href} href={n.href} className={`nav${isActive(n.href) ? ' active' : ''}`} aria-current={isActive(n.href) ? 'page' : undefined} title={n.label}>
+              <span className="icon" aria-hidden="true">
+                {n.icon}
+              </span>
+              <span className="navtext">{n.label}</span>
+            </Link>
+          ))}
+        </nav>
+        <div className="asidebottom">
+          <div className="org">{storeName.toUpperCase()}</div>
+          <div className="who">
+            <span className="avatar" aria-hidden="true">
+              {userName.split(/\s+/).map((p) => p[0]).slice(0, 2).join('').toUpperCase()}
+            </span>
+            <span>
+              <b>{userName}</b>
+              <br />
+              {roleLabel}
+            </span>
+          </div>
+          {sharedLoginName ? (
+            <div className="working">
+              {sharedLoginName} login · <Link href="/who">Change person</Link>
+            </div>
+          ) : null}
+          <form action={signOut}>
+            <button className="signout" type="submit">
+              Sign out
+            </button>
+          </form>
+        </div>
+      </aside>
+    </>
   );
 }
 

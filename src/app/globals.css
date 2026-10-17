@@ -82,7 +82,7 @@ p { color: #767d89; }
 .pill .count { font-size: 11px; opacity: .7; margin-left: 4px; }
 
 /* ── Tables ──────────────────────────────────────────────────────────── */
-.tablewrap { overflow-x: auto; }
+.tablewrap { overflow-x: auto; position: relative; }
 table { width: 100%; border-collapse: collapse; }
 th { text-align: left; font-size: 10px; letter-spacing: 1.2px; color: #999ea7; text-transform: uppercase; padding: 16px 12px; border-bottom: 1px solid var(--line); font-weight: 700; }
 td { padding: 19px 12px; border-bottom: 1px solid #eff1f4; vertical-align: top; }
@@ -189,14 +189,9 @@ details.section[open] { padding-bottom: 16px; }
 /* ── Responsive (from prototype) ─────────────────────────────────────── */
 @media (max-width: 1300px) { .grid { grid-template-columns: repeat(3, 1fr); } }
 @media (max-width: 950px) {
-  aside { width: 70px; padding: 20px 7px; }
-  .brand { font-size: 19px; padding: 0 6px; }
-  .subtitle, .navtext, .asidebottom .who, .asidebottom .org { display: none; }
-  .asidebottom { padding: 10px 0 0; border: 0; }
-  .signout { padding: 7px 4px; width: 100%; font-size: 10px; }
-  main { margin-left: 70px; padding: 20px; }
+  .subtitle { display: none; }
+  main { margin-left: 0; padding: 20px; }
   .grid { grid-template-columns: repeat(2, 1fr); }
-  .nav { justify-content: center; padding: 13px 0; }
   .fields, .fields.three, .split, .detailgrid.three { grid-template-columns: 1fr; }
   .field.wide { grid-column: auto; }
 }
@@ -278,7 +273,7 @@ details.section[open] { padding-bottom: 16px; }
 .spin { animation: cos-spin 0.8s linear infinite; }
 @keyframes cos-spin { to { transform: rotate(360deg); } }
 .asidebottom .who { margin-top: 10px; display: flex; align-items: center; }
-@media (max-width: 950px) { .asidebottom .who { display: none; } }
+
 
 /* ── Shared login: who's working ─────────────────────────────────────── */
 .whogrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 10px; margin-top: 14px; }
@@ -296,12 +291,7 @@ details.section[open] { padding-bottom: 16px; }
 .logo-mark { display: inline-flex; align-items: flex-end; font-size: 52px; font-weight: 800; letter-spacing: -2.5px; line-height: 0.95; }
 .logo-dot { width: 11px; height: 11px; border-radius: 50%; background: #1f7bff; margin: 0 0 7px 4px; flex: none; }
 .logo-sub { margin-top: 8px; font-size: 13px; font-weight: 600; letter-spacing: 9px; padding-left: 9px; color: #c9ced6; }
-@media (max-width: 950px) {
-  .logo { margin: 0 0 18px; }
-  .logo-mark { font-size: 20px; letter-spacing: -1px; }
-  .logo-dot { width: 5px; height: 5px; margin: 0 0 3px 2px; }
-  .logo-sub { font-size: 7px; letter-spacing: 3px; padding-left: 3px; margin-top: 3px; }
-}
+
 
 /* ── Returning customer picker ───────────────────────────────────────── */
 .picker { position: absolute; top: 100%; left: 0; right: 0; z-index: 30; list-style: none; margin: 4px 0 0; padding: 6px; background: #fff; border: 1px solid var(--line); border-radius: 12px; box-shadow: 0 16px 40px #0a122026; max-height: 300px; overflow: auto; }
@@ -467,3 +457,28 @@ details.section[open] { padding-bottom: 16px; }
 .perf .metric { min-width: 0; }
 .metric-money { font-size: clamp(20px, 5.5vw, 26px) !important; overflow-wrap: anywhere; }
 .perf-bar { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
+
+/* ── Phone / small tablet navigation: ☰ opens the full sidebar as a drawer ── */
+.mobilebar { display: none; }
+.navscrim, .navclose { display: none; }
+@media (max-width: 950px) {
+  .mobilebar {
+    display: flex; align-items: center; gap: 12px; position: sticky; top: 0; z-index: 20;
+    background: var(--green-dark); color: #fff; padding: 10px 14px; padding-top: max(10px, env(safe-area-inset-top));
+  }
+  .menubtn { width: 42px; height: 42px; border-radius: 10px; border: 1px solid #26324a; background: #16233a; display: grid; place-content: center; gap: 4px; padding: 0; }
+  .menubtn span { display: block; width: 18px; height: 2px; border-radius: 2px; background: #fff; }
+  .menubtn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .mobilelogo { display: inline-flex; align-items: flex-end; color: #fff; text-decoration: none; font-weight: 800; font-size: 22px; letter-spacing: -1px; line-height: 1; }
+  .mobilelogo .logo-dot { width: 6px; height: 6px; margin: 0 0 3px 3px; }
+  .mobilebar-store { margin-left: auto; font-size: 11px; letter-spacing: 1.5px; text-transform: uppercase; color: #a7b2c6; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 45vw; }
+  aside {
+    width: min(300px, 86vw); z-index: 40; transform: translateX(-102%); transition: transform .25s ease;
+    box-shadow: 0 0 40px #0008; overflow-y: auto; padding-top: max(24px, env(safe-area-inset-top));
+  }
+  aside.open { transform: none; }
+  .navscrim { display: block; position: fixed; inset: 0; background: #0a1220a6; z-index: 35; animation: scrim-in .2s ease; }
+  .navclose { display: grid; place-items: center; position: absolute; top: max(14px, env(safe-area-inset-top)); right: 12px; width: 36px; height: 36px; border-radius: 50%; border: 0; background: #1f2b40; color: #fff; font-size: 15px; }
+  .logo { margin: 6px 0 26px; }
+}
+@keyframes scrim-in { from { opacity: 0; } to { opacity: 1; } }
