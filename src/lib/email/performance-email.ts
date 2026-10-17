@@ -48,6 +48,36 @@ function section(title: string, body: string) {
   return `<tr><td style="padding:18px 26px 4px"><h2 style="font-size:16px;margin:0 0 10px;color:${INK}">${esc(title)}</h2>${body}</td></tr>`;
 }
 
+/** Pre-book stock received in the month, on-time rate by brand, and what's still due. Omitted when there's nothing to show. */
+function arrivalsHtml(p: Performance) {
+  const a = p.arrivals;
+  if (!a.receivedItems && !a.outstandingItems) return '';
+  const cell = (label: string, value: string, note: string, alert = false) =>
+    `<div style="display:inline-block;vertical-align:top;width:50%;max-width:147px;min-width:130px;box-sizing:border-box;padding:4px;text-align:left"><div style="border:1px solid ${alert ? '#f2c79a' : LINE};background:${alert ? '#fff8f0' : '#fff'};border-radius:10px;padding:10px 12px">
+<div style="font-size:11px;color:${MUTED}">${esc(label)}</div><div style="font-size:17px;font-weight:700;color:${INK};margin:2px 0">${esc(value)}</div><div style="font-size:11px;color:${MUTED}">${esc(note)}</div></div></div>`;
+  const brands = a.byBrand.length
+    ? `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="font-size:13px;margin-top:12px">
+<tr style="color:${MUTED};font-size:11px;text-transform:uppercase;letter-spacing:.5px"><td style="padding:4px 0">Brand</td><td align="right">Items</td><td align="right">Value</td><td align="right">On time</td><td align="right">Avg late</td></tr>
+${a.byBrand
+  .slice(0, 8)
+  .map(
+    (b) =>
+      `<tr><td style="padding:6px 0;border-top:1px solid ${LINE};color:${INK}"><b>${esc(b.brand)}</b></td><td align="right" style="border-top:1px solid ${LINE}">${b.items}</td><td align="right" style="border-top:1px solid ${LINE}">${esc(money(b.valuePence))}</td><td align="right" style="border-top:1px solid ${LINE};color:${b.onTimePct !== null && b.onTimePct < 75 ? '#a3322a' : INK}">${b.onTimePct === null ? '—' : `${b.onTimePct}%`}</td><td align="right" style="border-top:1px solid ${LINE};color:${MUTED}">${b.avgDaysLate === null ? '—' : `${b.avgDaysLate} days`}</td></tr>`,
+  )
+  .join('')}</table>`
+    : `<p style="font-size:13px;color:${MUTED};margin:12px 0 0">No pre-book stock arrived this month.</p>`;
+  const due = a.upcoming.length
+    ? `<div style="font-size:12px;color:${MUTED};margin-top:12px">Due in: ${a.upcoming
+        .slice(0, 3)
+        .map((m) => `<b style="color:${INK}">${esc(m.label)}</b> ${esc(money(m.valuePence))} (${m.items} items)`)
+        .join(' · ')}</div>`
+    : '';
+  return section(
+    'Pre-book arrivals',
+    `<div style="font-size:0;margin:0 -4px">${cell('Received', money(a.receivedValuePence), `${a.receivedItems} items at cost`)}${cell('On time', a.onTimePct === null ? '—' : `${a.onTimePct}%`, 'by expected date')}${cell('Still to arrive', money(a.outstandingValuePence), `${a.outstandingItems} items`)}${cell('Overdue', String(a.overdueLines), 'lines past date', a.overdueLines > 0)}</div>${brands}${due}`,
+  );
+}
+
 export function renderPerformanceEmail(org: Organisation, p: Performance, link: string) {
   const b = resolveBrand(org);
   const k = p.kpis;
@@ -77,6 +107,7 @@ ${p.turnaround
 ${section('Best-selling brands', rankRows(p.brands, accent, 'value'))}
 ${section('Best-selling products', rankRows(p.products, accent, 'count'))}
 ${section('Manufacturer turnaround', `<div style="font-size:12px;color:${MUTED};margin:-6px 0 8px">Days from order taken to arriving in store</div>${turnaround}`)}
+${arrivalsHtml(p)}
 ${section('Sales by team member', rankRows(p.team, accent, 'value'))}
 <tr><td style="padding:22px 26px 8px"><a href="${esc(link)}" style="display:inline-block;background:${accent};color:${b.accentText};text-decoration:none;padding:12px 20px;border-radius:${b.radius};font-weight:600;font-size:14px">Open Performance in COS</a></td></tr>
 <tr><td style="padding:8px 26px 24px;font-size:12px;color:${MUTED};line-height:1.6">The full figures are attached as a spreadsheet (CSV). You receive this because you're on the monthly report list in Store settings.</td></tr>
@@ -97,6 +128,15 @@ ${section('Sales by team member', rankRows(p.team, accent, 'value'))}
     '',
     'Manufacturer turnaround (order to in store):',
     ...p.turnaround.slice(0, 8).map((t) => `  ${t.brand}: ${t.avgDays} days average (${t.minDays}–${t.maxDays}), ${t.delayedPct}% delayed`),
+    ...(p.arrivals.receivedItems || p.arrivals.outstandingItems
+      ? [
+          '',
+          'Pre-book arrivals:',
+          `  Received: ${money(p.arrivals.receivedValuePence)} (${p.arrivals.receivedItems} items at cost)${p.arrivals.onTimePct !== null ? `, ${p.arrivals.onTimePct}% on time` : ''}`,
+          `  Still to arrive: ${money(p.arrivals.outstandingValuePence)} (${p.arrivals.outstandingItems} items), ${p.arrivals.overdueLines} overdue line${p.arrivals.overdueLines === 1 ? '' : 's'}`,
+          ...p.arrivals.byBrand.slice(0, 8).map((b) => `  ${b.brand}: ${b.items} items, ${money(b.valuePence)}${b.onTimePct !== null ? `, ${b.onTimePct}% on time` : ''}`),
+        ]
+      : []),
     '',
     `Open Performance in COS: ${link}`,
     'The full figures are attached as a CSV.',

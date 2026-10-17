@@ -621,3 +621,15 @@ describe('performance: pre-book arrivals', () => {
     expect(csv).toContain('Titleist,6,2800.00,100,');
   });
 });
+
+describe('monthly report: pre-book arrivals', () => {
+  it('includes the pre-book section when there is activity, and leaves it out when there is none', async () => {
+    const { getPerformance } = await import('@/lib/analytics');
+    const { renderPerformanceEmail } = await import('@/lib/email/performance-email');
+    const withActivity = renderPerformanceEmail(org, await getPerformance(org, 'all'), 'https://example.com');
+    expect(withActivity.html).toContain('Pre-book arrivals');
+    expect(withActivity.text).toContain('Pre-book arrivals:');
+    const quiet = renderPerformanceEmail(other, await getPerformance(other, 'all'), 'https://example.com');
+    expect(quiet.html).not.toContain('Pre-book arrivals');
+  });
+});
