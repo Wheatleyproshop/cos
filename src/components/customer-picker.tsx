@@ -3,7 +3,7 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import type { FormState } from '@/lib/action-utils';
 
-type Result = { id: string; name: string; email: string; phone: string; orders: number };
+type Result = { id: string; name: string; email: string; phone: string; orders: number; workshopJobs?: number };
 export type PickerDefaults = { customerId?: string; customerName?: string; email?: string; phone?: string };
 
 /**
@@ -116,6 +116,7 @@ export function CustomerPicker({ state, defaults }: { state: FormState; defaults
                   <small>
                     {[r.email, r.phone].filter(Boolean).join(' · ') || 'No contact details'}
                     {r.orders ? ` · ${r.orders} order${r.orders === 1 ? '' : 's'}` : ''}
+                    {r.workshopJobs ? ` · ${r.workshopJobs} workshop job${r.workshopJobs === 1 ? '' : 's'}` : ''}
                   </small>
                 </button>
               </li>

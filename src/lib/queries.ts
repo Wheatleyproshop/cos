@@ -14,6 +14,7 @@ import {
   payments,
   quotes,
   users,
+  workshopJobs,
   type Organisation,
   type OrderStatus,
 } from '@/db/schema';
@@ -315,6 +316,7 @@ export async function listQuotes(org: Organisation, opts: { q?: string; status?:
 export async function listCustomers(org: Organisation, qRaw?: string) {
   const q = (qRaw ?? '').trim().slice(0, 100);
   const t = likeTerm(q);
+  const digits = q.replace(/\D/g, '');
   return withTenant(org.id, async (tx) =>
     tx
       .select({
@@ -323,12 +325,23 @@ export async function listCustomers(org: Organisation, qRaw?: string) {
         totalOrders: sql<number>`(select count(*)::int from ${orders} o where o.customer_id = "customers"."id" and o.archived_at is null)`,
         lifetimePence: sql<number>`(select coalesce(sum(o.total_gross_pence),0)::int from ${orders} o where o.customer_id = "customers"."id" and o.archived_at is null)`,
         lastOrderAt: sql<Date | null>`(select max(o.created_at) from ${orders} o where o.customer_id = "customers"."id")`,
+        workshopJobs: sql<number>`(select count(*)::int from ${workshopJobs} w where w.customer_id = "customers"."id" and w.archived_at is null and w.status <> 'cancelled')`,
+        openWorkshopJobs: sql<number>`(select count(*)::int from ${workshopJobs} w where w.customer_id = "customers"."id" and w.archived_at is null and w.status in ('checked_in', 'in_progress', 'waiting_parts', 'ready'))`,
       })
       .from(customers)
       .where(
         and(
           isNull(customers.archivedAt),
-          q ? or(ilike(customers.name, t), ilike(customers.email, t), ilike(customers.phone, t)) : undefined,
+          q
+            ? or(
+                ilike(customers.name, t),
+                ilike(customers.email, t),
+                ilike(customers.phone, t),
+                digits.length >= 4 ? sql`regexp_replace(${customers.phone}, '\\D', '', 'g') like ${'%' + digits + '%'}` : undefined,
+                // A workshop job number (e.g. WS-1002) finds its customer.
+                sql`exists (select 1 from ${workshopJobs} w where w.customer_id = "customers"."id" and w.reference ilike ${t})`,
+              )
+            : undefined,
         ),
       )
       .orderBy(asc(customers.name))

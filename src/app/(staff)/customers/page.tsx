@@ -32,7 +32,7 @@ export default async function CustomersPage({ searchParams }: { searchParams: Pr
       />
       <div className="toolbar">
         <Suspense>
-          <SearchBox placeholder="Search by name, email or phone…" />
+          <SearchBox placeholder="Search by name, email, phone or workshop job number…" />
         </Suspense>
       </div>
       <div className="panel tablewrap">
@@ -44,6 +44,7 @@ export default async function CustomersPage({ searchParams }: { searchParams: Pr
               <th>Active orders</th>
               <th>Total orders</th>
               <th>Lifetime value</th>
+              <th>Workshop</th>
               <th>Last order</th>
             </tr>
           </thead>
@@ -63,13 +64,14 @@ export default async function CustomersPage({ searchParams }: { searchParams: Pr
                   <td>
                     <b>{money(r.lifetimePence)}</b>
                   </td>
+                  <td>{r.workshopJobs ? `${r.workshopJobs} job${r.workshopJobs === 1 ? '' : 's'}${r.openWorkshopJobs ? ` (${r.openWorkshopJobs} open)` : ''}` : '—'}</td>
                   <td>{r.lastOrderAt ? stamp(r.lastOrderAt, staff.org.timezone) : '—'}</td>
                 </RowLink>
               ))
             ) : (
               <tr>
-                <td colSpan={6} className="empty">
-                  {q ? `No customers match “${q}”.` : 'Customers are added automatically when you create an order or quote.'}
+                <td colSpan={7} className="empty">
+                  {q ? `No customers match “${q}”.` : 'Customers are added automatically when you create an order or quote, or check clubs in to the workshop.'}
                 </td>
               </tr>
             )}

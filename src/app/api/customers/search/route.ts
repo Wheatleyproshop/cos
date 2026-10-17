@@ -3,7 +3,7 @@ import { withTenant } from '@/db';
 import { customers } from '@/db/schema';
 import { getStaff } from '@/lib/auth';
 
-/** Typeahead for the new order form: returning customers by name, email or phone. */
+/** Typeahead for new orders, quotes, fittings and workshop check-ins: returning customers by name, email or phone. */
 export async function GET(req: Request) {
   const staff = await getStaff();
   if (!staff || staff.needsMember) return new Response('Unauthorised', { status: 401 });
@@ -19,6 +19,7 @@ export async function GET(req: Request) {
         email: customers.email,
         phone: customers.phone,
         orders: sql<number>`(select count(*)::int from orders o where o.customer_id = "customers"."id" and o.archived_at is null)`,
+        workshopJobs: sql<number>`(select count(*)::int from workshop_jobs w where w.customer_id = "customers"."id" and w.archived_at is null and w.status <> 'cancelled')`,
       })
       .from(customers)
       .where(
