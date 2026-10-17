@@ -820,4 +820,19 @@ describe('full export', () => {
     expect(data.workshopJobs.every((j) => j.organisationId === org.id)).toBe(true);
     expect(JSON.stringify(data.users)).not.toContain('passwordHash');
   });
+
+  it('includes the Custom Fitting catalogue with edited prices, and saved fitting builds', async () => {
+    const { buildExport, EXPORT_VERSION } = await import('@/lib/services/backups');
+    const data = await withTenant(org.id, (tx) => buildExport(tx, org.id));
+    expect(EXPORT_VERSION).toBe(2);
+    expect(data.catalogue.brands.length).toBeGreaterThan(0);
+    expect(data.catalogue.productModels.length).toBeGreaterThan(0);
+    expect(data.catalogue.components.length).toBeGreaterThan(0);
+    expect(data.catalogue.componentCategories.length).toBeGreaterThan(0);
+    // The head whose price a manager edited earlier keeps the edited price.
+    expect(data.catalogue.productModels.some((m) => m.basePricePence === 29800)).toBe(true);
+    expect(data.configurationQuotes.length).toBeGreaterThan(0);
+    // Never another shop's catalogue.
+    expect(data.catalogue.brands.every((b) => b.organisationId === org.id)).toBe(true);
+  });
 });

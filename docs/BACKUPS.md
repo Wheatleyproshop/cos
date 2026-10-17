@@ -10,7 +10,8 @@
 | Dropbox export | Pro | Nightly snapshot uploaded to the retailer's Dropbox | Adapter built; OAuth connect flow to do |
 
 ## Snapshot format
-`{ format: "cos-export", version: 1, exportedAt, organisation, users (no password hashes), customers, quotes, orders, payments, messages, attachments (metadata), auditEvents }`. Attachments' binary files stay in object storage under `orgs/{orgId}/…`.
+`{ format: "cos-export", version: 2, exportedAt, organisation, users (no password hashes), customers, quotes, orders, payments, messages, attachments (metadata), auditEvents, printBalls, supplierAccounts, prebooks, prebookLines, workshopJobs, workshopItems, catalogue: { brands, productModels, componentCategories, components, modelComponentRules }, configurationQuotes, configurationQuoteItems }`.
+Version 2 added the Custom Fitting catalogue and saved fitting builds; a version 1 file has the same shape minus those keys (and the newer pre-book, account and workshop tables). Attachments' binary files stay in object storage under `orgs/{orgId}/…`.
 
 Every export and backup is itself recorded on the ledger (`data_exported`, `backup_completed`, `backup_failed`), and runs are listed in **Store settings → Backups & export**.
 

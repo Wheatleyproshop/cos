@@ -2,6 +2,13 @@ import { and, eq, getTableColumns } from 'drizzle-orm';
 import { withTenant, type DB } from '@/db';
 import {
   attachments,
+  brands,
+  componentCategories,
+  components,
+  configurationQuoteItems,
+  configurationQuotes,
+  modelComponentRules,
+  productModels,
   auditEvents,
   backupDestinations,
   backupRuns,
@@ -27,7 +34,8 @@ import { storage } from '../storage';
 import { decryptSecret } from '../tokens';
 import { ServiceError } from './common';
 
-export const EXPORT_VERSION = 1;
+/** 2: adds the Custom Fitting catalogue and saved fitting builds (additive; version 1 files are a subset). */
+export const EXPORT_VERSION = 2;
 
 /** Full, portable snapshot of one organisation's data (no secrets). */
 export async function buildExport(tx: DB, orgId: string) {
@@ -53,6 +61,16 @@ export async function buildExport(tx: DB, orgId: string) {
     prebookLines: await tx.select().from(prebookLines),
     workshopJobs: await tx.select().from(workshopJobs),
     workshopItems: await tx.select().from(workshopItems),
+    // Custom Fitting catalogue (including prices the shop has edited) and saved fitting builds.
+    catalogue: {
+      brands: await tx.select().from(brands),
+      productModels: await tx.select().from(productModels),
+      componentCategories: await tx.select().from(componentCategories),
+      components: await tx.select().from(components),
+      modelComponentRules: await tx.select().from(modelComponentRules),
+    },
+    configurationQuotes: await tx.select().from(configurationQuotes),
+    configurationQuoteItems: await tx.select().from(configurationQuoteItems),
   };
 }
 
