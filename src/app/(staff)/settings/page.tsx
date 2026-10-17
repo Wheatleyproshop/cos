@@ -172,12 +172,12 @@ export default async function SettingsPage() {
         <div className="settingsrow">
           <div>
             <b>Download a full export</b>
-            <div className="muted">Every customer, order, quote, payment, email and audit event as JSON — or orders as CSV for spreadsheets.</div>
+            <div className="muted">Every customer, order, quote, payment, email and audit event as JSON — or orders and workshop jobs as CSV for spreadsheets.</div>
           </div>
           {admin ? (
             <span style={{ display: 'flex', gap: 8 }}>
               <a className="btn small" href="/api/export?format=csv">
-                Orders CSV
+                Orders &amp; workshop CSV
               </a>
               <a className="btn small" href="/api/export">
                 Full JSON
