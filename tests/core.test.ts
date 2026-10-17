@@ -810,3 +810,14 @@ describe('workshop search', () => {
     expect((await ws.listJobs(org.id, { q: '%' })).length).toBe(0);
   });
 });
+
+describe('full export', () => {
+  it('includes workshop jobs and their clubs, and never password hashes', async () => {
+    const { buildExport } = await import('@/lib/services/backups');
+    const data = await withTenant(org.id, (tx) => buildExport(tx, org.id));
+    expect(data.workshopJobs.length).toBeGreaterThan(0);
+    expect(data.workshopItems.length).toBeGreaterThan(0);
+    expect(data.workshopJobs.every((j) => j.organisationId === org.id)).toBe(true);
+    expect(JSON.stringify(data.users)).not.toContain('passwordHash');
+  });
+});
