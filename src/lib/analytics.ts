@@ -1,6 +1,6 @@
 import { and, eq, gte, inArray, isNull, lt, sql } from 'drizzle-orm';
 import { withTenant } from '@/db';
-import { auditEvents, orders, prebookLines, prebooks, quotes, users, type Organisation } from '@/db/schema';
+import { auditEvents, orders, prebookLines, prebooks, quotes, users, workshopItems, workshopJobs, type Organisation } from '@/db/schema';
 import { asBallPrintSpec } from './ball-print';
 import { fitSpec } from './fit-spec';
 import { CLUB_CATEGORIES } from './fitting-rules';
@@ -40,6 +40,83 @@ export type Arrivals = {
   overdueLines: number;
   upcoming: { month: string; label: string; items: number; valuePence: number }[];
 };
+
+export type WorkshopPerf = {
+  checkedIn: number;
+  clubs: number;
+  valuePence: number;
+  finished: number;
+  avgTurnaroundDays: number | null;
+  onTimePct: number | null;
+  waitedForPartsPct: number | null;
+  byWork: Ranked[];
+  byStaff: Ranked[];
+  openNow: number;
+  overdueNow: number;
+  readyUncollectedNow: number;
+  readyValueNow: number;
+};
+
+/**
+ * Workshop jobs checked in during the period (clubs, value, work types, who took them), jobs
+ * finished in the period (turnaround, on time against the date first promised, parts delays),
+ * and what's in the workshop now.
+ */
+async function workshopPerformance(orgId: string, from: Date, end: Date, inclusiveEnd: boolean, tz: string, now: Date): Promise<WorkshopPerf> {
+  return withTenant(orgId, async (tx) => {
+    const jobs = await tx.select().from(workshopJobs).where(isNull(workshopJobs.archivedAt));
+    const items = await tx.select().from(workshopItems).where(isNull(workshopItems.removedAt));
+    const staffRows = await tx.select({ id: users.id, name: users.name }).from(users);
+    const events = await tx
+      .select({ entityId: auditEvents.entityId, eventType: auditEvents.eventType, newValueJson: auditEvents.newValueJson })
+      .from(auditEvents)
+      .where(and(eq(auditEvents.entityType, 'workshop_job'), inArray(auditEvents.eventType, ['workshop_job_created', 'workshop_status_changed'])));
+    const inWindow = (d: Date | null) => Boolean(d && d >= from && (inclusiveEnd ? d <= end : d < end));
+    const itemsByJob = new Map<string, typeof items>();
+    for (const i of items) itemsByJob.set(i.jobId, [...(itemsByJob.get(i.jobId) ?? []), i]);
+    const promised = new Map<string, string | null>();
+    const waited = new Set<string>();
+    for (const e of events) {
+      if (!e.entityId) continue;
+      const n = (e.newValueJson ?? {}) as { etaDate?: string | null; status?: string };
+      if (e.eventType === 'workshop_job_created') promised.set(e.entityId, n.etaDate ?? null);
+      if (e.eventType === 'workshop_status_changed' && n.status === 'waiting_parts') waited.add(e.entityId);
+    }
+
+    const checkedIn = jobs.filter((j) => j.status !== 'cancelled' && inWindow(j.createdAt));
+    const lines = checkedIn.flatMap((j) => itemsByJob.get(j.id) ?? []);
+    const names = new Map(staffRows.map((u) => [u.id, u.name]));
+    const byWork = rank(lines.map((i) => ({ name: i.work, valuePence: i.pricePence, qty: i.quantity })), 12);
+    const byStaff = rank(
+      checkedIn.map((j) => ({ name: names.get(j.takenByUserId) ?? 'Unknown', valuePence: (itemsByJob.get(j.id) ?? []).reduce((s, i) => s + i.pricePence, 0), qty: 1 })),
+      10,
+    );
+
+    const finished = jobs.filter((j) => inWindow(j.readyAt));
+    const turn = finished.map((j) => days(j.createdAt, j.readyAt!));
+    const dated = finished.filter((j) => promised.get(j.id) ?? j.etaDate);
+    const onTime = dated.filter((j) => j.readyAt!.toLocaleDateString('en-CA', { timeZone: tz }) <= (promised.get(j.id) ?? j.etaDate)!);
+
+    const today = now.toLocaleDateString('en-CA', { timeZone: tz });
+    const open = jobs.filter((j) => ['checked_in', 'in_progress', 'waiting_parts'].includes(j.status));
+    const ready = jobs.filter((j) => j.status === 'ready');
+    return {
+      checkedIn: checkedIn.length,
+      clubs: lines.reduce((s, i) => s + i.quantity, 0),
+      valuePence: lines.reduce((s, i) => s + i.pricePence, 0),
+      finished: finished.length,
+      avgTurnaroundDays: turn.length ? round1(turn.reduce((s, x) => s + x, 0) / turn.length) : null,
+      onTimePct: dated.length ? Math.round((onTime.length / dated.length) * 100) : null,
+      waitedForPartsPct: finished.length ? Math.round((finished.filter((j) => waited.has(j.id)).length / finished.length) * 100) : null,
+      byWork,
+      byStaff,
+      openNow: open.length,
+      overdueNow: open.filter((j) => j.etaDate && j.etaDate < today).length,
+      readyUncollectedNow: ready.length,
+      readyValueNow: ready.reduce((s, j) => s + (itemsByJob.get(j.id) ?? []).reduce((t, i) => t + i.pricePence, 0), 0),
+    };
+  });
+}
 
 type ReceivedChange = { lineId?: string; from: number; to: number; unitCostPence?: number; expected?: string | null };
 
@@ -337,12 +414,16 @@ export async function getPerformance(org: Organisation, period: PeriodKey | Repo
     }))
     .sort((a, b) => b.orders - a.orders || a.avgDays - b.avgDays);
 
-  const arrivals = await prebookArrivals(org.id, from, end, !range, org.timezone, now);
+  const [arrivals, workshop] = await Promise.all([
+    prebookArrivals(org.id, from, end, !range, org.timezone, now),
+    workshopPerformance(org.id, from, end, !range, org.timezone, now),
+  ]);
 
   return {
     period: p,
     from,
     arrivals,
+    workshop,
     kpis: {
       valuePence: value,
       valueChange: change(value, prevValue),

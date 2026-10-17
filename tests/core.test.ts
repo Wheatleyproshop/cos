@@ -750,3 +750,20 @@ describe('workshop customer link', () => {
     expect((await findWorkshopByToken(token!))!.job.delayReason).toBe('');
   });
 });
+
+describe('performance: workshop', () => {
+  it('counts jobs, clubs, value and work types, and measures turnaround and on-time against the promised date', async () => {
+    const { getPerformance } = await import('@/lib/analytics');
+    const w = (await getPerformance(org, 'all')).workshop;
+    expect(w.checkedIn).toBeGreaterThanOrEqual(3);
+    expect(w.clubs).toBeGreaterThanOrEqual(w.checkedIn);
+    expect(w.byWork.map((r) => r.name)).toEqual(expect.arrayContaining(['Regrip', 'Reshaft']));
+    expect(w.finished).toBeGreaterThanOrEqual(2);
+    expect(w.avgTurnaroundDays).not.toBeNull();
+    // Jobs finished well before their promised dates count as on time.
+    expect(w.onTimePct).toBe(100);
+    expect(w.waitedForPartsPct).toBeGreaterThan(0);
+    const csv = (await import('@/lib/performance-report')).performanceCsv(org, await getPerformance(org, 'all'), '2026-10-17');
+    expect(csv).toContain('Workshop work done');
+  });
+});

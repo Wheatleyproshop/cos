@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { PERIODS, type Arrivals, type Bucket, type Performance, type Ranked, type Turnaround } from '@/lib/analytics';
+import { PERIODS, type Arrivals, type Bucket, type Performance, type Ranked, type Turnaround, type WorkshopPerf } from '@/lib/analytics';
 import { money } from '@/lib/format';
 
 const short = (pence: number) =>
@@ -54,7 +54,7 @@ function TrendChart({ data }: { data: Bucket[] }) {
   );
 }
 
-function RankBars({ rows, by = 'value', empty }: { rows: Ranked[]; by?: 'value' | 'count'; empty: string }) {
+function RankBars({ rows, by = 'value', empty, unit = 'sold' }: { rows: Ranked[]; by?: 'value' | 'count'; empty: string; unit?: string }) {
   if (!rows.length) return <p className="muted">{empty}</p>;
   const max = Math.max(...rows.map((r) => (by === 'value' ? r.valuePence : r.count)), 1);
   return (
@@ -74,7 +74,8 @@ function RankBars({ rows, by = 'value', empty }: { rows: Ranked[]; by?: 'value' 
               <div className="rb-fill" style={{ width: `${Math.max(3, (v / max) * 100)}%` }} />
             </div>
             <small>
-              {r.count} sold{by === 'count' ? ` · ${money(r.valuePence)}` : ''}
+              {r.count} {unit}
+              {by === 'count' ? ` · ${money(r.valuePence)}` : ''}
             </small>
           </li>
         );
@@ -288,6 +289,71 @@ function PrebookArrivals({ a, period }: { a: Arrivals; period: string }) {
   );
 }
 
+function WorkshopSection({ w, period }: { w: WorkshopPerf; period: string }) {
+  if (!w.checkedIn && !w.finished && !w.openNow && !w.readyUncollectedNow) {
+    return (
+      <section className="panel">
+        <div className="panel-head">
+          <h2>Workshop</h2>
+          <Link href="/workshop" className="muted">
+            Workshop page
+          </Link>
+        </div>
+        <p className="muted">No workshop jobs in this period yet.</p>
+      </section>
+    );
+  }
+  return (
+    <section className="panel">
+      <div className="panel-head">
+        <h2>Workshop</h2>
+        <Link href="/workshop" className="muted">
+          Workshop page
+        </Link>
+      </div>
+      <div className="arr-kpis">
+        <div>
+          <small>Checked in ({period})</small>
+          <b>{w.checkedIn}</b>
+          <span>
+            {w.clubs} clubs · {money(w.valuePence)}
+          </span>
+        </div>
+        <div>
+          <small>Finished</small>
+          <b>{w.finished}</b>
+          <span>{w.avgTurnaroundDays === null ? 'no jobs finished' : `${w.avgTurnaroundDays} days on average`}</span>
+        </div>
+        <div>
+          <small>Ready on time</small>
+          <b>{w.onTimePct === null ? '—' : `${w.onTimePct}%`}</b>
+          <span>
+            by the date promised
+            {w.waitedForPartsPct !== null ? ` · ${w.waitedForPartsPct}% waited for parts` : ''}
+          </span>
+        </div>
+        <div className={w.overdueNow ? 'alert' : ''}>
+          <small>In the workshop now</small>
+          <b>{w.openNow}</b>
+          <span>
+            {w.overdueNow} overdue · {w.readyUncollectedNow} ready to collect ({money(w.readyValueNow)})
+          </span>
+        </div>
+      </div>
+      <div className="perf-grid" style={{ marginTop: 16 }}>
+        <div>
+          <h3>Work done</h3>
+          <RankBars rows={w.byWork} by="count" unit="clubs" empty="No workshop jobs checked in this period." />
+        </div>
+        <div>
+          <h3>Checked in by</h3>
+          <RankBars rows={w.byStaff} unit="jobs" empty="No workshop jobs checked in this period." />
+        </div>
+      </div>
+    </section>
+  );
+}
+
 export function PerformanceView({ data, canExport }: { data: Performance; canExport?: boolean }) {
   const k = data.kpis;
   const per = data.period.label.toLowerCase();
@@ -376,6 +442,8 @@ export function PerformanceView({ data, canExport }: { data: Performance; canExp
       </section>
 
       <PrebookArrivals a={data.arrivals} period={per} />
+
+      <WorkshopSection w={data.workshop} period={per} />
 
       <div className="perf-grid">
         <section className="panel">

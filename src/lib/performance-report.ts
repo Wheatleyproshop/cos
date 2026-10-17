@@ -78,6 +78,22 @@ export function performanceCsv(org: Pick<Organisation, 'storeName'>, p: Performa
   ]);
   section('Pre-book stock received by brand', ['Brand', 'Items', 'Value at cost (GBP)', 'On time (%)', 'Average days late'], a.byBrand.map((b) => [b.brand, b.items, gbp(b.valuePence), b.onTimePct ?? '', b.avgDaysLate ?? '']));
   section('Pre-book stock due in', ['Month', 'Items', 'Value at cost (GBP)'], a.upcoming.map((m) => [m.label, m.items, gbp(m.valuePence)]));
+  const w = p.workshop;
+  section('Workshop', ['Measure', 'Value'], [
+    ['Jobs checked in', w.checkedIn],
+    ['Clubs checked in', w.clubs],
+    ['Workshop value (GBP)', gbp(w.valuePence)],
+    ['Jobs finished', w.finished],
+    ['Average turnaround (days, check-in to ready)', w.avgTurnaroundDays ?? ''],
+    ['Ready by the date promised (%)', w.onTimePct ?? ''],
+    ['Finished jobs that waited for parts (%)', w.waitedForPartsPct ?? ''],
+    ['In the workshop (now)', w.openNow],
+    ['Overdue (now)', w.overdueNow],
+    ['Ready, not collected (now)', w.readyUncollectedNow],
+    ['Ready, not collected value (GBP, now)', gbp(w.readyValueNow)],
+  ]);
+  section('Workshop work done', ['Work', 'Clubs', 'Value (GBP)'], w.byWork.map((r) => [r.name, r.count, gbp(r.valuePence)]));
+  section('Workshop jobs by team member', ['Team member', 'Jobs', 'Value (GBP)'], w.byStaff.map((r) => [r.name, r.count, gbp(r.valuePence)]));
   section('Order mix', ['Type', 'Orders', 'Value (GBP)'], p.mix.map((r) => [r.name, r.count, gbp(r.valuePence)]));
   section('Sales by team member', ['Team member', 'Orders', 'Value (GBP)'], p.team.map((r) => [r.name, r.count, gbp(r.valuePence)]));
   // BOM so Excel opens £ signs and accents correctly.
