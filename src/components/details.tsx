@@ -21,7 +21,7 @@ import { templateName } from '@/lib/audit';
 import { PAYMENT_KIND_LABELS } from '@/db/schema';
 import { asBallPrintSpec } from '@/lib/ball-print';
 import { bytes, longDate, money, niceDate, penceToInput, stamp, titleCase } from '@/lib/format';
-import { getCustomerDetail, getOrderDetail, getQuoteDetail } from '@/lib/queries';
+import { getBrandOptions, getCustomerDetail, getOrderDetail, getQuoteDetail } from '@/lib/queries';
 import { canTransition, DEFAULT_WORKFLOW, QUOTE_STATUS_LABELS, statusLabel } from '@/lib/status';
 import { CancelButton } from './cancel-button';
 import { CloseButton } from './chrome';
@@ -65,7 +65,7 @@ function BallProof({ quoteId, spec }: { quoteId: string | null; spec: unknown })
 /* ── Order ───────────────────────────────────────────────────────────── */
 
 export async function OrderDetail({ staff, number, inModal }: { staff: Staff; number: string; inModal: boolean }) {
-  const d = await getOrderDetail(staff.org, decodeURIComponent(number));
+  const [d, brands] = await Promise.all([getOrderDetail(staff.org, decodeURIComponent(number)), getBrandOptions(staff.organisationId)]);
   if (!d) notFound();
   const { order: o, customer: c } = d;
   const tz = staff.org.timezone;
@@ -135,7 +135,7 @@ export async function OrderDetail({ staff, number, inModal }: { staff: Staff; nu
 
       {!o.archivedAt ? (
         <>
-          <h3>Progress</h3>
+          <h3>{o.status === 'place_order' ? 'Place this order' : 'Progress'}</h3>
           <ProgressForm
             key={`${o.status}-${o.etaDate}-${o.supplierReference}`}
             action={updateProgressAction.bind(null, o.id)}
@@ -257,9 +257,10 @@ export async function OrderDetail({ staff, number, inModal }: { staff: Staff; nu
           <EditOrderForm
             action={editOrderAction.bind(null, o.id)}
             values={{
-              brand: o.brand, product: o.product, sku: o.sku, specificationText: o.specificationText, total: penceToInput(o.totalGrossPence),
+              brand: o.brand, category: o.category, product: o.product, sku: o.sku, specificationText: o.specificationText, total: penceToInput(o.totalGrossPence),
               supplier: o.supplier, supplierNotes: o.supplierNotes, internalNotes: o.internalNotes,
             }}
+            brands={brands}
           />
         </details>
       ) : null}
@@ -289,7 +290,7 @@ export async function OrderDetail({ staff, number, inModal }: { staff: Staff; nu
 /* ── Quote ───────────────────────────────────────────────────────────── */
 
 export async function QuoteDetail({ staff, number, inModal }: { staff: Staff; number: string; inModal: boolean }) {
-  const d = await getQuoteDetail(staff.org, decodeURIComponent(number));
+  const [d, brands] = await Promise.all([getQuoteDetail(staff.org, decodeURIComponent(number)), getBrandOptions(staff.organisationId)]);
   if (!d) notFound();
   const { quote: q, customer: c } = d;
   const tz = staff.org.timezone;
@@ -364,10 +365,11 @@ export async function QuoteDetail({ staff, number, inModal }: { staff: Staff; nu
             <EditQuoteForm
               action={editQuoteAction.bind(null, q.id)}
               values={{
-                brand: q.brand, product: q.product, sku: q.sku, specificationText: q.specificationText, total: penceToInput(q.totalGrossPence),
+                brand: q.brand, category: q.category, product: q.product, sku: q.sku, specificationText: q.specificationText, total: penceToInput(q.totalGrossPence),
                 deposit: penceToInput(q.depositRequiredPence), estimatedLeadTime: q.estimatedLeadTime, validUntil: q.validUntil ?? '',
                 internalNotes: q.internalNotes,
               }}
+              brands={brands}
             />
           </details>
         </>
@@ -428,6 +430,7 @@ export async function NewRequest({
     }
   }
   const mode = params.mode === 'quote' ? 'quote' : 'order';
+  const brands = await getBrandOptions(staff.organisationId);
   return (
     <>
       <div className="modalhead">
@@ -443,6 +446,7 @@ export async function NewRequest({
         canSuppress={hasRole(staff, 'manager')}
         initialMode={mode}
         defaults={defaults}
+        brands={brands}
         cancel={<CancelLink inModal={inModal} />}
       />
     </>

@@ -4,13 +4,13 @@ import { FILTERS, type FilterKey, type WorkRow } from '@/lib/queries';
 import { SearchBox } from './chrome';
 import { WorkTable } from './views';
 
-const VALID = new Set<string>([...FILTERS.map((f) => f.key), 'active', 'awaiting', 'overdue', 'archived']);
+const VALID = new Set<string>([...FILTERS.map((f) => f.key), 'active', 'awaiting', 'placed', 'overdue', 'archived']);
 
 export function parseFilter(v: string | undefined, fallback: FilterKey = 'all'): FilterKey {
   return v && VALID.has(v) ? (v as FilterKey) : fallback;
 }
 
-const EXTRA_LABELS: Record<string, string> = { active: 'Active', awaiting: 'Awaiting supplier', overdue: 'Delayed / overdue', archived: 'Archived' };
+const EXTRA_LABELS: Record<string, string> = { active: 'Active', awaiting: 'Awaiting supplier', placed: 'Placed (on order)', overdue: 'Delayed / overdue', archived: 'Archived' };
 
 export function WorkList({
   base,

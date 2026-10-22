@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { OrderBoard } from '@/components/order-board';
 import { PerformanceView } from '@/components/performance';
 import { PageHeader } from '@/components/views';
 import { parseFilter, WorkList } from '@/components/work-list';
@@ -85,6 +86,7 @@ export default async function Overview({ searchParams }: { searchParams: SP }) {
     <>
       <PageHeader staff={staff} title={greeting(staff.org.timezone)} sub="Your customer orders, beautifully organised." />
       <ViewTabs view="orders" />
+      {filter === 'all' && !q ? <OrderBoard rows={all} today={today} /> : null}
       <div className="grid">
         {cards.map((c) => (
           <Link key={c.key} href={`/?filter=${c.key}`} className={`metric${c.alert ? ' alert' : ''}`} scroll={false}>

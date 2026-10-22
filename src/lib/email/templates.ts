@@ -42,6 +42,8 @@ export type EmailContext = {
   fit?: FitSpec | null;
   /** 'print' = personalised balls from stock sent to the printer, not ordered from a manufacturer. */
   journey?: 'supplier' | 'print';
+  /** Order placed but the item is out of stock at the manufacturer (back order). */
+  outOfStock?: boolean;
 };
 
 export type RenderedEmail = { subject: string; html: string; text: string };
@@ -173,16 +175,32 @@ export function renderEmail(type: EmailAutomationKey, ctx: EmailContext): Render
   const print = ctx.journey === 'print';
   switch (type) {
     case 'order_confirmation': {
+      const backorder = !print && ctx.outOfStock;
+      const intro = print
+        ? ['Thank you for approving your proof. Your personalised golf balls have gone into print, and we’ll let you know as soon as they’re ready to collect.']
+        : backorder
+          ? [
+              `Thank you for your order. We’ve placed it with ${ctx.brand}, but it’s currently out of stock with them, so it’s on back order.`,
+              ctx.etaDate ? 'Here’s when they expect to have it. We’ll keep you updated and let you know as soon as it arrives in store.' : 'We’ll let you know as soon as they confirm a delivery date, and again when it arrives in store.',
+            ]
+          : [`Thank you for your order. We’ve placed it with ${ctx.brand}, and we’ll let you know as soon as it arrives in store.`];
+      if (backorder && ctx.etaReason) intro.push(ctx.etaReason);
+      const etaRow = { label: print ? 'Estimated ready date' : backorder ? 'Expected from the manufacturer' : 'Estimated arrival', value: ctx.etaDate ? longDate(ctx.etaDate) : 'To be confirmed' };
       const r = layout(ctx, {
-        preheader: print ? 'Your personalised golf balls have gone into print.' : `Your ${ctx.brand} order is confirmed.`,
-        heading: print ? 'Your golf balls have gone into print' : 'Your order is confirmed',
-        intro: print
-          ? ['Thank you for approving your proof. Your personalised golf balls have gone into print, and we’ll let you know as soon as they’re ready to collect.']
-          : ['Thank you for your order. It has been placed with the manufacturer, and we’ll let you know as soon as it arrives in store.'],
-        rows: [...commercialRows(ctx), { label: print ? 'Estimated ready date' : 'Estimated arrival', value: longDate(ctx.etaDate) }],
+        preheader: print ? 'Your personalised golf balls have gone into print.' : backorder ? `Your ${ctx.brand} order is placed — currently on back order.` : `Your ${ctx.brand} order has been placed.`,
+        heading: print ? 'Your golf balls have gone into print' : backorder ? 'Your order is placed — on back order' : 'Your order has been placed',
+        intro,
+        rows: [...commercialRows(ctx), etaRow],
         cta: ctx.actionUrl ? { label: 'Track your order', url: ctx.actionUrl } : undefined,
       });
-      return { subject: print ? `Your golf balls have gone into print (${ctx.reference})` : `Order confirmed — ${ctx.brand} ${ctx.product} (${ctx.reference})`, ...r };
+      return {
+        subject: print
+          ? `Your golf balls have gone into print (${ctx.reference})`
+          : backorder
+            ? `Your order is placed — ${ctx.brand} ${ctx.product} is on back order (${ctx.reference})`
+            : `Your order has been placed — ${ctx.brand} ${ctx.product} (${ctx.reference})`,
+        ...r,
+      };
     }
     case 'quote_approval': {
       const rows: Block[] = [{ label: 'Price (incl. VAT)', value: money(ctx.totalPence) }];

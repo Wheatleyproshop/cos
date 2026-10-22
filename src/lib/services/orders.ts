@@ -6,6 +6,7 @@ import { dispatchMessages, enqueueEmail } from '../email/outbox';
 import type { EmailContext } from '../email/templates';
 import { ALLOWED_UPLOAD_TYPES, MAX_UPLOAD_BYTES, storage } from '../storage';
 import { fitSpec } from '../fit-spec';
+import { composeSpec } from '../order-details';
 import { canTransition, journeyFor, statusLabel } from '../status';
 import { newToken } from '../tokens';
 import {
@@ -50,13 +51,15 @@ export function orderEmailContext(o: Order, c: Customer, t: PaymentTotals, actio
   };
 }
 
-/** Creates the order (and customer if new), records any deposit and queues the confirmation. */
-export async function createOrder(ctx: Ctx, raw: unknown, opts: { notify?: boolean } = {}) {
+/**
+ * Creates the order (and customer if new) on the order pad as "To place", and records any deposit.
+ * The customer isn't emailed yet: they hear from us when the order is placed with the supplier.
+ */
+export async function createOrder(ctx: Ctx, raw: unknown) {
   if (!ctx.userId) throw new ServiceError('Orders must be taken by a signed-in staff member.');
   const input = parse(orderCreateSchema, raw);
-  const notify = opts.notify !== false || !atLeast(ctx, 'manager');
 
-  const { order, messageId } = await withTenant(ctx.org.id, async (tx) => {
+  const order = await withTenant(ctx.org.id, async (tx) => {
     const customer = await findOrCreateCustomer(tx, ctx, { name: input.customerName, email: input.email, phone: input.phone, customerId: input.customerId });
     const orderNumber = await nextNumber(tx, ctx.org.id, 'order');
     const [order] = await tx
@@ -67,10 +70,11 @@ export async function createOrder(ctx: Ctx, raw: unknown, opts: { notify?: boole
         customerId: customer.id,
         status: 'place_order',
         brand: input.brand,
+        category: input.category,
         product: input.product,
         sku: input.sku,
         supplier: input.brand,
-        specificationText: input.specificationText,
+        specificationText: composeSpec({ ...input, notes: input.specificationText }),
         totalGrossPence: input.totalGrossPence,
         etaDate: input.etaDate,
         supplierReference: input.supplierReference,
@@ -107,21 +111,8 @@ export async function createOrder(ctx: Ctx, raw: unknown, opts: { notify?: boole
       await insertPayment(tx, ctx, order.id, { kind: 'deposit', amountPence: input.depositPence, method: input.depositMethod, reference: '' });
     }
 
-    const link = await issueTrackingLink(tx, ctx.org.id, order.id);
-    const messageId = await enqueueEmail(tx, {
-      org: ctx.org,
-      template: 'order_confirmation',
-      recipient: customer.email,
-      customerId: customer.id,
-      orderId: order.id,
-      context: orderEmailContext(order, customer, { paid: input.depositPence, credit: input.creditPence }, link),
-      actor: ctx.actor,
-      suppressedBy: notify ? null : actorName(ctx),
-    });
-    return { order, messageId };
+    return order;
   });
-
-  await dispatchMessages(ctx.org, [messageId]);
   return order;
 }
 
@@ -180,6 +171,13 @@ export async function updateOrderProgress(ctx: Ctx, orderId: string, raw: unknow
 
     // Status
     const statusChanged = input.status !== order.status;
+    // Placing = leaving the order pad: in stock (with an ETA) or out of stock at the supplier.
+    const placing = statusChanged && order.status === 'place_order' && (input.status === 'ordered' || input.status === 'delayed');
+    if (placing && input.status === 'ordered' && !input.etaDate) {
+      throw new ServiceError('Add the estimated arrival date: the customer’s confirmation email tells them when to expect it.', {
+        etaDate: 'Required when placing the order',
+      });
+    }
     if (statusChanged) {
       if (!canTransition(order.status, input.status)) {
         throw new ServiceError(`An order cannot move from ${statusLabel(order.status)} to ${statusLabel(input.status)}.`, {
@@ -229,10 +227,12 @@ export async function updateOrderProgress(ctx: Ctx, orderId: string, raw: unknow
     patch.updatedAt = now;
     const [updated] = await tx.update(orders).set(patch).where(eq(orders.id, orderId)).returning();
 
-    // Customer notifications
+    // Customer notifications: placed (with ETA, or out of stock), then only delays/ETA changes and arrival.
+    // Nothing is sent while an order is still on the order pad: the customer hasn't been told anything yet.
     const willBeReady = statusChanged && input.status === 'ready';
     const becameDelayed = statusChanged && input.status === 'delayed';
-    if (willBeReady || ((etaChanged || becameDelayed) && updated.status !== 'collected')) {
+    const onPad = updated.status === 'place_order';
+    if (willBeReady || placing || ((etaChanged || becameDelayed) && !onPad && updated.status !== 'collected')) {
       const totals = await paymentTotals(tx, orderId);
       const link = await issueTrackingLink(tx, ctx.org.id, orderId);
       const ctxEmail = orderEmailContext(updated, customer, totals, link);
@@ -242,6 +242,13 @@ export async function updateOrderProgress(ctx: Ctx, orderId: string, raw: unknow
           await enqueueEmail(tx, {
             org: ctx.org, template: 'ready_for_collection', recipient: customer.email, customerId: customer.id,
             orderId, context: ctxEmail, actor: ctx.actor, suppressedBy,
+          }),
+        );
+      } else if (placing) {
+        ids.push(
+          await enqueueEmail(tx, {
+            org: ctx.org, template: 'order_confirmation', recipient: customer.email, customerId: customer.id, orderId,
+            context: { ...ctxEmail, outOfStock: input.status === 'delayed' }, actor: ctx.actor, suppressedBy,
           }),
         );
       } else {
@@ -266,7 +273,7 @@ export async function editOrderDetails(ctx: Ctx, orderId: string, raw: unknown) 
   await withTenant(ctx.org.id, async (tx) => {
     const { order } = await loadOrder(tx, ctx, orderId);
     if (order.archivedAt) throw new ServiceError('Restore this order before changing it.');
-    const keys = ['brand', 'product', 'sku', 'totalGrossPence', 'supplier', 'supplierNotes', 'internalNotes'] as const;
+    const keys = ['brand', 'category', 'product', 'sku', 'totalGrossPence', 'supplier', 'supplierNotes', 'internalNotes'] as const;
     const oldV: Record<string, unknown> = {};
     const newV: Record<string, unknown> = {};
     for (const k of keys) {

@@ -37,20 +37,32 @@ export const customerFields = {
 
 export const productFields = {
   brand: required('Brand', 80),
+  category: text(40).default(''),
   product: required('Product', 160),
   sku: text(80).default(''),
-  specificationText: required('Specification', 4000),
+  specificationText: text(4000).default(''),
   totalGrossPence: money('Total price'),
+};
+
+/** Extra product details on the order/quote form; folded into the specification text. */
+export const detailFields = {
+  variant: text(120).default(''),
+  colour: text(60).default(''),
+  size: text(40).default(''),
+  hand: text(20).default(''),
+  quantity: z.coerce.number().int('Whole numbers only').min(1, 'At least 1').max(999).default(1),
 };
 
 export const orderCreateSchema = z
   .object({
     ...customerFields,
     ...productFields,
+    ...detailFields,
     depositPence: money('Deposit', { optional: true }),
     depositMethod: z.enum(PAYMENT_METHODS).default('card'),
     creditPence: money('Account credit', { optional: true }),
-    etaDate: isoDate,
+    // Usually set when the order is placed, not when it's taken.
+    etaDate: isoDate.optional().transform((v) => v ?? null),
     supplierReference: text(120).default(''),
     internalNotes: text(4000).default(''),
   })
@@ -63,6 +75,7 @@ export const quoteCreateSchema = z
   .object({
     ...customerFields,
     ...productFields,
+    ...detailFields,
     depositRequiredPence: money('Deposit required', { optional: true }),
     estimatedLeadTime: text(120).default(''),
     validUntil: isoDate,

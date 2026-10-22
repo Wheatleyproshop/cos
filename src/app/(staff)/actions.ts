@@ -52,7 +52,7 @@ export async function createRequestAction(_: FormState, fd: FormData): Promise<F
         const q = await createQuote(ctx, data, { send: flag(fd, 'sendNow') });
         target = `/quotes/${q.quoteNumber}`;
       } else {
-        const o = await createOrder(ctx, data, { notify: !flag(fd, 'skipEmail') });
+        const o = await createOrder(ctx, data);
         target = `/orders/${o.orderNumber}`;
       }
     },

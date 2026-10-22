@@ -22,9 +22,9 @@ export type WorkflowStep = {
 export const DEFAULT_WORKFLOW: WorkflowStep[] = [
   {
     key: 'place_order',
-    label: 'Place order',
-    // Customers see an order as placed with the manufacturer from the moment it's taken.
-    customerLabel: 'Placed with manufacturer',
+    // On the order pad: taken from the customer, not yet placed with the supplier (no customer email yet).
+    label: 'To place',
+    customerLabel: 'Order received',
     tone: 'neutral',
     awaitingSupplier: true,
     terminal: false,
@@ -32,7 +32,7 @@ export const DEFAULT_WORKFLOW: WorkflowStep[] = [
   },
   {
     key: 'ordered',
-    label: 'Ordered',
+    label: 'Placed',
     customerLabel: 'Placed with manufacturer',
     tone: 'progress',
     awaitingSupplier: true,
@@ -41,7 +41,7 @@ export const DEFAULT_WORKFLOW: WorkflowStep[] = [
   },
   {
     key: 'delayed',
-    label: 'Delayed',
+    label: 'Out of stock / delayed',
     customerLabel: 'Delayed at manufacturer',
     tone: 'warning',
     awaitingSupplier: true,
@@ -119,7 +119,7 @@ export const JOURNEY_WORDS: Record<
     delayed: 'Delayed at manufacturer',
     ready: 'Arrived in store',
     readyLong: 'Arrived in store — ready to collect',
-    created: (store) => `Order placed with ${store} and with the manufacturer`,
+    created: (store) => `Order received by ${store}`,
     etaLabel: 'Estimated arrival',
     doneValue: 'In store',
   },

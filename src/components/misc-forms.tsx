@@ -3,20 +3,22 @@
 import { useTransition, useState } from 'react';
 import type { FormState } from '@/lib/action-utils';
 import { ActionForm, Field, FormMessage, Submit, type BoundAction } from './forms';
+import { BrandSelect, CATEGORY_OPTIONS } from './order-forms';
 
 /* ── Quotes ──────────────────────────────────────────────────────────── */
 
-export function EditQuoteForm({ action, values }: { action: BoundAction; values: Record<string, string> }) {
+export function EditQuoteForm({ action, values, brands }: { action: BoundAction; values: Record<string, string>; brands: string[] }) {
   return (
     <ActionForm action={action}>
       {(s) => (
         <>
           <div className="fields">
-            <Field state={s} name="brand" label="Brand" required defaultValue={values.brand} />
+            <BrandSelect brands={brands} defaultValue={values.brand} state={s} />
+            <Field state={s} name="category" label="Category" options={CATEGORY_OPTIONS} defaultValue={values.category ?? ''} />
             <Field state={s} name="product" label="Product" required defaultValue={values.product} />
             <Field state={s} name="sku" label="Product ID / SKU" defaultValue={values.sku} />
             <Field state={s} name="totalGrossPence" label="Price (GBP, incl. VAT)" required inputMode="decimal" defaultValue={values.total} />
-            <Field state={s} name="specificationText" label="Custom specification" required wide textarea defaultValue={values.specificationText} />
+            <Field state={s} name="specificationText" label="Specification / details" wide textarea defaultValue={values.specificationText} />
             <Field state={s} name="depositRequiredPence" label="Deposit required (GBP)" inputMode="decimal" defaultValue={values.deposit} />
             <Field state={s} name="estimatedLeadTime" label="Estimated lead time" defaultValue={values.estimatedLeadTime} />
             <Field state={s} name="validUntil" label="Valid until" type="date" defaultValue={values.validUntil} />
@@ -206,7 +208,7 @@ export function ThresholdsForm({ action, values, disabled }: { action: BoundActi
           <div className="fields three">
             <Field state={s} name="readyUncollectedDays" label="Ready but uncollected after (days)" type="number" min="1" defaultValue={values.readyUncollectedDays} hint="Also when collection reminders are sent, for orders and workshop jobs" />
             <Field state={s} name="quoteFollowupDays" label="Quote awaiting response after (days)" type="number" min="1" defaultValue={values.quoteFollowupDays} />
-            <Field state={s} name="missingSupplierRefDays" label="No supplier reference after (days)" type="number" min="0" defaultValue={values.missingSupplierRefDays} />
+            <Field state={s} name="missingSupplierRefDays" label="Not placed / no supplier reference after (days)" type="number" min="0" defaultValue={values.missingSupplierRefDays} />
           </div>
           <FormMessage state={s} />
           {!disabled ? (

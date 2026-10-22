@@ -188,6 +188,8 @@ export const quotes = pgTable(
     customerId: uuid('customer_id').notNull().references(() => customers.id),
     brand: text('brand').notNull(),
     product: text('product').notNull(),
+    /** What kind of item: Clubs, Clothing, Shoes… (see ORDER_CATEGORIES). Empty on older orders. */
+    category: text('category').notNull().default(''),
     sku: text('sku').notNull().default(''),
     specificationText: text('specification_text').notNull(),
     /** Structured build (Phase 2 — COS Configure). Null for free-text specs. */
@@ -232,6 +234,8 @@ export const orders = pgTable(
     status: text('status', { enum: ORDER_STATUSES }).notNull().default('place_order'),
     brand: text('brand').notNull(),
     product: text('product').notNull(),
+    /** What kind of item: Clubs, Clothing, Shoes… (see ORDER_CATEGORIES). Empty on older orders. */
+    category: text('category').notNull().default(''),
     sku: text('sku').notNull().default(''),
     specificationText: text('specification_text').notNull(),
     specificationJson: jsonb('specification_json'),

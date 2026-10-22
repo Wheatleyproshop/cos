@@ -14,13 +14,13 @@ export type TrackingOrder = {
 export type TrackingEvent = { eventType: string; oldValueJson: unknown; newValueJson: unknown; createdAt: Date };
 
 /**
- * Customer-facing progress. "Place order" and "Ordered" are both shown as already placed, so
- * customers see e.g. Placed with manufacturer → Arrived in store → Collected (or, for printed
- * balls, Sent for printing → Ready to collect → Collected).
+ * Customer-facing progress: Order received → Placed with manufacturer → Arrived in store → Collected
+ * (printed balls skip "received": Sent for printing → Ready to collect → Collected).
  */
 export function steps(journey: Journey): { key: OrderStatus; label: string }[] {
   const w = JOURNEY_WORDS[journey];
   return [
+    ...(journey === 'supplier' ? [{ key: 'place_order' as OrderStatus, label: 'Order received' }] : []),
     { key: 'ordered', label: w.placed },
     { key: 'ready', label: w.ready },
     { key: 'collected', label: 'Collected' },
@@ -33,10 +33,12 @@ export function describe(e: { eventType: string; oldValueJson: unknown; newValue
   switch (e.eventType) {
     case 'order_created':
       return w.created(store);
-    case 'status_changed':
-      // Moving between Place order and Ordered is internal: the customer already sees "ordered".
-      if (n.status === 'place_order' || n.status === 'ordered') return null;
-      return n.status === 'delayed' ? w.delayed : n.status === 'ready' ? w.ready : n.status === 'collected' ? 'Collected' : null;
+    case 'status_changed': {
+      const was = (e.oldValueJson as { status?: string } | null)?.status;
+      if (n.status === 'ordered') return was === 'place_order' ? w.placed : was === 'delayed' ? 'Back in stock at the manufacturer' : null;
+      if (n.status === 'delayed') return was === 'place_order' ? `${w.placed} — out of stock, on back order` : w.delayed;
+      return n.status === 'ready' ? w.ready : n.status === 'collected' ? 'Collected' : null;
+    }
     case 'eta_changed':
       return `${w.etaLabel} updated to ${longDate(n.etaDate)}${n.etaReason ? ` — ${n.etaReason}` : ''}`;
     case 'order_ready':
@@ -58,7 +60,7 @@ export function TrackingView({
   org: Organisation; order: TrackingOrder; customerName: string; paid: number; credit?: number; balance: number;
   events: TrackingEvent[]; files: { id: string; filename: string }[]; token: string | null; approved?: boolean; banner?: React.ReactNode;
 }) {
-  const current = o.status === 'delayed' || o.status === 'place_order' ? 'ordered' : o.status;
+  const current = o.status === 'delayed' || (o.status === 'place_order' && journey === 'print') ? 'ordered' : o.status;
   const w = JOURNEY_WORDS[journey];
   const STEPS = steps(journey);
   const idx = STEPS.findIndex((s) => s.key === current);

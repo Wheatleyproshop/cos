@@ -103,20 +103,37 @@ describe('audit integrity', () => {
 });
 
 describe('order lifecycle', () => {
-  it('creates an order with deposit, ledger events and a confirmation email', async () => {
+  it('takes an order onto the order pad silently, then emails the confirmation with the ETA when it is placed', async () => {
     const order = await createOrder(staff, {
-      customerName: 'New Customer', email: 'NEW@example.com', phone: '07700 900999', brand: 'PING', product: 'i530 Irons',
-      sku: 'PING-I530', specificationText: '5–PW / Black dot / KBS Tour Lite R', totalGrossPence: '1099.00', depositPence: '200',
-      depositMethod: 'card', etaDate: '', supplierReference: '', internalNotes: '',
+      customerName: 'New Customer', email: 'NEW@example.com', phone: '07700 900999', brand: 'PING', category: 'Clubs', product: 'i530 Irons',
+      variant: '5–PW', hand: 'Right-handed', quantity: '1',
+      sku: 'PING-I530', specificationText: 'Black dot / KBS Tour Lite R', totalGrossPence: '1099.00', depositPence: '200',
+      depositMethod: 'card', internalNotes: '',
     });
     expect(order.orderNumber).toBe('COS-1052');
+    expect(order.status).toBe('place_order');
+    expect(order.category).toBe('Clubs');
+    expect(order.specificationText).toBe('Model / variant: 5–PW\nHand: Right-handed\n\nBlack dot / KBS Tour Lite R');
     expect(order.takenByUserId).toBe(staff.userId);
+    const none = await withTenant(org.id, (tx) => tx.select().from(messages).where(eq(messages.orderId, order.id)));
+    expect(none).toHaveLength(0);
+
+    // An ETA tweak while it's still on the pad tells the customer nothing.
+    await updateOrderProgress(staff, order.id, { status: 'place_order', etaDate: '2026-12-01', supplierReference: '' });
+    // Placing as in stock needs the ETA.
+    await expect(updateOrderProgress(staff, order.id, { status: 'ordered', etaDate: '', supplierReference: '' })).rejects.toThrow(/estimated arrival/);
+    await updateOrderProgress(staff, order.id, { status: 'ordered', etaDate: '2026-12-04', supplierReference: 'PING-1' });
+
     const events = await withTenant(org.id, (tx) => tx.select().from(auditEvents).where(eq(auditEvents.orderId, order.id)));
     const types = events.map((e) => e.eventType);
     expect(types).toEqual(expect.arrayContaining(['order_created', 'payment_recorded', 'email_queued', 'email_sent']));
     expect(events.find((e) => e.eventType === 'order_created')!.actorLabel).toBe('Will Walker');
     expect(events.find((e) => e.eventType === 'email_sent')!.actorType).toBe('system');
-    const [msg] = await withTenant(org.id, (tx) => tx.select().from(messages).where(eq(messages.orderId, order.id)));
+    const [msg, ...more] = await withTenant(org.id, (tx) => tx.select().from(messages).where(eq(messages.orderId, order.id)));
+    expect(more).toHaveLength(0);
+    expect(msg.templateType).toBe('order_confirmation');
+    expect(msg.subject).toContain('Your order has been placed');
+    expect(msg.bodyHtml).toContain('4 December 2026');
     expect(msg.status).toBe('sent');
     expect(msg.bodyHtml).toContain('alt="Desirable Golf"'); // retailer logo, not COS
     expect(msg.bodyHtml).not.toMatch(/\bCOS\b(?!-)/);
@@ -182,6 +199,10 @@ describe('quotes', () => {
     )!;
     expect(accepted.actorType).toBe('customer');
     expect((accepted.newValueJson as { totalGrossPence: number }).totalGrossPence).toBe(119900);
+    // A club order goes on the order pad; the customer is emailed when it's placed with the supplier.
+    expect(order.status).toBe('place_order');
+    const sent = await withTenant(org.id, (tx) => tx.select().from(messages).where(eq(messages.orderId, order.id)));
+    expect(sent).toHaveLength(0);
   });
 
   it('creates and sends a quote with a fresh approval link', async () => {
@@ -271,8 +292,10 @@ describe('account credit', () => {
     const order = await createOrder(staff, {
       customerName: 'Credit Customer', email: 'credit@example.com', brand: 'Titleist', product: 'Pro V1', sku: '',
       specificationText: '2 dozen', totalGrossPence: '104.00', depositPence: '20.00', depositMethod: 'card',
-      creditPence: '30.00', etaDate: '', supplierReference: '', internalNotes: '',
+      creditPence: '30.00', internalNotes: '',
     });
+    // Out of stock at the supplier: placed on back order, customer told, no date yet.
+    await updateOrderProgress(staff, order.id, { status: 'delayed', etaDate: '', etaReason: 'Titleist expect stock next month.', supplierReference: '' });
     const rows = await withTenant(org.id, (tx) => tx.select().from(payments).where(eq(payments.orderId, order.id)));
     const credit = rows.find((p) => p.kind === 'credit')!;
     expect(credit.amountPence).toBe(3000);
@@ -283,7 +306,10 @@ describe('account credit', () => {
     const [msg] = await withTenant(org.id, (tx) => tx.select().from(messages).where(eq(messages.orderId, order.id)));
     expect(msg.bodyHtml).toContain('Account credit applied');
     expect(msg.bodyHtml).toContain('£54.00'); // balance due
-    expect(msg.bodyHtml).toContain('placed with the manufacturer');
+    expect(msg.templateType).toBe('order_confirmation');
+    expect(msg.subject).toContain('back order');
+    expect(msg.bodyHtml).toContain('out of stock');
+    expect(msg.bodyHtml).toContain('Titleist expect stock next month.');
   });
 
   it('rejects deposit plus credit above the total', async () => {

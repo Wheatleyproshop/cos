@@ -245,7 +245,7 @@ function rank(items: { name: string; valuePence: number; qty: number }[], limit 
 }
 
 /** What was actually sold on an order: each fitted club, a ball print job, or the order itself. */
-function itemsOf(o: { brand: string; product: string; totalGrossPence: number; specificationJson: unknown }): Item[] {
+function itemsOf(o: { brand: string; product: string; category?: string; totalGrossPence: number; specificationJson: unknown }): Item[] {
   const fit = fitSpec(o.specificationJson);
   if (fit) {
     return fit.builds.map((b) => {
@@ -263,7 +263,7 @@ function itemsOf(o: { brand: string; product: string; totalGrossPence: number; s
   if (ball) {
     return [{ brand: ball.ball.brand, product: `${ball.ball.name} (printed)`, category: 'Printed balls', valuePence: o.totalGrossPence, qty: 1 }];
   }
-  return [{ brand: o.brand, product: o.product, category: guessKind(o.product), valuePence: o.totalGrossPence, qty: 1 }];
+  return [{ brand: o.brand, product: o.product, category: o.category || guessKind(o.product), valuePence: o.totalGrossPence, qty: 1 }];
 }
 
 /** Best guess at what a manually entered order is, from its product name. */
@@ -318,7 +318,7 @@ export async function getPerformance(org: Organisation, period: PeriodKey | Repo
   const { allOrders, allQuotes, staff, statusEvents } = await withTenant(org.id, async (tx) => {
     const allOrders = await tx
       .select({
-        id: orders.id, brand: orders.brand, product: orders.product, totalGrossPence: orders.totalGrossPence, status: orders.status,
+        id: orders.id, brand: orders.brand, product: orders.product, category: orders.category, totalGrossPence: orders.totalGrossPence, status: orders.status,
         createdAt: orders.createdAt, readyAt: orders.readyAt, specificationJson: orders.specificationJson,
         takenByUserId: orders.takenByUserId, customerId: orders.customerId,
       })

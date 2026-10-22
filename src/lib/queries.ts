@@ -1,5 +1,6 @@
 import 'server-only';
 import { likeTerm } from './like-term';
+import { DEFAULT_BRANDS, mergeBrands } from './order-details';
 import { and, asc, desc, eq, ilike, inArray, isNull, or, sql, type SQL } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/pg-core';
 import { withTenant } from '@/db';
@@ -8,11 +9,13 @@ import {
   auditEvents,
   backupDestinations,
   backupRuns,
+  brands,
   customers,
   messages,
   orders,
   payments,
   quotes,
+  supplierAccounts,
   users,
   workshopJobs,
   type Organisation,
@@ -46,14 +49,14 @@ export const FILTERS = [
   { key: 'all', label: 'All' },
   { key: 'attention', label: 'Needs attention' },
   { key: 'quote', label: 'Quote' },
-  { key: 'place_order', label: 'Place order' },
-  { key: 'ordered', label: 'Ordered' },
-  { key: 'delayed', label: 'Delayed' },
+  { key: 'place_order', label: 'To place' },
+  { key: 'ordered', label: 'Placed' },
+  { key: 'delayed', label: 'Out of stock / delayed' },
   { key: 'ready', label: 'Ready for collection' },
   { key: 'collected', label: 'Collected' },
 ] as const;
 
-export type FilterKey = (typeof FILTERS)[number]['key'] | 'active' | 'awaiting' | 'overdue' | 'archived';
+export type FilterKey = (typeof FILTERS)[number]['key'] | 'active' | 'awaiting' | 'placed' | 'overdue' | 'archived';
 
 
 function orderSearch(q: string): SQL | undefined {
@@ -184,6 +187,8 @@ function matchesFilter(r: WorkRow, f: FilterKey): boolean {
       return r.kind === 'order' && r.status !== 'collected';
     case 'awaiting':
       return r.kind === 'order' && r.status !== 'quote' && step(r.status).awaitingSupplier;
+    case 'placed':
+      return r.kind === 'order' && (r.status === 'ordered' || r.status === 'delayed');
     case 'overdue':
       return r.kind === 'order' && r.flags.some((x) => x.code === 'eta_passed' || x.code === 'delayed');
     default:
@@ -444,4 +449,21 @@ export async function previewSource(org: Organisation) {
       .limit(1);
     return row ?? null;
   });
+}
+
+/** Brands for the order form: your accounts and catalogue first, anything you've ordered before, plus common golf brands. */
+export async function getBrandOptions(orgId: string): Promise<string[]> {
+  const [cat, accounts, used] = await withTenant(orgId, (tx) =>
+    Promise.all([
+      tx.select({ name: brands.name }).from(brands).where(eq(brands.active, true)),
+      tx.select({ name: supplierAccounts.brand }).from(supplierAccounts),
+      tx.selectDistinct({ name: orders.brand }).from(orders).where(sql`${orders.createdAt} > now() - interval '2 years'`),
+    ]),
+  );
+  return mergeBrands(
+    cat.map((r) => r.name),
+    accounts.map((r) => r.name),
+    DEFAULT_BRANDS,
+    used.map((r) => r.name),
+  );
 }

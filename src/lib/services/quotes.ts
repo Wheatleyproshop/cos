@@ -6,6 +6,8 @@ import { dispatchMessages, enqueueEmail } from '../email/outbox';
 import { asBallPrintSpec } from '../ball-print';
 import { fitSpec } from '../fit-spec';
 import { todayInTz } from '../format';
+import { composeSpec } from '../order-details';
+import { journeyFor } from '../status';
 import { appUrl, hashToken, newToken, signValue } from '../tokens';
 import { parse, quoteCreateSchema, quoteEditSchema } from '../validation';
 import { findOrCreateCustomer, issueTrackingLink, nextNumber, ServiceError, type Ctx } from './common';
@@ -82,9 +84,10 @@ export async function createQuote(ctx: Ctx, raw: unknown, opts: CreateQuoteOptio
         quoteNumber,
         customerId: customer.id,
         brand: input.brand,
+        category: input.category,
         product: input.product,
         sku: input.sku,
-        specificationText: input.specificationText,
+        specificationText: composeSpec({ ...input, notes: input.specificationText }),
         totalGrossPence: input.totalGrossPence,
         depositRequiredPence: input.depositRequiredPence,
         estimatedLeadTime: input.estimatedLeadTime,
@@ -171,7 +174,7 @@ export async function editQuote(ctx: Ctx, quoteId: string, raw: unknown) {
     const { quote } = await loadQuote(tx, ctx.org.id, quoteId);
     assertOpen(quote);
     const keys = [
-      'brand', 'product', 'sku', 'specificationText', 'totalGrossPence', 'depositRequiredPence',
+      'brand', 'category', 'product', 'sku', 'specificationText', 'totalGrossPence', 'depositRequiredPence',
       'estimatedLeadTime', 'validUntil', 'internalNotes',
     ] as const;
     const oldV: Record<string, unknown> = {};
@@ -244,6 +247,7 @@ async function acceptAndConvert(
   assertOpen(quote);
   if (isExpired(quote, ctx.org.timezone)) throw new ServiceError('This quote has expired.');
   const now = new Date();
+  const print = journeyFor(quote.specificationJson) === 'print';
   const orderNumber = await nextNumber(tx, ctx.org.id, 'order');
   const [order] = await tx
     .insert(orders)
@@ -252,8 +256,10 @@ async function acceptAndConvert(
       orderNumber,
       customerId: customer.id,
       quoteId: quote.id,
-      status: 'place_order',
+      // Printed balls come from stock and go straight into print; everything else still has to be placed with the supplier.
+      status: print ? 'ordered' : 'place_order',
       brand: quote.brand,
+      category: quote.category,
       product: quote.product,
       sku: quote.sku,
       supplier: quote.brand,
@@ -299,6 +305,8 @@ async function acceptAndConvert(
   });
 
   const link = await issueTrackingLink(tx, ctx.org.id, order.id);
+  // Supplier orders: the customer hears from us once the order is actually placed (with its ETA).
+  if (!print) return { order, messageId: null, trackingUrl: link };
   const messageId = await enqueueEmail(tx, {
     org: ctx.org,
     template: 'order_confirmation',

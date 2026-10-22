@@ -2,7 +2,7 @@ import type { Order, Organisation, Quote } from '@/db/schema';
 import { daysBetween, niceDate } from './format';
 
 export type AttentionFlag = {
-  code: 'eta_passed' | 'delayed' | 'uncollected' | 'missing_supplier_ref' | 'quote_awaiting';
+  code: 'eta_passed' | 'delayed' | 'uncollected' | 'missing_supplier_ref' | 'not_placed' | 'quote_awaiting';
   label: string;
 };
 
@@ -19,12 +19,16 @@ export function orderAttention(
   if (o.etaDate && o.etaDate < today && o.status !== 'ready') {
     flags.push({ code: 'eta_passed', label: `ETA passed (${niceDate(o.etaDate)})` });
   }
-  if (o.status === 'delayed') flags.push({ code: 'delayed', label: 'Delayed at supplier' });
+  if (o.status === 'delayed') flags.push({ code: 'delayed', label: 'Out of stock / delayed at supplier' });
   if (o.status === 'ready' && o.readyAt) {
     const days = daysBetween(new Date(o.readyAt), now);
     if (days >= t.readyUncollectedDays) flags.push({ code: 'uncollected', label: `Ready but uncollected for ${days} days` });
   }
-  if (['place_order', 'ordered', 'delayed'].includes(o.status) && !o.supplierReference.trim()) {
+  // Still on the order pad: the customer is waiting for us to place it.
+  if (o.status === 'place_order') {
+    const days = daysBetween(new Date(o.createdAt), now);
+    if (days >= t.missingSupplierRefDays) flags.push({ code: 'not_placed', label: `Not placed yet after ${days} days` });
+  } else if (['ordered', 'delayed'].includes(o.status) && !o.supplierReference.trim()) {
     const days = daysBetween(new Date(o.createdAt), now);
     if (days >= t.missingSupplierRefDays) flags.push({ code: 'missing_supplier_ref', label: `No supplier reference after ${days} days` });
   }
