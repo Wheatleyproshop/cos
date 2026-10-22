@@ -419,6 +419,14 @@ describe('golf ball printing', () => {
     await expect(createBallPrintQuote(staff, { ...base, artworkType: 'logo' }, { logo: null, proof: jpeg() }, { send: false })).rejects.toThrow(/logo/);
   });
 
+  it('files a new ball under the existing brand spelling', async () => {
+    const { addBall, getBallRange } = await import('@/lib/services/ball-printing');
+    const [first] = await getBallRange(org.id);
+    await addBall(admin, { brand: first.brand.toUpperCase(), name: 'Case Test', colour: '#ffffff', pricePerDozenPence: '20' });
+    const added = (await getBallRange(org.id)).find((b) => b.name === 'Case Test')!;
+    expect(added.brand).toBe(first.brand);
+  });
+
   it('lets a customer design their own balls online: list price, review by the shop, abuse limits', async () => {
     const { getBallRange, submitBallDesign, findDesignShop, setBallDesignLink, DESIGN_LIMITS } = await import('@/lib/services/ball-printing');
     const [ball] = await getBallRange(org.id);

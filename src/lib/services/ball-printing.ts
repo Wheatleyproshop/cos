@@ -69,7 +69,12 @@ async function auditCatalogue(ctx: Ctx, what: string, value: Record<string, unkn
 export async function addBall(ctx: Ctx, raw: unknown) {
   requireRole(ctx, 'manager', 'edit the ball range');
   const v = parse(ballSchema, raw);
-  await withTenant(ctx.org.id, (tx) => tx.insert(printBalls).values({ organisationId: ctx.org.id, ...v, leadTimeDays: v.leadTimeDays || null }));
+  await withTenant(ctx.org.id, async (tx) => {
+    // "Taylormade" joins the existing "TaylorMade" rather than becoming a second brand.
+    const [same] = await tx.select({ brand: printBalls.brand }).from(printBalls).where(sql`lower(${printBalls.brand}) = ${v.brand.toLowerCase()}`).limit(1);
+    if (same) v.brand = same.brand;
+    await tx.insert(printBalls).values({ organisationId: ctx.org.id, ...v, leadTimeDays: v.leadTimeDays || null });
+  });
   await auditCatalogue(ctx, 'ball_added', v);
 }
 
