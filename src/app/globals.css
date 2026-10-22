@@ -175,6 +175,16 @@ details.section[open] { padding-bottom: 16px; }
 .authcard .brand { color: var(--ink); padding: 0; }
 .authcard .brand span { color: #2f80ff; }
 .public { max-width: 680px; margin: 0 auto; padding: 24px 16px 60px; }
+.public.wide { max-width: 1180px; }
+.design-intro { max-width: 680px; margin: 0 0 20px; }
+.design-intro h1 { font-family: var(--brand-heading, inherit); font-size: 28px; margin: 0 0 6px; }
+.design-intro p { margin: 0; color: #4a525e; }
+.bp-hp { position: absolute; left: -9999px; width: 1px; height: 1px; overflow: hidden; }
+.bp-thanks { text-align: center; padding: 28px 8px; }
+.bp-thanks-tick { display: inline-grid; place-items: center; width: 56px; height: 56px; border-radius: 50%; background: var(--green); color: #fff; font-size: 28px; margin-bottom: 10px; }
+.bp-thanks p { max-width: 440px; margin: 8px auto 0; }
+.design-link { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.design-link input { flex: 1 1 260px; min-width: 0; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px; }
 .public-head { color: #fff; text-align: center; padding: 30px 20px; font-size: 22px; letter-spacing: 3px; border-radius: 16px 16px 0 0; font-weight: 600; }
 .public-body { background: #fff; border: 1px solid #e3e7ec; border-top: 0; border-radius: 0 0 16px 16px; padding: 28px; }
 .steps { list-style: none; padding: 0; margin: 18px 0; display: grid; gap: 8px; }

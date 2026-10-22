@@ -37,7 +37,8 @@ export type EmailAutomationKey =
   | 'workshop_checked_in'
   | 'workshop_delayed'
   | 'workshop_ready'
-  | 'workshop_reminder';
+  | 'workshop_reminder'
+  | 'ball_design_received';
 
 export type EmailAutomations = Record<EmailAutomationKey, boolean>;
 
@@ -76,6 +77,7 @@ export const organisations = pgTable('organisations', {
     workshop_delayed: true,
     workshop_ready: true,
     workshop_reminder: true,
+    ball_design_received: true,
   }),
   /** Off = payments are taken at the shop's till: no Payments section, no balance check at collection. */
   paymentTracking: boolean('payment_tracking').notNull().default(true),
@@ -83,6 +85,8 @@ export const organisations = pgTable('organisations', {
   performanceReport: jsonb('performance_report').$type<PerformanceReportSettings>().notNull().default({ enabled: true, recipients: [] }),
   /** Golf ball printing: one-off artwork setup charge added to each print quote. */
   ballSetupFeePence: integer('ball_setup_fee_pence').notNull().default(0),
+  /** Public “design your own balls” page at /design/<slug>. */
+  ballDesignLink: boolean('ball_design_link').notNull().default(true),
   readyUncollectedDays: integer('ready_uncollected_days').notNull().default(7),
   quoteFollowupDays: integer('quote_followup_days').notNull().default(5),
   missingSupplierRefDays: integer('missing_supplier_ref_days').notNull().default(2),

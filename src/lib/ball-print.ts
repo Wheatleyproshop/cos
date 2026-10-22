@@ -58,6 +58,8 @@ export type BallPrintSpec = {
   setupFeePence: number;
   notes: string;
   totalPence: number;
+  /** Designed by the customer on the public design page. */
+  submittedOnline?: boolean;
 };
 
 export function asBallPrintSpec(json: unknown): BallPrintSpec | null {

@@ -66,7 +66,8 @@ export type EventType =
   | 'workshop_status_changed'
   | 'workshop_eta_changed'
   | 'workshop_item_added'
-  | 'workshop_item_removed';
+  | 'workshop_item_removed'
+  | 'ball_design_submitted';
 
 export type EventInput = {
   organisationId: string;
@@ -111,6 +112,7 @@ const TEMPLATE_NAMES: Record<string, string> = {
   workshop_delayed: 'Workshop delay update',
   workshop_ready: 'Workshop ready to collect',
   workshop_reminder: 'Workshop collection reminder',
+  ball_design_received: 'Ball design received',
 };
 
 export function templateName(key: string): string {
@@ -128,6 +130,8 @@ export function describeEvent(e: Pick<AuditEvent, 'eventType' | 'oldValueJson' |
     checked_in: 'Checked in', in_progress: 'In progress', waiting_parts: 'Waiting for parts', ready: 'Ready to collect', collected: 'Collected', cancelled: 'Cancelled',
   };
   switch (e.eventType) {
+    case 'ball_design_submitted':
+      return 'Ball design submitted online by the customer';
     case 'workshop_job_created':
       return `Clubs checked in${Array.isArray(n.items) ? `: ${(n.items as string[]).join(', ')}` : ''}`;
     case 'workshop_status_changed':

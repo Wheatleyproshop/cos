@@ -1,8 +1,12 @@
-import { and, asc, eq } from 'drizzle-orm';
+import { and, asc, desc, eq, gt, isNull, sql } from 'drizzle-orm';
+import { Resend } from 'resend';
 import { z } from 'zod';
-import { withTenant } from '@/db';
-import { organisations, printBalls } from '@/db/schema';
+import { systemDb, withTenant } from '@/db';
+import { auditEvents, customers, organisations, printBalls, quotes, users, type Organisation } from '@/db/schema';
 import { recordEvent } from '../audit';
+import { dispatchMessages, enqueueEmail } from '../email/outbox';
+import { resendApiKey } from '../email/resend-key';
+import { fromHeader } from '../email/sender';
 import {
   INK_COLOURS,
   LOGO_TYPES,
@@ -17,10 +21,10 @@ import {
 } from '../ball-print';
 import { money, parseMoneyToPence } from '../format';
 import { storage } from '../storage';
-import { newToken } from '../tokens';
+import { appUrl, newToken } from '../tokens';
 import { customerFields, parse } from '../validation';
 import { requireRole, ServiceError, type Ctx } from './common';
-import { createQuote } from './quotes';
+import { createQuote, proofPathFor } from './quotes';
 
 export async function getBallRange(orgId: string, opts: { includeInactive?: boolean } = {}) {
   return withTenant(orgId, (tx) =>
@@ -160,7 +164,13 @@ async function readImage(file: File | null, what: string, maxBytes: number) {
  * The customer's original logo and the rendered proof are kept in private storage and
  * referenced from `specification_json`; the approval email shows the proof.
  */
-export async function createBallPrintQuote(ctx: Ctx, raw: unknown, files: { logo: File | null; proof: File | null }, opts: { send: boolean }) {
+export async function createBallPrintQuote(
+  ctx: Ctx,
+  raw: unknown,
+  files: { logo: File | null; proof: File | null },
+  opts: { send: boolean; source?: 'staff' | 'customer' },
+) {
+  const fromCustomer = opts.source === 'customer';
   const input = parse(printSchema, raw);
   const [ball] = await withTenant(ctx.org.id, (tx) =>
     tx.select().from(printBalls).where(and(eq(printBalls.id, input.ballId), eq(printBalls.active, true))).limit(1),
@@ -169,11 +179,18 @@ export async function createBallPrintQuote(ctx: Ctx, raw: unknown, files: { logo
   if (input.dozens < ball.minDozens) {
     throw new ServiceError(`The ${ball.name} has a minimum of ${ball.minDozens} dozen.`, { dozens: `Minimum ${ball.minDozens}` });
   }
+  // Customers designing online always get the shop's list price; staff can adjust it when reviewing.
+  if (fromCustomer) {
+    input.pricePerDozenPence = ball.pricePerDozenPence;
+    input.setupFeePence = ctx.org.ballSetupFeePence;
+    input.validUntil = '';
+    input.customerId = null;
+  }
 
   const lines = input.textLines.filter(Boolean);
   if (input.artworkType === 'text' && !lines.length) throw new ServiceError('Enter the text to print.', { textLines: 'Required' });
   const logo = input.artworkType === 'logo' ? await readImage(files.logo, 'logo', MAX_LOGO_BYTES) : null;
-  if (input.artworkType === 'logo' && !logo) throw new ServiceError('Upload the customer’s logo.', { logo: 'Required' });
+  if (input.artworkType === 'logo' && !logo) throw new ServiceError(fromCustomer ? 'Please upload your logo.' : 'Upload the customer’s logo.', { logo: 'Required' });
   const proof = await readImage(files.proof, 'preview', MAX_PROOF_BYTES);
   if (!proof) throw new ServiceError('The preview could not be created. Please try again.');
 
@@ -212,6 +229,7 @@ export async function createBallPrintQuote(ctx: Ctx, raw: unknown, files: { logo
     setupFeePence: input.setupFeePence,
     notes: input.notes,
     totalPence: total,
+    ...(fromCustomer ? { submittedOnline: true } : {}),
   };
   const days = ball.leadTimeDays ?? 0;
 
@@ -230,8 +248,131 @@ export async function createBallPrintQuote(ctx: Ctx, raw: unknown, files: { logo
       depositRequiredPence: '0',
       estimatedLeadTime: days ? `About ${Math.ceil(days / 7)} week${days > 7 ? 's' : ''}` : '',
       validUntil: input.validUntil,
-      internalNotes: 'Created with Ball Printing.',
+      internalNotes: fromCustomer
+        ? 'Designed and submitted online by the customer. Check the artwork, then approve it in store to put it into print, or edit it and email a proof back.'
+        : 'Created with Ball Printing.',
     },
     { send: opts.send, specificationJson: spec },
+  );
+}
+
+/* ─────────────────────── Customer design link (/design/<slug>) ─────────────────────── */
+
+export const DESIGN_LIMITS = { perIpPerHour: 5, perShopPerDay: 60 };
+
+/** The shop behind a public design link, if the link is switched on and there are balls to choose from. */
+export async function findDesignShop(slug: string) {
+  if (!/^[a-z0-9-]{1,80}$/.test(slug)) return null;
+  const [org] = await systemDb().select().from(organisations).where(eq(organisations.slug, slug)).limit(1);
+  if (!org?.ballDesignLink) return null;
+  const balls = await getBallRange(org.id);
+  return balls.length ? { org, balls } : null;
+}
+
+export const designPathFor = (org: Pick<Organisation, 'slug'>) => `/design/${org.slug}`;
+export const publicBallPhotoPath = (org: Pick<Organisation, 'slug'>, ballId: string, photoKey: string) =>
+  `/api/public/ball-photo/${org.slug}/${ballId}?v=${photoKey.slice(-10)}`;
+
+/**
+ * A customer submits their own design. It becomes a draft quote at list price for the shop to
+ * review (approve in store → into print, or edit and send a proof back). The customer gets a
+ * "we've received it" email and the shop gets an alert.
+ */
+export async function submitBallDesign(slug: string, raw: Record<string, unknown>, files: { logo: File | null; proof: File | null }, meta: { ip: string | null }) {
+  const shop = await findDesignShop(slug);
+  if (!shop) throw new ServiceError('This design page isn’t available at the moment. Please contact the shop.');
+  const { org } = shop;
+
+  const recent = await withTenant(org.id, (tx) =>
+    tx
+      .select({
+        shop: sql<number>`count(*)::int`,
+        ip: sql<number>`count(*) filter (where ${auditEvents.metadataJson}->>'ip' = ${meta.ip ?? ''} and ${auditEvents.createdAt} > now() - interval '1 hour')::int`,
+      })
+      .from(auditEvents)
+      .where(and(eq(auditEvents.eventType, 'ball_design_submitted'), gt(auditEvents.createdAt, sql`now() - interval '1 day'`))),
+  );
+  if ((meta.ip && recent[0].ip >= DESIGN_LIMITS.perIpPerHour) || recent[0].shop >= DESIGN_LIMITS.perShopPerDay) {
+    throw new ServiceError('We’ve had a lot of designs in a short time. Please try again later or contact the shop.');
+  }
+
+  // Quotes belong to a staff member; online designs are assigned to the shop owner until someone picks them up.
+  const [owner] = await withTenant(org.id, (tx) =>
+    tx.select({ id: users.id }).from(users).where(and(eq(users.role, 'admin'), eq(users.active, true))).orderBy(asc(users.createdAt)).limit(1),
+  );
+  if (!owner) throw new ServiceError('This design page isn’t available at the moment. Please contact the shop.');
+
+  const name = String(raw.customerName ?? '').trim().slice(0, 120);
+  const ctx: Ctx = { org, actor: { type: 'customer', name: name || 'Customer' }, userId: owner.id, role: null };
+  const quote = await createBallPrintQuote(
+    ctx,
+    { ...raw, customerId: '', pricePerDozenPence: '1', setupFeePence: '0', validUntil: '' },
+    files,
+    { send: false, source: 'customer' },
+  );
+
+  const messageId = await withTenant(org.id, async (tx) => {
+    const [customer] = await tx.select().from(customers).where(eq(customers.id, quote.customerId)).limit(1);
+    await recordEvent(tx, {
+      organisationId: org.id, actor: ctx.actor, eventType: 'ball_design_submitted', entityType: 'quote', quoteId: quote.id,
+      customerId: quote.customerId, newValue: { product: `${quote.brand} ${quote.product}`, totalPence: quote.totalGrossPence },
+      metadata: { ip: meta.ip ?? '' },
+    });
+    return enqueueEmail(tx, {
+      org, template: 'ball_design_received', recipient: customer.email, customerId: customer.id, quoteId: quote.id, actor: ctx.actor,
+      context: {
+        customerName: customer.name, reference: quote.quoteNumber, brand: quote.brand, product: quote.product,
+        specification: quote.specificationText, totalPence: quote.totalGrossPence, previewImageUrl: appUrl(proofPathFor(quote.id)),
+      },
+    });
+  });
+  await dispatchMessages(org, [messageId]);
+  await alertShop(org, quote, name).catch((e) => console.error('[COS ball design alert]', e));
+  return quote;
+}
+
+const escHtml = (v: string) => v.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
+
+/** Short internal heads-up to the shop's own address. */
+async function alertShop(org: Organisation, quote: { id: string; quoteNumber: string; brand: string; product: string; totalGrossPence: number; specificationText: string }, name: string) {
+  if (!org.replyToEmail) return;
+  const link = appUrl(`/quotes/${quote.quoteNumber}`);
+  const subject = `New golf ball design from ${name} (${quote.quoteNumber})`;
+  const text = `${name} has designed personalised golf balls online.\n\n${quote.specificationText}\n\nList price: ${money(quote.totalGrossPence)}\n\nReview it: ${link}`;
+  const html = `<div style="font-family:system-ui,-apple-system,Segoe UI,sans-serif;font-size:15px;color:#1d2a22;max-width:560px">
+<p><b>${escHtml(name)}</b> has designed personalised golf balls online.</p>
+<p><img src="${escHtml(appUrl(proofPathFor(quote.id)))}" width="320" alt="Design preview" style="max-width:100%;border-radius:12px;background:#eef0f4"></p>
+<p style="white-space:pre-line;color:#4b5a51">${escHtml(quote.specificationText)}</p>
+<p>List price: <b>${money(quote.totalGrossPence)}</b></p>
+<p><a href="${escHtml(link)}" style="display:inline-block;background:#193b2c;color:#fff;padding:10px 18px;border-radius:999px;text-decoration:none">Review ${quote.quoteNumber}</a></p>
+<p style="color:#7a857e;font-size:13px">Approve it in store to put it into print, or edit it and email a proof back.</p></div>`;
+  const key = resendApiKey();
+  if (!key) return console.log(`[COS email · simulated] ball design alert to=${org.replyToEmail} subject="${subject}"`);
+  const res = await new Resend(key).emails.send({ from: fromHeader(org), to: [org.replyToEmail], subject, html, text, tags: [{ name: 'cos_alert', value: 'ball_design' }] });
+  if (res.error) console.error('[COS ball design alert]', res.error.message);
+}
+
+export async function setBallDesignLink(ctx: Ctx, enabled: boolean) {
+  requireRole(ctx, 'manager', 'change the design link');
+  await withTenant(ctx.org.id, async (tx) => {
+    await tx.update(organisations).set({ ballDesignLink: enabled }).where(eq(organisations.id, ctx.org.id));
+    await recordEvent(tx, {
+      organisationId: ctx.org.id, actor: ctx.actor, eventType: 'settings_changed', entityType: 'organisation', entityId: ctx.org.id,
+      oldValue: { ballDesignLink: ctx.org.ballDesignLink }, newValue: { ballDesignLink: enabled }, metadata: { section: 'ball_printing.design_link' },
+    });
+  });
+}
+
+/** Online designs still waiting for the shop to act on them. */
+export async function listSubmittedDesigns(orgId: string) {
+  return withTenant(orgId, (tx) =>
+    tx
+      .select({ quoteNumber: quotes.quoteNumber, product: quotes.product, brand: quotes.brand, totalGrossPence: quotes.totalGrossPence, createdAt: quotes.createdAt, customer: customers.name })
+      .from(auditEvents)
+      .innerJoin(quotes, eq(quotes.id, auditEvents.quoteId))
+      .innerJoin(customers, eq(customers.id, quotes.customerId))
+      .where(and(eq(auditEvents.eventType, 'ball_design_submitted'), eq(quotes.status, 'draft'), isNull(quotes.archivedAt)))
+      .orderBy(desc(quotes.createdAt))
+      .limit(20),
   );
 }

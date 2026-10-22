@@ -167,6 +167,7 @@ const AUTOMATIONS: { key: string; label: string; detail: string }[] = [
   { key: 'workshop_delayed', label: 'Workshop: delay update', detail: 'When a workshop job is waiting for parts or its ready date changes' },
   { key: 'workshop_ready', label: 'Workshop: ready to collect', detail: 'When a workshop job is marked ready' },
   { key: 'workshop_reminder', label: 'Workshop: collection reminder', detail: 'Daily check for workshop jobs ready but not collected' },
+  { key: 'ball_design_received', label: 'Ball design received', detail: 'When a customer submits their own golf ball design online' },
 ];
 
 export function AutomationsForm({ action, enabled, disabled }: { action: BoundAction; enabled: Record<string, boolean>; disabled: boolean }) {

@@ -418,6 +418,39 @@ describe('golf ball printing', () => {
     await expect(createBallPrintQuote(staff, { ...base, artworkType: 'text', textLines: ['Hi'] }, { logo: null, proof: fake }, { send: false })).rejects.toThrow(/PNG, JPG or WebP/);
     await expect(createBallPrintQuote(staff, { ...base, artworkType: 'logo' }, { logo: null, proof: jpeg() }, { send: false })).rejects.toThrow(/logo/);
   });
+
+  it('lets a customer design their own balls online: list price, review by the shop, abuse limits', async () => {
+    const { getBallRange, submitBallDesign, findDesignShop, setBallDesignLink, DESIGN_LIMITS } = await import('@/lib/services/ball-printing');
+    const [ball] = await getBallRange(org.id);
+    const design = {
+      customerName: 'Online Olly', email: 'olly@example.com', phone: '07700 900555', ballId: ball.id, artworkType: 'text',
+      textLines: ['Olly', '', ''], font: 'classic', ink: 'navy', scale: '0.8', dozens: '2', notes: '',
+      // A customer can't set their own price or pick another customer's record.
+      pricePerDozenPence: '0.01', setupFeePence: '0', customerId: '00000000-0000-0000-0000-000000000000',
+    };
+    const q = await submitBallDesign('desirable-golf', design, { logo: null, proof: jpeg() }, { ip: '203.0.113.9' });
+    expect(q.status).toBe('draft');
+    expect(q.totalGrossPence).toBe(2 * ball.pricePerDozenPence + org.ballSetupFeePence);
+    const [cust] = await withTenant(org.id, (tx) => tx.select().from(customers).where(eq(customers.id, q.customerId)));
+    expect(cust.email).toBe('olly@example.com');
+    const [msg] = await withTenant(org.id, (tx) => tx.select().from(messages).where(eq(messages.quoteId, q.id)));
+    expect(msg.templateType).toBe('ball_design_received');
+    const [ev] = await withTenant(org.id, (tx) =>
+      tx.select().from(auditEvents).where(and(eq(auditEvents.quoteId, q.id), eq(auditEvents.eventType, 'ball_design_submitted'))),
+    );
+    expect(ev.actorUserId).toBeNull();
+    const { listNotifications } = await import('@/lib/services/notifications');
+    const { items } = await listNotifications(org.id, admin.userId!);
+    expect(items[0].title).toBe('New golf ball design to review');
+
+    for (let i = 1; i < DESIGN_LIMITS.perIpPerHour; i++) await submitBallDesign('desirable-golf', design, { logo: null, proof: jpeg() }, { ip: '203.0.113.9' });
+    await expect(submitBallDesign('desirable-golf', design, { logo: null, proof: jpeg() }, { ip: '203.0.113.9' })).rejects.toThrow(/try again later/);
+
+    await setBallDesignLink(admin, false);
+    expect(await findDesignShop('desirable-golf')).toBeNull();
+    expect(await findDesignShop('fairway-demo')).toBeNull(); // no balls in that shop's range
+    await expect(submitBallDesign('desirable-golf', design, { logo: null, proof: jpeg() }, { ip: '198.51.100.1' })).rejects.toThrow(/isn’t available/);
+  });
 });
 
 describe('catalogue prices', () => {

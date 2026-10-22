@@ -321,6 +321,12 @@ export async function QuoteDetail({ staff, number, inModal }: { staff: Staff; nu
         </div>
       ) : null}
 
+      {open && asBallPrintSpec(q.specificationJson)?.submittedOnline ? (
+        <div className="notice">
+          <b>Designed online by {c.name}</b>
+          Check the artwork, quantity and price. Approve it in store below to put it into print, or edit it and email a proof back for them to approve.
+        </div>
+      ) : null}
       <BallProof quoteId={q.id} spec={q.specificationJson} />
       <SpecView json={q.specificationJson} text={q.specificationText} label="Custom specification" />
       <div className="detailgrid">
@@ -332,7 +338,7 @@ export async function QuoteDetail({ staff, number, inModal }: { staff: Staff; nu
           {q.estimatedLeadTime || '—'} / {q.validUntil ? longDate(q.validUntil) : 'No expiry'}
         </DetailBox>
         <DetailBox label="Quote created by" sub={stamp(q.createdAt, tz)}>
-          {d.createdByName}
+          {asBallPrintSpec(q.specificationJson)?.submittedOnline ? `${c.name} (online)` : d.createdByName}
         </DetailBox>
         <DetailBox label="Sent to customer">{q.sentAt ? stamp(q.sentAt, tz) : 'Not sent yet'}</DetailBox>
       </div>

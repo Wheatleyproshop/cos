@@ -1,0 +1,2 @@
+ALTER TABLE "organisations" ALTER COLUMN "email_automations" SET DEFAULT '{"order_confirmation":true,"quote_approval":true,"eta_revised":true,"ready_for_collection":true,"collection_reminder":true,"workshop_checked_in":true,"workshop_delayed":true,"workshop_ready":true,"workshop_reminder":true,"ball_design_received":true}'::jsonb;--> statement-breakpoint
+ALTER TABLE "organisations" ADD COLUMN "ball_design_link" boolean DEFAULT true NOT NULL;

@@ -35,7 +35,7 @@ import { addAccountsForCatalogueBrands, clearAccountLogo, saveAccount, setAccoun
 import { sendReportNow, updatePerformanceReport } from '@/lib/services/performance-report';
 import { addWorkshopItem, checkInClubs, removeWorkshopItem, updateWorkshopProgress } from '@/lib/services/workshop';
 import { addLine, archivePrebook, createPrebook, receiveStock, removeLine, setPrebookStatus, updatePrebook } from '@/lib/services/prebooks';
-import { addBall, addStarterBalls, createBallPrintQuote, setBallActive, setBallPhoto, updateBallPrice, updateSetupFee } from '@/lib/services/ball-printing';
+import { addBall, addStarterBalls, createBallPrintQuote, setBallActive, setBallDesignLink, setBallPhoto, updateBallPrice, updateSetupFee } from '@/lib/services/ball-printing';
 
 const obj = (fd: FormData) => Object.fromEntries([...fd.entries()].filter(([, v]) => typeof v === 'string'));
 const flag = (fd: FormData, name: string) => fd.get(name) === 'on' || fd.get(name) === 'true';
@@ -344,6 +344,13 @@ export async function ballActiveAction(id: string, active: boolean) {
   return act('manager', async (ctx) => {
     await setBallActive(ctx, id, active);
     return active ? 'Restored.' : 'Retired.';
+  });
+}
+
+export async function designLinkAction(enabled: boolean) {
+  return act('manager', async (ctx) => {
+    await setBallDesignLink(ctx, enabled);
+    return enabled ? 'Design link switched on.' : 'Design link switched off.';
   });
 }
 

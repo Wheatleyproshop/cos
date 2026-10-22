@@ -56,6 +56,7 @@ export const TEMPLATE_KEYS: EmailAutomationKey[] = [
   'workshop_delayed',
   'workshop_ready',
   'workshop_reminder',
+  'ball_design_received',
 ];
 
 const esc = (s: unknown) =>
@@ -215,6 +216,18 @@ export function renderEmail(type: EmailAutomationKey, ctx: EmailContext): Render
         cta: ctx.actionUrl ? { label: 'Track your order', url: ctx.actionUrl } : undefined,
       });
       return { subject: `Update on your order ${ctx.reference} — new estimated ${print ? 'ready date' : 'arrival'}`, ...r };
+    }
+    case 'ball_design_received': {
+      const r = layout(ctx, {
+        preheader: `We’ve received your golf ball design.`,
+        heading: 'Thanks — we’ve received your design',
+        intro: [
+          'Thank you for designing your personalised golf balls with us. Our team will check your artwork and be in touch shortly to confirm everything before it goes into print.',
+          'You don’t need to do anything else for now. If you’d like to change anything, just reply to this email.',
+        ],
+        rows: [{ label: 'Estimated price (incl. VAT)', value: money(ctx.totalPence) }],
+      });
+      return { subject: `We’ve received your golf ball design (${ctx.reference})`, ...r };
     }
     case 'workshop_checked_in': {
       const rows: Block[] = [{ label: 'Estimated ready', value: ctx.etaDate ? longDate(ctx.etaDate) : 'We’ll confirm shortly' }];

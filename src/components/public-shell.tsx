@@ -4,7 +4,7 @@ import type { Organisation } from '@/db/schema';
 import { resolveBrand } from '@/lib/branding';
 
 /** Customer-facing frame: the retailer's identity only — no COS branding. */
-export function PublicShell({ org, children }: { org: Organisation; children: ReactNode }) {
+export function PublicShell({ org, children, wide }: { org: Organisation; children: ReactNode; wide?: boolean }) {
   const b = resolveBrand(org);
   const contact = [org.collectionLocation, org.storePhone, org.openingHours].filter(Boolean);
   const mark = b.logoUrl ? (
@@ -15,7 +15,7 @@ export function PublicShell({ org, children }: { org: Organisation; children: Re
   );
   const vars = { '--green': b.accent, '--brand-heading': b.headingFont, '--brand-radius': b.radius } as CSSProperties;
   return (
-    <div className="public branded" style={vars}>
+    <div className={`public branded${wide ? ' wide' : ''}`} style={vars}>
       {b.fontsHref ? <link rel="stylesheet" href={b.fontsHref} precedence="default" /> : null}
       <header className="public-head" style={{ background: b.headerBg, color: b.headerText, fontFamily: b.headingFont }}>
         {b.websiteUrl ? <a href={b.websiteUrl} style={{ color: 'inherit', textDecoration: 'none' }}>{mark}</a> : mark}

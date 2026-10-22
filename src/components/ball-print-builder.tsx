@@ -12,6 +12,7 @@ import { CustomerPicker, type PickerDefaults } from './customer-picker';
 import { Field, FormMessage } from './forms';
 
 const STEPS = ['Ball', 'Personalise', 'Quantity & send'];
+const PUBLIC_STEPS = ['Ball', 'Personalise', 'Your details'];
 
 export type BuilderBall = {
   id: string; brand: string; name: string; colour: string; pricePerDozenPence: number; minDozens: number; photoUrl: string | null;
@@ -175,12 +176,16 @@ export function BallPrintBuilder({
   setupFeePence,
   action,
   defaults,
+  variant = 'staff',
 }: {
   balls: BuilderBall[];
   setupFeePence: number;
   action: (prev: FormState, fd: FormData) => Promise<FormState>;
   defaults: PickerDefaults;
+  /** 'public' = the customer's own design page: fixed prices, their own details, sends to the shop for review. */
+  variant?: 'staff' | 'public';
 }) {
+  const isPublic = variant === 'public';
   const [state, formAction, pending] = useActionState(action, null);
   const [step, setStep] = useState(0);
   const [brandFilter, setBrandFilter] = useState<string | null>(null);
@@ -253,7 +258,9 @@ export function BallPrintBuilder({
   const loadLogo = (file: File | undefined | null) => {
     setLogoError('');
     if (!file) return;
-    if (!LOGO_TYPES[file.type]) return setLogoError('Please use a PNG, JPG or WebP image. Ask the customer for a PNG of their logo if you only have a PDF.');
+    if (!LOGO_TYPES[file.type]) {
+      return setLogoError(isPublic ? 'Please use a PNG, JPG or WebP image of your logo.' : 'Please use a PNG, JPG or WebP image. Ask the customer for a PNG of their logo if you only have a PDF.');
+    }
     if (file.size > MAX_LOGO_BYTES) return setLogoError('That image is over 3 MB. Please use a smaller version.');
     const url = URL.createObjectURL(file);
     const img = new Image();
@@ -320,7 +327,7 @@ export function BallPrintBuilder({
 
       <section className="bp-panel">
         <ol className="stepper bp-steps" aria-label="Ball printing steps">
-          {STEPS.map((s, i) => (
+          {(isPublic ? PUBLIC_STEPS : STEPS).map((s, i) => (
             <li key={s} className={i === step ? 'current' : i < step ? 'done' : ''}>
               <button
                 type="button"
@@ -365,7 +372,7 @@ export function BallPrintBuilder({
         ) : step === 1 ? (
           <div aria-live="polite">
             <h2>Personalise</h2>
-            <p className="muted">Upload the customer’s logo or type a message. The preview updates as you go.</p>
+            <p className="muted">{isPublic ? 'Upload your logo or type a message.' : 'Upload the customer’s logo or type a message.'} The preview updates as you go.</p>
             <div className="seg wide" role="tablist" aria-label="Personalisation type" style={{ marginTop: 14 }}>
               <button type="button" role="tab" aria-selected={mode === 'logo'} className={mode === 'logo' ? 'on' : ''} onClick={() => setMode('logo')}>
                 Upload a logo
@@ -455,6 +462,64 @@ export function BallPrintBuilder({
               <input type="range" min={0.4} max={1} step={0.01} value={scale} onChange={(e) => setScale(Number(e.target.value))} />
             </label>
           </div>
+        ) : isPublic && state?.ok ? (
+          <div className="bp-thanks" role="status">
+            <span className="bp-thanks-tick" aria-hidden="true">✓</span>
+            <h2>Design sent</h2>
+            <p>{state.message}</p>
+          </div>
+        ) : isPublic ? (
+          <form onSubmit={submit}>
+            <h2>Quantity &amp; your details</h2>
+            <p className="muted">Send us your design and we’ll check the artwork before anything goes into print. Nothing is charged now.</p>
+            <input type="hidden" name="ballId" value={ballId ?? ''} />
+            <input type="hidden" name="artworkType" value={mode} />
+            <input type="hidden" name="font" value={font} />
+            <input type="hidden" name="ink" value={ink} />
+            <input type="hidden" name="scale" value={scale} />
+            {mode === 'text' ? lines.map((l, i) => <input key={i} type="hidden" name="textLines" value={l} />) : null}
+            <FormMessage state={state} />
+            <div className="bp-qty">
+              <span>Dozens</span>
+              <div className="stepperinput">
+                <button type="button" aria-label="One dozen fewer" onClick={() => setDozens((d) => Math.max(ball?.minDozens ?? 1, d - 1))}>
+                  −
+                </button>
+                <input
+                  name="dozens"
+                  inputMode="numeric"
+                  value={dozens}
+                  onChange={(e) => setDozens(Math.max(1, Math.min(500, Number(e.target.value.replace(/\D/g, '')) || 1)))}
+                  aria-label="Number of dozens"
+                />
+                <button type="button" aria-label="One dozen more" onClick={() => setDozens((d) => Math.min(500, d + 1))}>
+                  +
+                </button>
+              </div>
+              <small className="muted">{dozens * 12} balls{ball && ball.minDozens > 1 ? ` · minimum ${ball.minDozens} dozen` : ''}</small>
+            </div>
+            <div className="fields" style={{ marginTop: 14 }}>
+              <Field state={state} name="customerName" label="Your name" required autoComplete="name" />
+              <Field state={state} name="email" label="Email" type="email" required autoComplete="email" />
+              <Field state={state} name="phone" label="Mobile" type="tel" autoComplete="tel" />
+              <Field state={state} name="notes" label="Anything we should know?" wide textarea placeholder="e.g. Logo on one side only, needed for our society day on 14 May" />
+            </div>
+            <label className="bp-hp" aria-hidden="true">
+              Website <input name="website" tabIndex={-1} autoComplete="off" />
+            </label>
+            <div className="bp-total">
+              <div>
+                <span>{dozens} dozen × {money(ball?.pricePerDozenPence ?? 0)}</span>
+                {setupFeePence ? <span>Artwork setup {money(setupFeePence)}</span> : null}
+              </div>
+              <b>{money(dozens * (ball?.pricePerDozenPence ?? 0) + setupFeePence)}</b>
+            </div>
+            <div className="actions">
+              <button className="btn primary" type="submit" disabled={working || !ball || !hasArtwork}>
+                {working ? 'Sending…' : 'Send my design for approval →'}
+              </button>
+            </div>
+          </form>
         ) : (
           <form onSubmit={submit} noValidate={false}>
             <h2>Quantity &amp; send</h2>
@@ -520,7 +585,7 @@ export function BallPrintBuilder({
           </form>
         )}
 
-        {step < STEPS.length - 1 ? (
+        {step < STEPS.length - 1 && !(isPublic && state?.ok) ? (
           <div className="actions">
             {step > 0 ? (
               <button type="button" className="btn" onClick={() => setStep(step - 1)}>
@@ -536,7 +601,7 @@ export function BallPrintBuilder({
                 setStep(step + 1);
               }}
             >
-              Next: {STEPS[step + 1]} →
+              Next: {(isPublic ? PUBLIC_STEPS : STEPS)[step + 1]} →
             </button>
           </div>
         ) : null}
