@@ -1,12 +1,14 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
-import { AddBallForm, BallPhotoForm, BallPriceForm, SetupFeeForm } from '@/components/ball-range-forms';
+import { AddBallForm, BallPhotoForm, BallPriceForm, EditBallButton, SetupFeeForm } from '@/components/ball-range-forms';
 import { ActionButton } from '@/components/forms';
 import { PageHeader } from '@/components/views';
 import { hasRole, requireStaff } from '@/lib/auth';
+import { BALL_BRANDS } from '@/lib/ball-print';
 import { money, penceToInput } from '@/lib/format';
+import { mergeBrands } from '@/lib/order-details';
 import { getBallRange } from '@/lib/services/ball-printing';
-import { addBallAction, ballActiveAction, ballPhotoAction, ballPriceAction, setupFeeAction, starterBallsAction } from '../../actions';
+import { addBallAction, ballActiveAction, ballEditAction, ballPhotoAction, ballPriceAction, setupFeeAction, starterBallsAction } from '../../actions';
 
 export const metadata: Metadata = { title: 'Ball range' };
 
@@ -14,6 +16,8 @@ export default async function BallRangePage() {
   const staff = await requireStaff();
   const manager = hasRole(staff, 'manager');
   const balls = await getBallRange(staff.organisationId, { includeInactive: true });
+  // The brands you offer, plus any other brand already on an active ball.
+  const brands = mergeBrands(BALL_BRANDS, balls.filter((b) => b.active).map((b) => b.brand));
   return (
     <>
       <PageHeader
@@ -62,9 +66,20 @@ export default async function BallRangePage() {
                       <td className="num">{manager ? <BallPriceForm action={ballPriceAction.bind(null, b.id)} value={penceToInput(b.pricePerDozenPence)} /> : money(b.pricePerDozenPence)}</td>
                       <td className="num">
                         {manager ? (
-                          <ActionButton action={ballActiveAction.bind(null, b.id, !b.active)} className="btn small">
-                            {b.active ? 'Retire' : 'Restore'}
-                          </ActionButton>
+                          <span className="rowbtns">
+                            <EditBallButton
+                              action={ballEditAction.bind(null, b.id)}
+                              label={`${b.brand} ${b.name}`}
+                              brands={brands}
+                              values={{
+                                brand: b.brand, name: b.name, colour: b.colour, price: penceToInput(b.pricePerDozenPence),
+                                minDozens: String(b.minDozens), leadTimeDays: b.leadTimeDays ? String(b.leadTimeDays) : '0',
+                              }}
+                            />
+                            <ActionButton action={ballActiveAction.bind(null, b.id, !b.active)} className="btn small">
+                              {b.active ? 'Retire' : 'Restore'}
+                            </ActionButton>
+                          </span>
                         ) : null}
                       </td>
                     </tr>
@@ -85,7 +100,7 @@ export default async function BallRangePage() {
           {manager ? (
             <details className="section" open={!balls.length}>
               <summary>Add a ball</summary>
-              <AddBallForm action={addBallAction} />
+              <AddBallForm action={addBallAction} brands={brands} />
             </details>
           ) : null}
         </section>

@@ -453,6 +453,16 @@ describe('golf ball printing', () => {
     expect(added.brand).toBe(first.brand);
   });
 
+  it('lets a manager edit a ball, keeping one spelling per brand', async () => {
+    const { updateBall, getBallRange } = await import('@/lib/services/ball-printing');
+    const ball = (await getBallRange(org.id)).find((b) => b.name === 'Case Test')!;
+    const brandOf = (await getBallRange(org.id)).find((b) => b.id !== ball.id)!.brand;
+    await expect(updateBall(staff, ball.id, { brand: 'X', name: 'Y', pricePerDozenPence: '1' })).rejects.toThrow(/manager/);
+    await updateBall(admin, ball.id, { brand: brandOf.toLowerCase(), name: 'Case Test II', colour: '#ffcc00', pricePerDozenPence: '31.50', minDozens: '2', leadTimeDays: '7' });
+    const after = (await getBallRange(org.id)).find((b) => b.id === ball.id)!;
+    expect(after).toMatchObject({ brand: brandOf, name: 'Case Test II', colour: '#ffcc00', pricePerDozenPence: 3150, minDozens: 2, leadTimeDays: 7 });
+  });
+
   it('lets a customer design their own balls online: list price, review by the shop, abuse limits', async () => {
     const { getBallRange, submitBallDesign, findDesignShop, setBallDesignLink, DESIGN_LIMITS } = await import('@/lib/services/ball-printing');
     const [ball] = await getBallRange(org.id);

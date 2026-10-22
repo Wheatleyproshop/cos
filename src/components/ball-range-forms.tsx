@@ -1,30 +1,81 @@
 'use client';
 
+import { useCallback, useEffect, useRef, useState } from 'react';
+import type { FormState } from '@/lib/action-utils';
 import { ActionForm, Field, FormMessage, Submit, type BoundAction } from './forms';
+import { BrandSelect } from './order-forms';
 
-export function AddBallForm({ action }: { action: BoundAction }) {
+type BallValues = { brand: string; name: string; colour: string; price: string; minDozens: string; leadTimeDays: string };
+
+/** Add or edit a ball. */
+function BallForm({
+  action, values, submitLabel, onSaved, brands,
+}: { action: BoundAction; values?: BallValues; submitLabel: string; onSaved?: () => void; brands: string[] }) {
   return (
-    <ActionForm action={action} resetOnSuccess>
+    <ActionForm action={action} resetOnSuccess={!values}>
       {(s) => (
         <>
+          <OnSaved state={s} run={onSaved} />
           <div className="fields">
-            <Field state={s} name="brand" label="Brand" required placeholder="e.g. Titleist" />
-            <Field state={s} name="name" label="Model" required placeholder="e.g. Pro V1" />
-            <Field state={s} name="pricePerDozenPence" label="Price per dozen incl. printing (GBP)" required inputMode="decimal" />
+            <BrandSelect brands={brands} defaultValue={values?.brand} state={s} />
+            <Field state={s} name="name" label="Model" required placeholder="e.g. Pro V1" defaultValue={values?.name} />
+            <Field state={s} name="pricePerDozenPence" label="Price per dozen incl. printing (GBP)" required inputMode="decimal" defaultValue={values?.price} />
             <label className="field">
               <span>Ball colour</span>
-              <input type="color" name="colour" defaultValue="#ffffff" style={{ height: 40, padding: 2 }} />
+              <input type="color" name="colour" defaultValue={values?.colour ?? '#ffffff'} style={{ height: 40, padding: 2 }} />
             </label>
-            <Field state={s} name="minDozens" label="Minimum dozens" type="number" min="1" defaultValue="1" />
-            <Field state={s} name="leadTimeDays" label="Lead time (days)" type="number" min="0" defaultValue="14" />
+            <Field state={s} name="minDozens" label="Minimum dozens" type="number" min="1" defaultValue={values?.minDozens ?? '1'} />
+            <Field state={s} name="leadTimeDays" label="Lead time (days)" type="number" min="0" defaultValue={values?.leadTimeDays ?? '14'} />
           </div>
           <FormMessage state={s} />
           <div className="actions" style={{ marginTop: 10 }}>
-            <Submit className="btn">Add ball</Submit>
+            <Submit className={values ? 'btn primary' : 'btn'}>{submitLabel}</Submit>
           </div>
         </>
       )}
     </ActionForm>
+  );
+}
+
+function OnSaved({ state, run }: { state: FormState; run?: () => void }) {
+  useEffect(() => {
+    if (state?.ok) run?.();
+  }, [state, run]);
+  return null;
+}
+
+export function AddBallForm({ action, brands }: { action: BoundAction; brands: string[] }) {
+  return <BallForm action={action} submitLabel="Add ball" brands={brands} />;
+}
+
+/** "Edit" button that opens the ball's details in a pop-up. */
+export function EditBallButton({ action, values, label, brands }: { action: BoundAction; values: BallValues; label: string; brands: string[] }) {
+  const ref = useRef<HTMLDialogElement>(null);
+  const [n, setN] = useState(0); // fresh form each time it opens
+  const close = useCallback(() => ref.current?.close(), []);
+  return (
+    <>
+      <button
+        type="button"
+        className="btn small"
+        aria-label={`Edit ${label}`}
+        onClick={() => {
+          setN((x) => x + 1);
+          ref.current?.showModal();
+        }}
+      >
+        Edit
+      </button>
+      <dialog ref={ref} className="editdialog" aria-label={`Edit ${label}`}>
+        <div className="editdialog-head">
+          <h2>Edit {label}</h2>
+          <button type="button" className="btn small" onClick={close} aria-label="Close">
+            ✕
+          </button>
+        </div>
+        <BallForm key={n} action={action} values={values} submitLabel="Save changes" onSaved={close} brands={brands} />
+      </dialog>
+    </>
   );
 }
 

@@ -577,3 +577,10 @@ details.section[open] { padding-bottom: 16px; }
 .placeopt:focus-within { outline: 2px solid var(--focus, #2f80ff); outline-offset: 2px; }
 .placeopt small { color: #6b7480; }
 @media (max-width: 700px) { .placechoice { grid-template-columns: 1fr; } }
+
+/* ── Edit pop-up (ball range) ─────────────────────────────────────────── */
+.editdialog { text-align: left; border: 0; border-radius: 18px; padding: 22px; width: min(640px, calc(100vw - 32px)); max-height: calc(100vh - 40px); overflow: auto; box-shadow: 0 30px 80px #0e152240; }
+.editdialog::backdrop { background: #0e152266; }
+.editdialog-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 12px; }
+.editdialog-head h2 { margin: 0; font-size: 20px; }
+.rowbtns { display: inline-flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }

@@ -74,3 +74,6 @@ export function sniffImage(buf: Uint8Array): 'image/png' | 'image/jpeg' | 'image
   if (buf.length > 12 && String.fromCharCode(...buf.slice(0, 4)) === 'RIFF' && String.fromCharCode(...buf.slice(8, 12)) === 'WEBP') return 'image/webp';
   return null;
 }
+
+/** Ball brands the shop offers for printing (the Brand dropdown on the ball range). */
+export const BALL_BRANDS = ['Callaway', 'Srixon', 'TaylorMade', 'Titleist'];

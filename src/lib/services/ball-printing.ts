@@ -1,7 +1,7 @@
 import { and, asc, desc, eq, gt, isNull, sql } from 'drizzle-orm';
 import { Resend } from 'resend';
 import { z } from 'zod';
-import { systemDb, withTenant } from '@/db';
+import { systemDb, withTenant, type DB } from '@/db';
 import { auditEvents, customers, organisations, printBalls, quotes, users, type Organisation } from '@/db/schema';
 import { recordEvent } from '../audit';
 import { dispatchMessages, enqueueEmail } from '../email/outbox';
@@ -70,12 +70,41 @@ export async function addBall(ctx: Ctx, raw: unknown) {
   requireRole(ctx, 'manager', 'edit the ball range');
   const v = parse(ballSchema, raw);
   await withTenant(ctx.org.id, async (tx) => {
-    // "Taylormade" joins the existing "TaylorMade" rather than becoming a second brand.
-    const [same] = await tx.select({ brand: printBalls.brand }).from(printBalls).where(sql`lower(${printBalls.brand}) = ${v.brand.toLowerCase()}`).limit(1);
-    if (same) v.brand = same.brand;
+    v.brand = await existingBrandSpelling(tx, v.brand);
     await tx.insert(printBalls).values({ organisationId: ctx.org.id, ...v, leadTimeDays: v.leadTimeDays || null });
   });
   await auditCatalogue(ctx, 'ball_added', v);
+}
+
+/** "Taylormade" joins the existing "TaylorMade" rather than becoming a second brand. */
+async function existingBrandSpelling(tx: DB, brand: string, exceptId?: string) {
+  const [same] = await tx
+    .select({ brand: printBalls.brand })
+    .from(printBalls)
+    .where(and(sql`lower(${printBalls.brand}) = ${brand.toLowerCase()}`, exceptId ? sql`${printBalls.id} <> ${exceptId}` : undefined))
+    .limit(1);
+  return same?.brand ?? brand;
+}
+
+/** Edit a ball's brand, model, colour, price, minimum and lead time. Quotes keep their own copy. */
+export async function updateBall(ctx: Ctx, id: string, raw: unknown) {
+  requireRole(ctx, 'manager', 'edit the ball range');
+  const v = parse(ballSchema, raw);
+  await withTenant(ctx.org.id, async (tx) => {
+    const [before] = await tx.select().from(printBalls).where(and(eq(printBalls.id, id), eq(printBalls.organisationId, ctx.org.id))).limit(1);
+    if (!before) throw new ServiceError('Ball not found.');
+    v.brand = await existingBrandSpelling(tx, v.brand, id);
+    const next = { ...v, leadTimeDays: v.leadTimeDays || null };
+    await tx.update(printBalls).set(next).where(eq(printBalls.id, id));
+    const changed = (Object.keys(next) as (keyof typeof next)[]).filter((k) => before[k] !== next[k]);
+    if (changed.length) {
+      await recordEvent(tx, {
+        organisationId: ctx.org.id, actor: ctx.actor, eventType: 'settings_changed', entityType: 'organisation', entityId: ctx.org.id,
+        oldValue: Object.fromEntries(changed.map((k) => [k, before[k]])), newValue: { id, ...Object.fromEntries(changed.map((k) => [k, next[k]])) },
+        metadata: { section: 'ball_printing.ball_edited', ball: `${before.brand} ${before.name}` },
+      });
+    }
+  });
 }
 
 export async function updateBallPrice(ctx: Ctx, id: string, raw: unknown) {
