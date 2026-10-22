@@ -313,6 +313,9 @@ export async function listQuotes(org: Organisation, opts: { q?: string; status?:
   });
 }
 
+/** A club's full membership list fits; beyond this the page asks you to search. */
+export const CUSTOMER_LIST_LIMIT = 3000;
+
 export async function listCustomers(org: Organisation, qRaw?: string) {
   const q = (qRaw ?? '').trim().slice(0, 100);
   const t = likeTerm(q);
@@ -334,7 +337,7 @@ export async function listCustomers(org: Organisation, qRaw?: string) {
           isNull(customers.archivedAt),
           q
             ? or(
-                ilike(customers.name, t),
+                q.includes(' ') ? and(...q.split(/\s+/).slice(0, 5).map((w) => ilike(customers.name, likeTerm(w)))) : ilike(customers.name, t),
                 ilike(customers.email, t),
                 ilike(customers.phone, t),
                 digits.length >= 4 ? sql`regexp_replace(${customers.phone}, '\\D', '', 'g') like ${'%' + digits + '%'}` : undefined,
@@ -345,7 +348,7 @@ export async function listCustomers(org: Organisation, qRaw?: string) {
         ),
       )
       .orderBy(asc(customers.name))
-      .limit(500),
+      .limit(CUSTOMER_LIST_LIMIT),
   );
 }
 

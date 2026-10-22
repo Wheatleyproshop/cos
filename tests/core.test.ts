@@ -346,6 +346,24 @@ describe('customer import & returning customers', () => {
     expect(again.created).toBe(0);
   });
 
+  it('reads a club membership export: titles stripped, mobile tidied, extra columns ignored', async () => {
+    const { planImport } = await import('@/lib/services/customer-import');
+    const plan = planImport(
+      [
+        '\ufeff"Title/Forename/Surname","Member Or Visitor","Email Address","Telephone (Mobile)","Surname/Title/Forename","Parental Email"',
+        '"Mr Alan Birch","Member","alan@example.com","+447700900222","Birch, Mr Alan","mum@example.com"',
+        '"Mrs Jo Ash","Member","jo@example.com","7700 900333","Ash, Mrs Jo",""',
+        '"Tom Oak","Member","","07700900444 - dad","Oak, Tom",""',
+      ].join('\n'),
+    );
+    expect(plan.columns).toMatchObject({ name: 'Title/Forename/Surname', email: 'Email Address', phone: 'Telephone (Mobile)' });
+    expect(plan.rows.map((r) => [r.name, r.email, r.phone])).toEqual([
+      ['Alan Birch', 'alan@example.com', '07700 900222'],
+      ['Jo Ash', 'jo@example.com', '07700 900333'],
+      ['Tom Oak', '', '07700900444 - dad'],
+    ]);
+  });
+
   it('links a new order to the picked returning customer and adds their missing email', async () => {
     const [noEmail] = await withTenant(org.id, (tx) => tx.select().from(customers).where(eq(customers.phone, '07700 333444')));
     const order = await createOrder(staff, {

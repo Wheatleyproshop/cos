@@ -9,7 +9,11 @@ export async function GET(req: Request) {
   if (!staff || staff.needsMember) return new Response('Unauthorised', { status: 401 });
   const q = (new URL(req.url).searchParams.get('q') ?? '').trim().slice(0, 80);
   if (q.length < 2) return Response.json({ results: [] });
-  const term = `%${q.replace(/[\\%_]/g, (c) => '\\' + c)}%`;
+  const esc = (v: string) => v.replace(/[\\%_]/g, (c) => '\\' + c);
+  const term = `%${esc(q)}%`;
+  // Every word must appear in the name, in any order: "john sm" and "smith john" both find John Smith.
+  const words = q.split(/\s+/).filter(Boolean).slice(0, 5);
+  const nameMatch = words.length > 1 ? and(...words.map((w) => ilike(customers.name, `%${esc(w)}%`))) : ilike(customers.name, term);
   const digits = q.replace(/\D/g, '');
   const results = await withTenant(staff.organisationId, (tx) =>
     tx
@@ -26,14 +30,14 @@ export async function GET(req: Request) {
         and(
           isNull(customers.archivedAt),
           or(
-            ilike(customers.name, term),
+            nameMatch,
             ilike(customers.email, term),
             ilike(customers.phone, term),
             digits.length >= 4 ? sql`regexp_replace(${customers.phone}, '\\D', '', 'g') like ${'%' + digits + '%'}` : undefined,
           ),
         ),
       )
-      .orderBy(desc(customers.updatedAt))
+      .orderBy(sql`(${customers.name} ilike ${esc(q) + '%'}) desc`, sql`(${customers.name} ilike ${'% ' + esc(q) + '%'}) desc`, desc(customers.updatedAt))
       .limit(8),
   );
   return Response.json({ results }, { headers: { 'Cache-Control': 'no-store' } });

@@ -9,16 +9,40 @@ export const MAX_IMPORT_ROWS = 10_000;
 
 /** Header names we recognise (lower-cased, punctuation stripped). */
 const HEADERS: Record<'name' | 'first' | 'last' | 'email' | 'phone' | 'notes', string[]> = {
-  name: ['name', 'fullname', 'customer', 'customername', 'contact', 'contactname', 'accountname'],
+  // Club membership systems export names as "Title/Forename/Surname"; prefer that over "Surname/Title/Forename".
+  name: ['name', 'fullname', 'customer', 'customername', 'contact', 'contactname', 'accountname', 'membername', 'titleforenamesurname', 'forenamesurname'],
   first: ['firstname', 'forename', 'givenname', 'first'],
   last: ['lastname', 'surname', 'familyname', 'last'],
   email: ['email', 'emailaddress', 'e-mail', 'mail'],
-  phone: ['phone', 'mobile', 'mobilenumber', 'telephone', 'tel', 'phonenumber', 'cell', 'mobilephone', 'contactnumber'],
+  phone: ['phone', 'mobile', 'mobilenumber', 'telephonemobile', 'mobiletelephone', 'mobileno', 'telephone', 'tel', 'phonenumber', 'cell', 'mobilephone', 'contactnumber'],
   notes: ['notes', 'note', 'comments', 'comment', 'memo'],
 };
 
 const norm = (h: string) => h.toLowerCase().replace(/[^a-z-]/g, '');
-const digitsOf = (p: string) => p.replace(/\D/g, '');
+/** Digits for matching, with UK +44 numbers compared as their 0… form. */
+const digitsOf = (p: string) => {
+  const d = p.replace(/\D/g, '');
+  return d.startsWith('44') && d.length === 12 ? `0${d.slice(2)}` : d;
+};
+
+const TITLES = new Set(['mr', 'mrs', 'ms', 'miss', 'mst', 'master', 'mx', 'dr', 'rev', 'revd', 'sir', 'dame', 'lady', 'lord', 'prof', 'capt', 'col', 'maj']);
+
+/** "Mr John Smith" → "John Smith". Leaves a lone word alone. */
+export function tidyName(raw: string) {
+  const words = raw.replace(/\s+/g, ' ').trim().split(' ');
+  if (words.length > 1 && TITLES.has(words[0].toLowerCase().replace(/\.$/, ''))) words.shift();
+  return words.join(' ');
+}
+
+/** UK numbers as 07700 900111; anything else (notes like "- dad", overseas) kept as typed, spaces tidied. */
+export function tidyPhone(raw: string) {
+  const t = raw.replace(/\s+/g, ' ').trim();
+  if (!/^[+\d\s()-]+$/.test(t)) return t;
+  let d = t.replace(/\D/g, '');
+  if (d.startsWith('44') && d.length === 12) d = `0${d.slice(2)}`;
+  else if (d.length === 10 && d.startsWith('7')) d = `0${d}`;
+  return d.length === 11 && d.startsWith('0') ? `${d.slice(0, 5)} ${d.slice(5)}` : t;
+}
 
 export type ImportRow = { name: string; email: string; phone: string; notes: string };
 export type ImportPlan = {
@@ -49,9 +73,9 @@ export function planImport(csvText: string): ImportPlan {
   const skipped: ImportPlan['skipped'] = [];
   const cell = (r: string[], i?: number) => (i === undefined ? '' : (r[i] ?? '').trim());
   table.slice(1).forEach((r, n) => {
-    const name = (cell(r, idx.name) || [cell(r, idx.first), cell(r, idx.last)].filter(Boolean).join(' ')).replace(/\s+/g, ' ').slice(0, 120);
+    const name = tidyName(cell(r, idx.name) || [cell(r, idx.first), cell(r, idx.last)].filter(Boolean).join(' ')).slice(0, 120);
     let email = cell(r, idx.email).toLowerCase();
-    const phone = cell(r, idx.phone).slice(0, 40);
+    const phone = tidyPhone(cell(r, idx.phone)).slice(0, 40);
     const notes = cell(r, idx.notes).slice(0, 4000);
     if (email && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) email = '';
     if (!name && !email) return skipped.push({ line: n + 2, reason: 'no name or email' });
