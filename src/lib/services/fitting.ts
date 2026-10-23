@@ -1,4 +1,4 @@
-import { and, asc, eq } from 'drizzle-orm';
+import { and, asc, eq, isNotNull, isNull } from 'drizzle-orm';
 import { z } from 'zod';
 import { withTenant } from '@/db';
 import {
@@ -25,12 +25,14 @@ export { CLUB_CATEGORIES, validComponentIds };
 /** Everything the Custom Fitting builder needs, in one tenant-scoped read. */
 export async function getCatalog(orgId: string, opts: { includeInactive?: boolean } = {}) {
   return withTenant(orgId, async (tx) => {
-    const activeOnly = <T extends { active: unknown }>(t: T) => (opts.includeInactive ? undefined : eq(t.active as never, true));
+    // Deleted items never show; retired ones only when asked for (the catalogue page).
+    const shown = <T extends { active: unknown; removedAt: unknown }>(t: T) =>
+      and(isNull(t.removedAt as never), opts.includeInactive ? undefined : eq(t.active as never, true));
     const [b, m, cats, comps, rules] = await Promise.all([
-      tx.select().from(brands).where(activeOnly(brands)).orderBy(asc(brands.sortOrder), asc(brands.name)),
-      tx.select().from(productModels).where(activeOnly(productModels)).orderBy(asc(productModels.name)),
+      tx.select().from(brands).where(shown(brands)).orderBy(asc(brands.sortOrder), asc(brands.name)),
+      tx.select().from(productModels).where(shown(productModels)).orderBy(asc(productModels.name)),
       tx.select().from(componentCategories).orderBy(asc(componentCategories.sortOrder)),
-      tx.select().from(components).where(activeOnly(components)).orderBy(asc(components.upchargePence), asc(components.name)),
+      tx.select().from(components).where(shown(components)).orderBy(asc(components.upchargePence), asc(components.name)),
       tx.select().from(modelComponentRules),
     ]);
     return { brands: b, models: m, categories: cats, components: comps, rules };
@@ -243,6 +245,60 @@ export async function updateComponentUpcharge(ctx: Ctx, id: string, raw: unknown
 }
 
 /** Catalogue items are retired, never deleted, so old quotes keep their references. */
+/** Deleted catalogue items, newest first, for the "Deleted" list on the catalogue page. */
+export async function listRemovedCatalog(orgId: string) {
+  return withTenant(orgId, async (tx) => {
+    const [b, m, comps] = await Promise.all([
+      tx.select().from(brands).where(isNotNull(brands.removedAt)),
+      tx.select({ model: productModels, brand: brands.name }).from(productModels).innerJoin(brands, eq(brands.id, productModels.brandId)).where(isNotNull(productModels.removedAt)),
+      tx.select({ c: components, category: componentCategories.label }).from(components).innerJoin(componentCategories, eq(componentCategories.id, components.categoryId)).where(isNotNull(components.removedAt)),
+    ]);
+    // A brand's heads/options deleted along with it are restored with it, so they aren't listed separately.
+    const withBrand = new Map(b.map((x) => [x.id, x.removedAt!.getTime()]));
+    const cascaded = (brandId: string | null, at: Date) => brandId !== null && withBrand.get(brandId) === at.getTime();
+    return [
+      ...b.map((x) => ({ kind: 'brand' as const, id: x.id, name: x.name, detail: 'Brand, with its heads and brand options', at: x.removedAt! })),
+      ...m.filter((x) => !cascaded(x.model.brandId, x.model.removedAt!)).map((x) => ({ kind: 'model' as const, id: x.model.id, name: `${x.brand} ${x.model.name}`, detail: 'Head', at: x.model.removedAt! })),
+      ...comps.filter((x) => !cascaded(x.c.brandId, x.c.removedAt!)).map((x) => ({ kind: 'component' as const, id: x.c.id, name: x.c.name, detail: x.category, at: x.c.removedAt! })),
+    ].sort((a, z) => z.at.getTime() - a.at.getTime());
+  });
+}
+
+/**
+ * Deletes a brand, head or option from the catalogue (or restores it). Nothing is erased: quotes
+ * and orders keep their own copy, the row is hidden everywhere, and it can be restored from the
+ * Deleted list. Deleting a brand takes its heads and brand-specific options with it.
+ */
+export async function setCatalogRemoved(ctx: Ctx, kind: 'brand' | 'model' | 'component', id: string, removed: boolean) {
+  requireRole(ctx, 'manager', 'edit the product catalogue');
+  const name = await withTenant(ctx.org.id, async (tx) => {
+    const table = kind === 'brand' ? brands : kind === 'model' ? productModels : components;
+    const [row] = await tx.select().from(table).where(and(eq(table.id, id), eq(table.organisationId, ctx.org.id))).limit(1);
+    if (!row) throw new ServiceError('That item is no longer in the catalogue.');
+    if (removed) {
+      const now = new Date();
+      await tx.update(table).set({ removedAt: now, active: false }).where(eq(table.id, id));
+      if (kind === 'brand') {
+        await tx.update(productModels).set({ removedAt: now, active: false }).where(and(eq(productModels.brandId, id), isNull(productModels.removedAt)));
+        await tx.update(components).set({ removedAt: now, active: false }).where(and(eq(components.brandId, id), isNull(components.removedAt)));
+      }
+    } else {
+      if (!row.removedAt) return row.name;
+      await tx.update(table).set({ removedAt: null, active: true }).where(eq(table.id, id));
+      if (kind === 'brand') {
+        await tx.update(productModels).set({ removedAt: null, active: true }).where(and(eq(productModels.brandId, id), eq(productModels.removedAt, row.removedAt)));
+        await tx.update(components).set({ removedAt: null, active: true }).where(and(eq(components.brandId, id), eq(components.removedAt, row.removedAt)));
+      } else if (kind === 'model' || (kind === 'component' && 'brandId' in row && row.brandId)) {
+        // Restoring a head or option of a deleted brand brings the brand back too.
+        const brandId = (row as { brandId: string | null }).brandId!;
+        await tx.update(brands).set({ removedAt: null, active: true }).where(and(eq(brands.id, brandId), isNotNull(brands.removedAt)));
+      }
+    }
+    return row.name;
+  });
+  await audit(ctx, removed ? `${kind}_deleted` : `${kind}_undeleted`, { id, name });
+}
+
 export async function setCatalogActive(ctx: Ctx, kind: 'brand' | 'model' | 'component', id: string, active: boolean) {
   requireRole(ctx, 'manager', 'edit the product catalogue');
   await withTenant(ctx.org.id, async (tx) => {

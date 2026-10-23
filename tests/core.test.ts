@@ -588,6 +588,30 @@ describe('catalogue prices', () => {
     );
     expect(events.at(-1)?.newValueJson).toMatchObject({ basePricePence: 29800 });
   });
+
+  it('deletes and restores heads and whole brands', async () => {
+    const { getCatalog, setCatalogRemoved, listRemovedCatalog } = await import('@/lib/services/fitting');
+    const before = await getCatalog(org.id, { includeInactive: true });
+    const model = before.models.at(-1)!;
+    await expect(setCatalogRemoved(staff, 'model', model.id, true)).rejects.toThrow(/manager/);
+    await setCatalogRemoved(admin, 'model', model.id, true);
+    expect((await getCatalog(org.id, { includeInactive: true })).models.some((m) => m.id === model.id)).toBe(false);
+    expect((await listRemovedCatalog(org.id)).map((r) => r.id)).toContain(model.id);
+    await setCatalogRemoved(admin, 'model', model.id, false);
+    expect((await getCatalog(org.id)).models.some((m) => m.id === model.id)).toBe(true);
+
+    // A brand takes its heads with it, and brings them back on restore.
+    const brand = before.brands.find((b) => before.models.some((m) => m.brandId === b.id))!;
+    const heads = before.models.filter((m) => m.brandId === brand.id && m.active).map((m) => m.id);
+    await setCatalogRemoved(admin, 'brand', brand.id, true);
+    const gone = await getCatalog(org.id, { includeInactive: true });
+    expect(gone.brands.some((b) => b.id === brand.id)).toBe(false);
+    expect(gone.models.some((m) => m.brandId === brand.id)).toBe(false);
+    expect((await listRemovedCatalog(org.id)).filter((r) => heads.includes(r.id))).toHaveLength(0); // listed under the brand
+    await setCatalogRemoved(admin, 'brand', brand.id, false);
+    const back = await getCatalog(org.id);
+    expect(heads.every((id) => back.models.some((m) => m.id === id))).toBe(true);
+  });
 });
 
 describe('catalogue upcharges', () => {

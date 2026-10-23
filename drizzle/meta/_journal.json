@@ -155,6 +155,13 @@
       "when": 1792743951511,
       "tag": "0021_crest_design_link",
       "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1792744489065,
+      "tag": "0022_catalogue_removed",
+      "breakpoints": true
     }
   ]
 }

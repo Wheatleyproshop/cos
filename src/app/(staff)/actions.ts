@@ -30,7 +30,7 @@ import {
 } from '@/lib/services/admin';
 import { runBackup } from '@/lib/services/backups';
 import { sendTestEmail } from '@/lib/services/test-email';
-import { addBrand, addComponent, addModel, createFittingQuote, setCatalogActive, updateComponentUpcharge, updateModelPrice } from '@/lib/services/fitting';
+import { addBrand, addComponent, addModel, createFittingQuote, setCatalogActive, setCatalogRemoved, updateComponentUpcharge, updateModelPrice } from '@/lib/services/fitting';
 import { addAccountsForCatalogueBrands, clearAccountLogo, saveAccount, setAccountActive, setAccountLogo } from '@/lib/services/accounts';
 import { sendReportNow, updatePerformanceReport } from '@/lib/services/performance-report';
 import { addWorkshopItem, checkInClubs, removeWorkshopItem, updateWorkshopProgress } from '@/lib/services/workshop';
@@ -267,6 +267,13 @@ export async function catalogueAction(kind: 'brand' | 'model' | 'component', _: 
     else await addComponent(ctx, obj(fd));
     return 'Added to the catalogue.';
   }, fd);
+}
+
+export async function catalogueRemoveAction(kind: 'brand' | 'model' | 'component', id: string, removed: boolean) {
+  return act('manager', async (ctx) => {
+    await setCatalogRemoved(ctx, kind, id, removed);
+    return removed ? 'Deleted.' : 'Restored.';
+  });
 }
 
 export async function catalogueActiveAction(kind: 'brand' | 'model' | 'component', id: string, active: boolean) {

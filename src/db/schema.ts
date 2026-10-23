@@ -467,6 +467,8 @@ export const brands = pgTable('brands', {
   tagline: text('tagline').notNull().default(''),
   sortOrder: integer('sort_order').notNull().default(0),
   active: boolean('active').notNull().default(true),
+  /** Deleted from the catalogue (hidden everywhere; restorable). Old quotes keep their own copy. */
+  removedAt: timestamp('removed_at', { withTimezone: true }),
   createdAt: createdAt(),
 });
 
@@ -487,6 +489,8 @@ export const productModels = pgTable('product_models', {
   validFrom: date('valid_from', { mode: 'string' }),
   validTo: date('valid_to', { mode: 'string' }),
   active: boolean('active').notNull().default(true),
+  /** Deleted from the catalogue (hidden everywhere; restorable). Old quotes keep their own copy. */
+  removedAt: timestamp('removed_at', { withTimezone: true }),
   createdAt: createdAt(),
 });
 
@@ -652,6 +656,8 @@ export const components = pgTable('components', {
   imageKey: text('image_key'),
   season: text('season').notNull().default(''),
   active: boolean('active').notNull().default(true),
+  /** Deleted from the catalogue (hidden everywhere; restorable). Old quotes keep their own copy. */
+  removedAt: timestamp('removed_at', { withTimezone: true }),
   metadata: jsonb('metadata').notNull().default({}),
 });
 

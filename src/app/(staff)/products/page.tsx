@@ -4,23 +4,42 @@ import { ActionButton } from '@/components/forms';
 import { CatalogueForm } from '@/components/catalogue-form';
 import { PageHeader } from '@/components/views';
 import { hasRole, requireStaff } from '@/lib/auth';
-import { money, penceToInput } from '@/lib/format';
+import { money, penceToInput, stamp } from '@/lib/format';
 import { CLUB_CATEGORIES } from '@/lib/fitting-rules';
-import { getCatalog } from '@/lib/services/fitting';
-import { catalogueAction, catalogueActiveAction, componentUpchargeAction, modelPriceAction } from '../actions';
+import { getCatalog, listRemovedCatalog } from '@/lib/services/fitting';
+import { catalogueAction, catalogueActiveAction, catalogueRemoveAction, componentUpchargeAction, modelPriceAction } from '../actions';
 
 export const metadata: Metadata = { title: 'Products' };
 
 export default async function ProductsPage() {
   const staff = await requireStaff();
   const manager = hasRole(staff, 'manager');
-  const c = await getCatalog(staff.organisationId, { includeInactive: true });
+  const [c, removed] = await Promise.all([getCatalog(staff.organisationId, { includeInactive: true }), listRemovedCatalog(staff.organisationId)]);
   const brandName = (id: string) => c.brands.find((b) => b.id === id)?.name ?? '';
+  const nameOf = (kind: 'brand' | 'model' | 'component', id: string) =>
+    kind === 'brand'
+      ? brandName(id)
+      : kind === 'model'
+        ? (c.models.find((m) => m.id === id)?.name ?? 'this head')
+        : (c.components.find((x) => x.id === id)?.name ?? 'this option');
   const retire = (kind: 'brand' | 'model' | 'component', id: string, active: boolean) =>
     manager ? (
-      <ActionButton action={catalogueActiveAction.bind(null, kind, id, !active)} className="btn small">
-        {active ? 'Retire' : 'Restore'}
-      </ActionButton>
+      <span className="rowbtns">
+        <ActionButton action={catalogueActiveAction.bind(null, kind, id, !active)} className="btn small">
+          {active ? 'Retire' : 'Restore'}
+        </ActionButton>
+        <ActionButton
+          action={catalogueRemoveAction.bind(null, kind, id, true)}
+          className="btn small danger"
+          confirm={
+            kind === 'brand'
+              ? `Delete ${nameOf(kind, id)} and all its heads and brand options from the catalogue? Quotes and orders keep their details, and you can restore it from Deleted items.`
+              : `Delete ${nameOf(kind, id)} from the catalogue? Quotes and orders keep their details, and you can restore it from Deleted items.`
+          }
+        >
+          Delete
+        </ActionButton>
+      </span>
     ) : null;
 
   return (
@@ -158,6 +177,30 @@ export default async function ProductsPage() {
               </details>
             ) : null}
           </section>
+          {removed.length ? (
+            <section className="panel">
+              <details className="section">
+                <summary>Deleted items ({removed.length})</summary>
+                <ul className="attention">
+                  {removed.map((r) => (
+                    <li key={`${r.kind}-${r.id}`}>
+                      <span>
+                        <b>{r.name}</b>
+                        <div className="muted">
+                          {r.detail} · deleted {stamp(r.at, staff.org.timezone)}
+                        </div>
+                      </span>
+                      {manager ? (
+                        <ActionButton action={catalogueRemoveAction.bind(null, r.kind, r.id, false)} className="btn small">
+                          Restore
+                        </ActionButton>
+                      ) : null}
+                    </li>
+                  ))}
+                </ul>
+              </details>
+            </section>
+          ) : null}
         </div>
       </div>
     </>
