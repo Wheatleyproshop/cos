@@ -1,4 +1,4 @@
-import { and, asc, eq, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, isNotNull, isNull, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import { systemDb, withTenant, type DB } from '@/db';
 import { organisations, printBalls, type Organisation } from '@/db/schema';
@@ -28,7 +28,8 @@ export async function getBallRange(orgId: string, opts: { includeInactive?: bool
     tx
       .select()
       .from(printBalls)
-      .where(opts.includeInactive ? undefined : eq(printBalls.active, true))
+      // Deleted balls never show; retired ones only on the range page.
+      .where(and(isNull(printBalls.removedAt), opts.includeInactive ? undefined : eq(printBalls.active, true)))
       .orderBy(asc(printBalls.sortOrder), asc(printBalls.brand), asc(printBalls.name)),
   );
 }
@@ -133,6 +134,22 @@ export async function setBallActive(ctx: Ctx, id: string, active: boolean) {
     tx.update(printBalls).set({ active }).where(and(eq(printBalls.id, id), eq(printBalls.organisationId, ctx.org.id))),
   );
   await auditCatalogue(ctx, active ? 'ball_restored' : 'ball_retired', { id });
+}
+
+/** Deletes a ball from the range, or restores it. Nothing is erased: quotes keep their own copy. */
+export async function setBallRemoved(ctx: Ctx, id: string, removed: boolean) {
+  requireRole(ctx, 'manager', 'edit the ball range');
+  const ball = await withTenant(ctx.org.id, async (tx) => {
+    const [b] = await tx.select().from(printBalls).where(and(eq(printBalls.id, id), eq(printBalls.organisationId, ctx.org.id))).limit(1);
+    if (!b) throw new ServiceError('Ball not found.');
+    await tx.update(printBalls).set(removed ? { removedAt: new Date(), active: false } : { removedAt: null, active: true }).where(eq(printBalls.id, id));
+    return b;
+  });
+  await auditCatalogue(ctx, removed ? 'ball_deleted' : 'ball_undeleted', { id, ball: `${ball.brand} ${ball.name}` });
+}
+
+export async function listRemovedBalls(orgId: string) {
+  return withTenant(orgId, (tx) => tx.select().from(printBalls).where(isNotNull(printBalls.removedAt)).orderBy(desc(printBalls.removedAt)));
 }
 
 export async function addStarterBalls(ctx: Ctx) {

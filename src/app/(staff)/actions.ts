@@ -36,7 +36,7 @@ import { sendReportNow, updatePerformanceReport } from '@/lib/services/performan
 import { addWorkshopItem, checkInClubs, removeWorkshopItem, updateWorkshopProgress } from '@/lib/services/workshop';
 import { addLine, archivePrebook, createPrebook, receiveStock, removeLine, setPrebookStatus, updatePrebook } from '@/lib/services/prebooks';
 import { createCrestQuote, setCrestDesignLink, updateCrestPrices } from '@/lib/services/cresting';
-import { addBall, addStarterBalls, createBallPrintQuote, setBallActive, setBallDesignLink, setBallPhoto, updateBall, updateBallPrice, updateSetupFee } from '@/lib/services/ball-printing';
+import { addBall, addStarterBalls, createBallPrintQuote, setBallActive, setBallDesignLink, setBallPhoto, setBallRemoved, updateBall, updateBallPrice, updateSetupFee } from '@/lib/services/ball-printing';
 
 const obj = (fd: FormData) => Object.fromEntries([...fd.entries()].filter(([, v]) => typeof v === 'string'));
 const flag = (fd: FormData, name: string) => fd.get(name) === 'on' || fd.get(name) === 'true';
@@ -393,6 +393,13 @@ export async function ballEditAction(id: string, _: FormState, fd: FormData) {
     await updateBall(ctx, id, obj(fd));
     return 'Ball updated.';
   }, fd);
+}
+
+export async function ballRemoveAction(id: string, removed: boolean) {
+  return act('manager', async (ctx) => {
+    await setBallRemoved(ctx, id, removed);
+    return removed ? 'Deleted.' : 'Restored.';
+  });
 }
 
 export async function ballActiveAction(id: string, active: boolean) {

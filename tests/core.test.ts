@@ -463,6 +463,17 @@ describe('golf ball printing', () => {
     expect(after).toMatchObject({ brand: brandOf, name: 'Case Test II', colour: '#ffcc00', pricePerDozenPence: 3150, minDozens: 2, leadTimeDays: 7 });
   });
 
+  it('deletes a ball from the range and restores it', async () => {
+    const { getBallRange, setBallRemoved, listRemovedBalls } = await import('@/lib/services/ball-printing');
+    const ball = (await getBallRange(org.id)).find((b) => b.name === 'Case Test II')!;
+    await expect(setBallRemoved(staff, ball.id, true)).rejects.toThrow(/manager/);
+    await setBallRemoved(admin, ball.id, true);
+    expect((await getBallRange(org.id, { includeInactive: true })).some((b) => b.id === ball.id)).toBe(false);
+    expect((await listRemovedBalls(org.id)).map((b) => b.id)).toContain(ball.id);
+    await setBallRemoved(admin, ball.id, false);
+    expect((await getBallRange(org.id)).some((b) => b.id === ball.id)).toBe(true);
+  });
+
   it('lets a customer design their own balls online: list price, review by the shop, abuse limits', async () => {
     const { getBallRange, submitBallDesign, findDesignShop, setBallDesignLink, DESIGN_LIMITS } = await import('@/lib/services/ball-printing');
     const [ball] = await getBallRange(org.id);

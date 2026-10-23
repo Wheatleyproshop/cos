@@ -5,17 +5,17 @@ import { ActionButton } from '@/components/forms';
 import { PageHeader } from '@/components/views';
 import { hasRole, requireStaff } from '@/lib/auth';
 import { BALL_BRANDS } from '@/lib/ball-print';
-import { money, penceToInput } from '@/lib/format';
+import { money, penceToInput, stamp } from '@/lib/format';
 import { mergeBrands } from '@/lib/order-details';
-import { getBallRange } from '@/lib/services/ball-printing';
-import { addBallAction, ballActiveAction, ballEditAction, ballPhotoAction, ballPriceAction, setupFeeAction, starterBallsAction } from '../../actions';
+import { getBallRange, listRemovedBalls } from '@/lib/services/ball-printing';
+import { addBallAction, ballActiveAction, ballEditAction, ballRemoveAction, ballPhotoAction, ballPriceAction, setupFeeAction, starterBallsAction } from '../../actions';
 
 export const metadata: Metadata = { title: 'Ball range' };
 
 export default async function BallRangePage() {
   const staff = await requireStaff();
   const manager = hasRole(staff, 'manager');
-  const balls = await getBallRange(staff.organisationId, { includeInactive: true });
+  const [balls, removed] = await Promise.all([getBallRange(staff.organisationId, { includeInactive: true }), listRemovedBalls(staff.organisationId)]);
   // The brands you offer, plus any other brand already on an active ball.
   const brands = mergeBrands(BALL_BRANDS, balls.filter((b) => b.active).map((b) => b.brand));
   return (
@@ -79,6 +79,13 @@ export default async function BallRangePage() {
                             <ActionButton action={ballActiveAction.bind(null, b.id, !b.active)} className="btn small">
                               {b.active ? 'Retire' : 'Restore'}
                             </ActionButton>
+                            <ActionButton
+                              action={ballRemoveAction.bind(null, b.id, true)}
+                              className="btn small danger"
+                              confirm={`Delete ${b.brand} ${b.name} from your ball range? Quotes and orders keep their details, and you can restore it from Deleted balls.`}
+                            >
+                              Delete
+                            </ActionButton>
                           </span>
                         ) : null}
                       </td>
@@ -97,6 +104,30 @@ export default async function BallRangePage() {
               ) : null}
             </div>
           )}
+          {removed.length ? (
+            <details className="section">
+              <summary>Deleted balls ({removed.length})</summary>
+              <ul className="attention">
+                {removed.map((b) => (
+                  <li key={b.id}>
+                    <span>
+                      <b>
+                        {b.brand} {b.name}
+                      </b>
+                      <div className="muted">
+                        {money(b.pricePerDozenPence)} per dozen · deleted {stamp(b.removedAt!, staff.org.timezone)}
+                      </div>
+                    </span>
+                    {manager ? (
+                      <ActionButton action={ballRemoveAction.bind(null, b.id, false)} className="btn small">
+                        Restore
+                      </ActionButton>
+                    ) : null}
+                  </li>
+                ))}
+              </ul>
+            </details>
+          ) : null}
           {manager ? (
             <details className="section" open={!balls.length}>
               <summary>Add a ball</summary>
@@ -112,7 +143,7 @@ export default async function BallRangePage() {
             <p>Artwork setup fee: {money(staff.org.ballSetupFeePence)}</p>
           )}
           <p className="muted" style={{ marginTop: 16 }}>
-            Retired balls disappear from the builder but stay on old quotes and orders.
+            Retired balls disappear from the builder but stay listed here; deleted balls are cleared from the list (restore them from Deleted balls). Old quotes and orders keep their details either way.
           </p>
           <h3>Ball photos</h3>
           <p className="muted">

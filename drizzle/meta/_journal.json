@@ -162,6 +162,13 @@
       "when": 1792744489065,
       "tag": "0022_catalogue_removed",
       "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1792745243812,
+      "tag": "0023_ball_removed",
+      "breakpoints": true
     }
   ]
 }

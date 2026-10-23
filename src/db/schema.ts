@@ -535,7 +535,7 @@ export const workshopItems = pgTable(
     quantity: integer('quantity').notNull().default(1),
     pricePence: integer('price_pence').notNull().default(0),
     createdAt: createdAt(),
-    removedAt: timestamp('removed_at', { withTimezone: true }),
+  removedAt: timestamp('removed_at', { withTimezone: true }),
   },
   (t) => [index('workshop_items_job_idx').on(t.jobId)],
 );
@@ -609,7 +609,7 @@ export const prebookLines = pgTable(
     expectedDate: date('expected_date', { mode: 'string' }),
     forCustomer: text('for_customer').notNull().default(''),
     createdAt: createdAt(),
-    removedAt: timestamp('removed_at', { withTimezone: true }),
+  removedAt: timestamp('removed_at', { withTimezone: true }),
   },
   (t) => [index('prebook_lines_prebook_idx').on(t.prebookId)],
 );
@@ -630,6 +630,8 @@ export const printBalls = pgTable('print_balls', {
   leadTimeDays: integer('lead_time_days'),
   sortOrder: integer('sort_order').notNull().default(0),
   active: boolean('active').notNull().default(true),
+  /** Deleted from the range (hidden everywhere; restorable). Quotes keep their own copy. */
+  removedAt: timestamp('removed_at', { withTimezone: true }),
   createdAt: createdAt(),
 });
 
