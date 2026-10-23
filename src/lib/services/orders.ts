@@ -318,6 +318,35 @@ export async function recordPayment(ctx: Ctx, orderId: string, raw: unknown) {
   });
 }
 
+/**
+ * Voids a payment recorded by mistake. Payments are append-only, so nothing is edited or erased:
+ * a 'void' entry is added that cancels it, the original stays visible (struck through) with who
+ * voided it and why, and balances ignore it.
+ */
+export async function voidPayment(ctx: Ctx, orderId: string, paymentId: string, rawReason: unknown) {
+  requireRole(ctx, 'manager', 'void payments');
+  if (!ctx.userId) throw new ServiceError('Payments must be voided by a signed-in staff member.');
+  const reason = String(rawReason ?? '').trim().slice(0, 120);
+  if (!reason) throw new ServiceError('Say why it’s being voided, e.g. “Entered twice”.', { reason: 'Required' });
+  await withTenant(ctx.org.id, async (tx) => {
+    const { order } = await loadOrder(tx, ctx, orderId);
+    if (order.removedAt) throw new ServiceError('This order was deleted. Restore it first.');
+    const [p] = await tx.select().from(payments).where(and(eq(payments.id, paymentId), eq(payments.orderId, orderId))).limit(1);
+    if (!p) throw new ServiceError('Payment not found.');
+    if (p.kind === 'void') throw new ServiceError('That entry is itself a void.');
+    const [already] = await tx.select({ id: payments.id }).from(payments).where(eq(payments.voidsPaymentId, paymentId)).limit(1);
+    if (already) throw new ServiceError('That payment has already been voided.');
+    const [v] = await tx
+      .insert(payments)
+      .values({ organisationId: ctx.org.id, orderId, kind: 'void', amountPence: p.amountPence, method: p.method, reference: reason, recordedByUserId: ctx.userId!, voidsPaymentId: p.id })
+      .returning();
+    await recordEvent(tx, {
+      organisationId: ctx.org.id, actor: ctx.actor, eventType: 'payment_voided', entityType: 'order', orderId, customerId: order.customerId,
+      oldValue: { paymentId: p.id, kind: p.kind, amountPence: p.amountPence, method: p.method }, newValue: { voidId: v.id, reason },
+    });
+  });
+}
+
 export async function addNote(ctx: Ctx, orderId: string, raw: unknown) {
   const { note } = parse(noteSchema, raw);
   await withTenant(ctx.org.id, async (tx) => {

@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { ATTACHMENT_CATEGORIES, PAYMENT_KINDS, PAYMENT_METHODS } from '@/db/schema';
+import { ATTACHMENT_CATEGORIES, PAYMENT_METHODS, RECORDABLE_PAYMENT_KINDS } from '@/db/schema';
 import { parseMoneyToPence } from './format';
 import { ServiceError } from './services/common';
 
@@ -111,7 +111,7 @@ export const quoteEditSchema = z.object({
 });
 
 export const paymentSchema = z.object({
-  kind: z.enum(PAYMENT_KINDS),
+  kind: z.enum(RECORDABLE_PAYMENT_KINDS),
   amountPence: money('Amount').refine((p) => p > 0, 'Amount must be more than £0'),
   method: z.enum(PAYMENT_METHODS),
   reference: text(120).default(''),

@@ -425,3 +425,29 @@ function PlaceOrderForm({ action, order, canSuppress }: { action: BoundAction; o
     </ActionForm>
   );
 }
+
+/** "Void" on a payment row: asks for the reason, then cancels the payment (it stays on record, struck through). */
+export function VoidPaymentForm({ action, label }: { action: BoundAction; label: string }) {
+  const [open, setOpen] = useState(false);
+  if (!open) {
+    return (
+      <button type="button" className="btn small danger" onClick={() => setOpen(true)} aria-label={`Void ${label}`}>
+        Void
+      </button>
+    );
+  }
+  return (
+    <ActionForm action={action} className="voidform">
+      {(s) => (
+        <>
+          <input name="reason" required maxLength={120} placeholder="Why? e.g. Entered twice" aria-label={`Reason for voiding ${label}`} autoFocus />
+          <Submit className="btn small danger">Void {label}</Submit>
+          <button type="button" className="btn small" onClick={() => setOpen(false)}>
+            Keep
+          </button>
+          {s?.error ? <span className="error">{s.error}</span> : null}
+        </>
+      )}
+    </ActionForm>
+  );
+}

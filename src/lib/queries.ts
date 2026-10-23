@@ -23,6 +23,7 @@ import {
 } from '@/db/schema';
 import { orderAttention, quoteAttention, type AttentionFlag } from './attention';
 import { todayInTz } from './format';
+import { livePayment } from './services/common';
 import { QUOTE_STATUS_LABELS, statusLabel, step } from './status';
 
 export type WorkRow = {
@@ -251,7 +252,11 @@ export async function getOrderDetail(org: Organisation, orderNumber: string) {
         ? tx.select({ number: quotes.quoteNumber }).from(quotes).where(eq(quotes.id, row.order.quoteId)).limit(1)
         : Promise.resolve([]),
     ]);
-    const paid = paymentRows.reduce((s, { p }) => s + (p.kind === 'refund' ? -p.amountPence : p.amountPence), 0);
+    // Voids and the payments they cancel don't count.
+    const voidedIds = new Set(paymentRows.map(({ p }) => p.voidsPaymentId).filter(Boolean));
+    const paid = paymentRows
+      .filter(({ p }) => p.kind !== 'void' && !voidedIds.has(p.id))
+      .reduce((s, { p }) => s + (p.kind === 'refund' ? -p.amountPence : p.amountPence), 0);
     const credit = paymentRows.reduce((s, { p }) => s + (p.kind === 'credit' ? p.amountPence : 0), 0);
     return {
       ...row,
@@ -371,7 +376,7 @@ export async function getCustomerDetail(org: Organisation, customerId: string) {
         })
         .from(payments)
         .innerJoin(orders, eq(orders.id, payments.orderId))
-        .where(and(eq(orders.customerId, customerId), isNull(orders.removedAt))),
+        .where(and(eq(orders.customerId, customerId), isNull(orders.removedAt), livePayment())),
     ]);
     const live = orderRows.filter((o) => !o.archivedAt);
     // Saved builds: distinct specifications this customer has ordered before.

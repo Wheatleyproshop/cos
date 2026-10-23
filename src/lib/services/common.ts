@@ -142,6 +142,10 @@ export async function issueTrackingLink(tx: DB, orgId: string, orderId: string):
 
 export type PaymentTotals = { paid: number; credit: number };
 
+/** Payments that count: not a void entry, and not cancelled by one. */
+export const livePayment = () =>
+  sql`${payments.kind} <> 'void' and not exists (select 1 from payments v where v.voids_payment_id = ${payments.id})`;
+
 /** Money paid (deposits + payments − refunds) and account credit applied, kept separate for customers. */
 export async function paymentTotals(tx: DB, orderId: string): Promise<PaymentTotals> {
   const [row] = await tx
@@ -150,7 +154,7 @@ export async function paymentTotals(tx: DB, orderId: string): Promise<PaymentTot
       credit: sql<number>`coalesce(sum(case when ${payments.kind} = 'credit' then ${payments.amountPence} else 0 end), 0)::int`,
     })
     .from(payments)
-    .where(eq(payments.orderId, orderId));
+    .where(and(eq(payments.orderId, orderId), livePayment()));
   return { paid: Number(row?.paid ?? 0), credit: Number(row?.credit ?? 0) };
 }
 
@@ -161,6 +165,6 @@ export async function paidPence(tx: DB, orderId: string): Promise<number> {
       total: sql<number>`coalesce(sum(case when ${payments.kind} = 'refund' then -${payments.amountPence} else ${payments.amountPence} end), 0)::int`,
     })
     .from(payments)
-    .where(eq(payments.orderId, orderId));
+    .where(and(eq(payments.orderId, orderId), livePayment()));
   return Number(row?.total ?? 0);
 }

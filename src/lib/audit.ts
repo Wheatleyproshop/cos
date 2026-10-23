@@ -24,6 +24,7 @@ export type EventType =
   | 'supplier_reference_changed'
   | 'specification_changed'
   | 'payment_recorded'
+  | 'payment_voided'
   | 'note_added'
   | 'attachment_added'
   | 'attachment_archived'
@@ -203,6 +204,8 @@ export function describeEvent(e: Pick<AuditEvent, 'eventType' | 'oldValueJson' |
       return n.kind === 'credit'
         ? `Account credit of ${money(n.amountPence)} applied${n.reference ? ` (${n.reference})` : ''}`
         : `${titleCase(n.kind)} of ${money(n.amountPence)} recorded (${titleCase(n.method)}${n.reference ? `, ref ${n.reference}` : ''})`;
+    case 'payment_voided':
+      return `${titleCase(o.kind)} of ${money(o.amountPence)} voided — ${n.reason}`;
     case 'note_added':
       return `Note: ${n.note}`;
     case 'attachment_added':

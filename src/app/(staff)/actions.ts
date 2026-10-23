@@ -4,7 +4,7 @@ import { redirect, RedirectType } from 'next/navigation';
 import { act, type FormState } from '@/lib/action-utils';
 import { logout } from '@/lib/auth';
 import type { BackupProvider, EmailAutomationKey } from '@/db/schema';
-import { addAttachment, addNote, archiveAttachment, createOrder, createTrackingLink, editOrderDetails, recordPayment, setArchived, setOrderDeleted, updateOrderProgress } from '@/lib/services/orders';
+import { addAttachment, addNote, archiveAttachment, createOrder, createTrackingLink, editOrderDetails, recordPayment, setArchived, setOrderDeleted, updateOrderProgress, voidPayment } from '@/lib/services/orders';
 import { acceptQuoteInStore, closeQuote, createApprovalLink, createQuote, editQuote, sendQuote, setQuoteDeleted } from '@/lib/services/quotes';
 import {
   changeOwnPassword,
@@ -647,4 +647,11 @@ export async function restorePrebookLineAction(prebookId: string, lineId: string
     await restoreLine(ctx, prebookId, lineId);
     return 'Line restored.';
   });
+}
+
+export async function voidPaymentAction(orderId: string, paymentId: string, _: FormState, fd: FormData) {
+  return act('manager', async (ctx) => {
+    await voidPayment(ctx, orderId, paymentId, fd.get('reason'));
+    return 'Payment voided.';
+  }, fd);
 }

@@ -7,6 +7,7 @@ import {
   archiveAttachmentAction,
   archiveOrderAction,
   deleteOrderAction,
+  voidPaymentAction,
   deleteQuoteAction,
   closeQuoteAction,
   createRequestAction,
@@ -30,7 +31,7 @@ import { CancelButton } from './cancel-button';
 import { CloseButton } from './chrome';
 import { ActionButton, LinkGenerator } from './forms';
 import { AcceptInStoreForm, EditQuoteForm } from './misc-forms';
-import { AttachmentForm, CreateRequestForm, EditOrderForm, NoteForm, PaymentForm, ProgressForm, type RequestDefaults } from './order-forms';
+import { AttachmentForm, CreateRequestForm, EditOrderForm, NoteForm, PaymentForm, ProgressForm, VoidPaymentForm, type RequestDefaults } from './order-forms';
 import { SpecView } from './spec-view';
 import { Badge, DetailBox, MessageBadge, Timeline } from './views';
 
@@ -193,7 +194,7 @@ export async function OrderDetail({ staff, number, inModal }: { staff: Staff; nu
       {staff.org.paymentTracking ? (
         <>
       <h3>Payments</h3>
-      {d.payments.length ? (
+      {d.payments.some(({ p }) => p.kind !== 'void') ? (
         <div className="tablewrap">
           <table className="compact">
             <thead>
@@ -206,18 +207,35 @@ export async function OrderDetail({ staff, number, inModal }: { staff: Staff; nu
               </tr>
             </thead>
             <tbody>
-              {d.payments.map(({ p, by }) => (
-                <tr key={p.id}>
-                  <td>{stamp(p.createdAt, tz)}</td>
-                  <td>
-                    {PAYMENT_KIND_LABELS[p.kind]}
-                    {p.reference ? <div className="muted">Ref {p.reference}</div> : null}
-                  </td>
-                  <td>{titleCase(p.method)}</td>
-                  <td>{by}</td>
-                  <td className="num">{p.kind === 'refund' ? `−${money(p.amountPence)}` : money(p.amountPence)}</td>
-                </tr>
-              ))}
+              {d.payments
+                .filter(({ p }) => p.kind !== 'void')
+                .map(({ p, by }) => {
+                  const voided = d.payments.find((x) => x.p.voidsPaymentId === p.id);
+                  const label = `${PAYMENT_KIND_LABELS[p.kind].toLowerCase()} of ${money(p.amountPence)}`;
+                  return (
+                    <tr key={p.id} className={voided ? 'pay-voided' : undefined}>
+                      <td>{stamp(p.createdAt, tz)}</td>
+                      <td>
+                        <span className="pay-what">{PAYMENT_KIND_LABELS[p.kind]}</span>
+                        {p.reference ? <div className="muted">Ref {p.reference}</div> : null}
+                        {voided ? (
+                          <div className="pay-void-note">
+                            Voided by {voided.by} · {stamp(voided.p.createdAt, tz)} — {voided.p.reference}
+                          </div>
+                        ) : manager && !o.removedAt ? (
+                          <div style={{ marginTop: 4 }}>
+                            <VoidPaymentForm action={voidPaymentAction.bind(null, o.id, p.id)} label={label} />
+                          </div>
+                        ) : null}
+                      </td>
+                      <td>{titleCase(p.method)}</td>
+                      <td>{by}</td>
+                      <td className="num">
+                        <span className="pay-what">{p.kind === 'refund' ? `−${money(p.amountPence)}` : money(p.amountPence)}</span>
+                      </td>
+                    </tr>
+                  );
+                })}
               <tr>
                 <td colSpan={4}>
                   <b>Total {money(o.totalGrossPence)} · Paid {money(d.paid)}</b>

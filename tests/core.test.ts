@@ -173,6 +173,26 @@ describe('order lifecycle', () => {
     expect(msgs.some((m) => m.status === 'sent')).toBe(true); // notify=false ignored for staff
   });
 
+  it('voids a payment recorded by mistake: it stays on record but no longer counts', async () => {
+    const { voidPayment, setOrderDeleted } = await import('@/lib/services/orders');
+    const { paidPence } = await import('@/lib/services/common');
+    const o = await createOrder(staff, { customerName: 'Void Vic', email: 'void@example.com', brand: 'PING', product: 'Putter', totalGrossPence: '300', depositPence: '100' });
+    const [dep] = await withTenant(org.id, (tx) => tx.select().from(payments).where(eq(payments.orderId, o.id)));
+    await expect(voidPayment(staff, o.id, dep.id, 'Typo')).rejects.toThrow(/manager/);
+    await expect(voidPayment(admin, o.id, dep.id, '')).rejects.toThrow(/why/);
+    await voidPayment(admin, o.id, dep.id, 'Entered on the wrong order');
+    expect(await withTenant(org.id, (tx) => paidPence(tx, o.id))).toBe(0);
+    await expect(voidPayment(admin, o.id, dep.id, 'Again')).rejects.toThrow(/already been voided/);
+    const rows = await withTenant(org.id, (tx) => tx.select().from(payments).where(eq(payments.orderId, o.id)));
+    expect(rows.map((r) => r.kind).sort()).toEqual(['deposit', 'void']); // original kept, void added
+    const v = rows.find((r) => r.kind === 'void')!;
+    await expect(voidPayment(admin, o.id, v.id, 'x')).rejects.toThrow(/itself a void/);
+    // The ledger is still append-only underneath.
+    expect(await dbError(withTenant(org.id, (tx) => tx.update(payments).set({ amountPence: 1 }).where(eq(payments.id, dep.id))))).toMatch(/not permitted|permission/);
+    // With nothing left counting, the mistaken order can now be deleted.
+    await setOrderDeleted(admin, o.id, true);
+  });
+
   it('deletes an order entered by mistake (not one with money on it) and restores it', async () => {
     const { setOrderDeleted, listDeletedOrders } = await import('@/lib/services/orders');
     const paidOrder = await createOrder(staff, { customerName: 'Paid Pat', email: 'paidpat@example.com', brand: 'PING', product: 'Bag', totalGrossPence: '200', depositPence: '50' });
@@ -760,7 +780,8 @@ describe('multi-club fitting quotes', () => {
 describe('performance overview', () => {
   it('totals sales, ranks brands and measures turnaround from the shop’s orders', async () => {
     const { getPerformance } = await import('@/lib/analytics');
-    const all = await withTenant(org.id, (tx) => tx.select().from(orders));
+    // Deleted orders are left out of Performance.
+    const all = (await withTenant(org.id, (tx) => tx.select().from(orders))).filter((o) => !o.removedAt);
     const p = await getPerformance(org, 'all');
     expect(p.kpis.orders).toBe(all.length);
     expect(p.kpis.valuePence).toBe(all.reduce((s, o) => s + o.totalGrossPence, 0));

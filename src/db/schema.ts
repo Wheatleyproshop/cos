@@ -22,6 +22,7 @@ import {
   timestamp,
   uniqueIndex,
   uuid,
+  type AnyPgColumn,
 } from 'drizzle-orm/pg-core';
 import type { CrestPrices } from '../lib/cresting';
 
@@ -274,13 +275,17 @@ export const orders = pgTable(
 /* ─────────────────────────────── Payments ───────────────────────────────── */
 
 /** `credit` = customer account credit from the till, applied against the order. */
-export const PAYMENT_KINDS = ['deposit', 'payment', 'credit', 'refund'] as const;
+/** `void` = cancels an earlier entry (`voidsPaymentId`). Payments are append-only, so mistakes are voided, never edited or erased. */
+export const PAYMENT_KINDS = ['deposit', 'payment', 'credit', 'refund', 'void'] as const;
+/** What staff can record directly. */
+export const RECORDABLE_PAYMENT_KINDS = ['deposit', 'payment', 'credit', 'refund'] as const;
 
 export const PAYMENT_KIND_LABELS: Record<(typeof PAYMENT_KINDS)[number], string> = {
   deposit: 'Deposit',
   payment: 'Payment',
   credit: 'Account credit',
   refund: 'Refund',
+  void: 'Void',
 };
 export const PAYMENT_METHODS = ['card', 'cash', 'bank_transfer', 'voucher', 'account', 'other'] as const;
 
@@ -296,9 +301,11 @@ export const payments = pgTable(
     method: text('method', { enum: PAYMENT_METHODS }).notNull(),
     reference: text('reference').notNull().default(''),
     recordedByUserId: uuid('recorded_by_user_id').notNull().references(() => users.id),
+    /** For `void` entries: the payment being cancelled (its reason is in `reference`). */
+    voidsPaymentId: uuid('voids_payment_id').references((): AnyPgColumn => payments.id),
     createdAt: createdAt(),
   },
-  (t) => [index('payments_order_idx').on(t.orderId)],
+  (t) => [index('payments_order_idx').on(t.orderId), uniqueIndex('payments_voids_unique').on(t.voidsPaymentId)],
 );
 
 /* ──────────────────────── Audit ledger (COS Ledger) ─────────────────────── */
