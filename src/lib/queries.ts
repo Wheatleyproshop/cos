@@ -347,7 +347,7 @@ export async function listCustomers(org: Organisation, qRaw?: string) {
                 ilike(customers.phone, t),
                 digits.length >= 4 ? sql`regexp_replace(${customers.phone}, '\\D', '', 'g') like ${'%' + digits + '%'}` : undefined,
                 // A workshop job number (e.g. WS-1002) finds its customer.
-                sql`exists (select 1 from ${workshopJobs} w where w.customer_id = "customers"."id" and w.reference ilike ${t})`,
+                sql`exists (select 1 from ${workshopJobs} w where w.customer_id = "customers"."id" and w.archived_at is null and w.reference ilike ${t})`,
               )
             : undefined,
         ),

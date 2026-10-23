@@ -11,7 +11,7 @@ import { hasRole, requireStaff } from '@/lib/auth';
 import { stamp, todayInTz } from '@/lib/format';
 import { shortDate } from '@/lib/short-date';
 import { getJob, jobSpec, WORKSHOP_STATUS_LABELS } from '@/lib/services/workshop';
-import { addWorkshopItemAction, removeWorkshopItemAction, workshopProgressAction } from '../../actions';
+import { addWorkshopItemAction, deleteJobAction, removeWorkshopItemAction, workshopProgressAction } from '../../actions';
 
 export async function generateMetadata({ params }: { params: Promise<{ ref: string }> }): Promise<Metadata> {
   return { title: decodeURIComponent((await params).ref) };
@@ -26,7 +26,8 @@ export default async function WorkshopJobPage({ params }: { params: Promise<{ re
   if (!d) notFound();
   const { job: j, customer: c, items, events, emails, takenBy } = d;
   const tz = staff.org.timezone;
-  const open = ['checked_in', 'in_progress', 'waiting_parts'].includes(j.status);
+  const deleted = Boolean(j.archivedAt);
+  const open = !deleted && ['checked_in', 'in_progress', 'waiting_parts'].includes(j.status);
   const today = todayInTz(tz);
   const late = open && j.etaDate && j.etaDate < today;
   const spec = jobSpec(j, items);
@@ -43,6 +44,19 @@ export default async function WorkshopJobPage({ params }: { params: Promise<{ re
           </Link>
         }
       />
+      {deleted ? (
+        <div className="notice warn">
+          <b>This job was deleted {stamp(j.archivedAt!, tz)}</b>
+          It’s hidden from the workshop list, search and reports, and the customer’s tracking link no longer works.
+          {manager ? (
+            <div style={{ marginTop: 8 }}>
+              <ActionButton action={deleteJobAction.bind(null, j.id, false)} className="btn small">
+                Restore job
+              </ActionButton>
+            </div>
+          ) : null}
+        </div>
+      ) : null}
       <div className="pb-status">
         <span className={`badge ws-${j.status}`}>{WORKSHOP_STATUS_LABELS[j.status]}</span>
         <span className={late ? 'flag' : 'muted'}>
@@ -101,7 +115,7 @@ export default async function WorkshopJobPage({ params }: { params: Promise<{ re
         ) : null}
       </section>
 
-      {open || j.status === 'ready' || (j.status === 'collected' && manager) ? (
+      {!deleted && (open || j.status === 'ready' || (j.status === 'collected' && manager)) ? (
         <section className="panel">
           <h2>Update job</h2>
           <WorkshopProgressForm
@@ -150,6 +164,17 @@ export default async function WorkshopJobPage({ params }: { params: Promise<{ re
           </ol>
         </section>
       </div>
+      {manager && !deleted ? (
+        <div className="actions">
+          <ActionButton
+            action={deleteJobAction.bind(null, j.id, true)}
+            className="btn danger"
+            confirm={`Delete ${j.reference} for ${c.name}? Use this for jobs entered by mistake. No email is sent, the tracking link stops working, and you can restore it from Deleted jobs on the Workshop page.`}
+          >
+            Delete job
+          </ActionButton>
+        </div>
+      ) : null}
     </>
   );
 }

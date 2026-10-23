@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, ilike, isNull, lt, or, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, ilike, isNotNull, isNull, lt, or, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import { withTenant, type DB } from '@/db';
 import type { Organisation } from '@/db/schema';
@@ -121,6 +121,7 @@ async function load(tx: DB, ctx: Ctx, id: string) {
     .for('update', { of: workshopJobs })
     .limit(1);
   if (!row) throw new ServiceError('Workshop job not found.');
+  if (row.job.archivedAt) throw new ServiceError('This job was deleted. Restore it before changing it.');
   return row;
 }
 
@@ -313,6 +314,37 @@ export async function getJob(orgId: string, reference: string) {
     ]);
     return { ...row, items, events, emails };
   });
+}
+
+/**
+ * Deletes a workshop job entered by mistake (or restores it). Nothing is erased: the job is hidden
+ * from lists, search, reports and reminders, its tracking link stops working, and it can be restored.
+ */
+export async function setJobDeleted(ctx: Ctx, id: string, deleted: boolean) {
+  requireRole(ctx, 'manager', 'delete workshop jobs');
+  await withTenant(ctx.org.id, async (tx) => {
+    const [job] = await tx.select().from(workshopJobs).where(and(eq(workshopJobs.id, id), eq(workshopJobs.organisationId, ctx.org.id))).limit(1);
+    if (!job) throw new ServiceError('Job not found.');
+    if (Boolean(job.archivedAt) === deleted) return;
+    await tx.update(workshopJobs).set({ archivedAt: deleted ? new Date() : null, updatedAt: new Date() }).where(eq(workshopJobs.id, id));
+    await recordEvent(tx, {
+      organisationId: ctx.org.id, actor: ctx.actor, eventType: deleted ? 'workshop_job_deleted' : 'workshop_job_restored',
+      entityType: 'workshop_job', entityId: id, customerId: job.customerId, newValue: { reference: job.reference, status: job.status },
+    });
+  });
+}
+
+/** Deleted jobs, newest first, for the "Deleted jobs" list. */
+export async function listDeletedJobs(orgId: string) {
+  return withTenant(orgId, (tx) =>
+    tx
+      .select({ id: workshopJobs.id, reference: workshopJobs.reference, status: workshopJobs.status, archivedAt: workshopJobs.archivedAt, customerName: customers.name })
+      .from(workshopJobs)
+      .innerJoin(customers, eq(customers.id, workshopJobs.customerId))
+      .where(isNotNull(workshopJobs.archivedAt))
+      .orderBy(desc(workshopJobs.archivedAt))
+      .limit(50),
+  );
 }
 
 export function formatJobTotal(items: Pick<WorkshopItem, 'pricePence'>[]) {

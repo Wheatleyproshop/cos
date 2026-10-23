@@ -924,6 +924,20 @@ describe('workshop', () => {
     expect(titles).toContain('Workshop job ready');
     expect(n.items.find((i) => i.title === 'Workshop job ready')!.href).toMatch(/^\/workshop\/WS-/);
   });
+
+  it('deletes a job entered by mistake and restores it', async () => {
+    const { checkInClubs, setJobDeleted, listJobs, listDeletedJobs, updateWorkshopProgress } = await import('@/lib/services/workshop');
+    const job = await checkInClubs(admin, {
+      customerName: 'Mistake Mo', email: 'mistake@example.com', etaDate: '', items: [{ club: 'Driver', work: 'Regrip', pricePence: '10' }],
+    });
+    await expect(setJobDeleted(staff, job.id, true)).rejects.toThrow(/manager/);
+    await setJobDeleted(admin, job.id, true);
+    expect((await listJobs(org.id)).some((j) => j.id === job.id)).toBe(false);
+    expect((await listDeletedJobs(org.id)).map((j) => j.id)).toContain(job.id);
+    await expect(updateWorkshopProgress(admin, job.id, { status: 'ready', etaDate: '' })).rejects.toThrow(/deleted/);
+    await setJobDeleted(admin, job.id, false);
+    expect((await listJobs(org.id)).some((j) => j.id === job.id)).toBe(true);
+  });
 });
 
 describe('workshop collection reminders', () => {

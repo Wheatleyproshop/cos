@@ -33,6 +33,7 @@ export async function GET(req: Request) {
       .from(workshopJobs)
       .innerJoin(customers, eq(customers.id, workshopJobs.customerId))
       .innerJoin(users, eq(users.id, workshopJobs.takenByUserId))
+      .where(isNull(workshopJobs.archivedAt))
       .orderBy(asc(workshopJobs.createdAt));
     const items = jobs.length ? await tx.select().from(workshopItems).where(isNull(workshopItems.removedAt)).orderBy(asc(workshopItems.createdAt)) : [];
     const header = ['Type', 'Order', 'Created', 'Taken by', 'Status', 'Archived', 'Customer', 'Email', 'Phone', 'Brand', 'Product', 'SKU', 'Specification', 'Total (GBP)', 'Paid (GBP)', 'Balance (GBP)', 'ETA', 'Supplier', 'Supplier ref'];

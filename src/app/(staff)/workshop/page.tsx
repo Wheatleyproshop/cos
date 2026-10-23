@@ -1,13 +1,14 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
+import { ActionButton } from '@/components/forms';
 import { PageHeader } from '@/components/views';
 import { CheckInForm } from '@/components/workshop-forms';
 import { hasRole, requireStaff } from '@/lib/auth';
-import { addDays, money, todayInTz } from '@/lib/format';
+import { addDays, money, stamp, todayInTz } from '@/lib/format';
 import { getCustomerDetail } from '@/lib/queries';
 import { shortDate } from '@/lib/short-date';
-import { listJobs, WORKSHOP_STATUS_LABELS } from '@/lib/services/workshop';
-import { checkInAction } from '../actions';
+import { listDeletedJobs, listJobs, WORKSHOP_STATUS_LABELS } from '@/lib/services/workshop';
+import { checkInAction, deleteJobAction } from '../actions';
 
 export const metadata: Metadata = { title: 'Workshop' };
 
@@ -24,7 +25,12 @@ export default async function WorkshopPage({ searchParams }: { searchParams: Pro
   const staff = await requireStaff();
   const sp = await searchParams;
   const filter = FILTERS.some((f) => f.key === sp.filter) ? sp.filter! : 'open';
-  const [jobs, cust] = await Promise.all([listJobs(staff.organisationId), sp.customer ? getCustomerDetail(staff.org, sp.customer) : null]);
+  const [jobs, cust, deletedJobs] = await Promise.all([
+    listJobs(staff.organisationId),
+    sp.customer ? getCustomerDetail(staff.org, sp.customer) : null,
+    listDeletedJobs(staff.organisationId),
+  ]);
+  const manager = hasRole(staff, 'manager');
   const today = todayInTz(staff.org.timezone);
   const open = jobs.filter((j) => OPEN.includes(j.status));
   const overdue = open.filter((j) => j.etaDate && j.etaDate < today);
@@ -110,6 +116,33 @@ export default async function WorkshopPage({ searchParams }: { searchParams: Pro
           <p className="muted">{jobs.length ? 'Nothing here right now.' : 'No workshop jobs yet — check some clubs in below.'}</p>
         )}
       </section>
+
+      {deletedJobs.length ? (
+        <section className="panel">
+          <details className="section">
+            <summary>Deleted jobs ({deletedJobs.length})</summary>
+            <ul className="attention">
+              {deletedJobs.map((j) => (
+                <li key={j.id}>
+                  <span>
+                    <Link href={`/workshop/${j.reference}`} className="rowtitle">
+                      {j.reference} · {j.customerName}
+                    </Link>
+                    <div className="muted">
+                      Was {WORKSHOP_STATUS_LABELS[j.status].toLowerCase()} · deleted {stamp(j.archivedAt!, staff.org.timezone)}
+                    </div>
+                  </span>
+                  {manager ? (
+                    <ActionButton action={deleteJobAction.bind(null, j.id, false)} className="btn small">
+                      Restore
+                    </ActionButton>
+                  ) : null}
+                </li>
+              ))}
+            </ul>
+          </details>
+        </section>
+      ) : null}
 
       <section className="panel" id="checkin" style={{ scrollMarginTop: 80 }}>
         <h2>Check in clubs</h2>

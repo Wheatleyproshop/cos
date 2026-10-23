@@ -67,6 +67,8 @@ export type EventType =
   | 'workshop_eta_changed'
   | 'workshop_item_added'
   | 'workshop_item_removed'
+  | 'workshop_job_deleted'
+  | 'workshop_job_restored'
   | 'ball_design_submitted'
   | 'crest_design_submitted';
 
@@ -143,6 +145,10 @@ export function describeEvent(e: Pick<AuditEvent, 'eventType' | 'oldValueJson' |
       return `Ready date ${o.etaDate ? `changed from ${o.etaDate} ` : 'set '}to ${n.etaDate ?? 'none'}${n.reason ? ` — ${n.reason}` : ''}`;
     case 'workshop_item_added':
       return `Added ${n.club}: ${n.work}${n.parts ? ` (${n.parts})` : ''}`;
+    case 'workshop_job_deleted':
+      return 'Job deleted';
+    case 'workshop_job_restored':
+      return 'Job restored';
     case 'workshop_item_removed':
       return `Removed ${o.club}: ${o.work}`;
     case 'order_created':

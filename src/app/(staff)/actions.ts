@@ -33,7 +33,7 @@ import { sendTestEmail } from '@/lib/services/test-email';
 import { addBrand, addComponent, addModel, createFittingQuote, setCatalogActive, setCatalogRemoved, updateComponentUpcharge, updateModelPrice } from '@/lib/services/fitting';
 import { addAccountsForCatalogueBrands, clearAccountLogo, saveAccount, setAccountActive, setAccountLogo } from '@/lib/services/accounts';
 import { sendReportNow, updatePerformanceReport } from '@/lib/services/performance-report';
-import { addWorkshopItem, checkInClubs, removeWorkshopItem, updateWorkshopProgress } from '@/lib/services/workshop';
+import { addWorkshopItem, checkInClubs, removeWorkshopItem, setJobDeleted, updateWorkshopProgress } from '@/lib/services/workshop';
 import { addLine, archivePrebook, createPrebook, receiveStock, removeLine, setPrebookStatus, updatePrebook } from '@/lib/services/prebooks';
 import { createCrestQuote, setCrestDesignLink, setCrestPositionRemoved, updateCrestPrices } from '@/lib/services/cresting';
 import { addBall, addStarterBalls, createBallPrintQuote, setBallActive, setBallDesignLink, setBallPhoto, setBallRemoved, updateBall, updateBallPrice, updateSetupFee } from '@/lib/services/ball-printing';
@@ -599,5 +599,12 @@ export async function removeWorkshopItemAction(id: string, itemId: string) {
   return act('staff', async (ctx) => {
     await removeWorkshopItem(ctx, id, itemId);
     return 'Club removed.';
+  });
+}
+
+export async function deleteJobAction(id: string, deleted: boolean) {
+  return act('manager', async (ctx) => {
+    await setJobDeleted(ctx, id, deleted);
+    return deleted ? 'Job deleted.' : 'Job restored.';
   });
 }
