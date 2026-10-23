@@ -40,8 +40,8 @@ export type EmailContext = {
   previewImageUrl?: string;
   /** Custom Fitting: each club with its details on separate lines (replaces the plain specification). */
   fit?: FitSpec | null;
-  /** 'print' = personalised balls from stock sent to the printer, not ordered from a manufacturer. */
-  journey?: 'supplier' | 'print';
+  /** 'print' = personalised balls sent to the printer; 'cresting' = clothing crested in-house. Neither is ordered from a manufacturer. */
+  journey?: 'supplier' | 'print' | 'cresting';
   /** Order placed but the item is out of stock at the manufacturer (back order). */
   outOfStock?: boolean;
 };
@@ -123,7 +123,7 @@ ${b.fontsHref ? `<link href="${esc(b.fontsHref)}" rel="stylesheet">` : ''}</head
 <p style="font-size:15px;line-height:1.6;margin:0 0 14px">Hi ${esc(firstName(ctx.customerName))},</p>
 ${o.intro.map((p) => `<p style="font-size:15px;line-height:1.6;margin:0 0 14px;color:#2b2e38">${esc(p)}</p>`).join('')}
 </td></tr>
-${ctx.previewImageUrl ? `<tr><td style="padding:6px 32px 14px" align="center"><img src="${esc(ctx.previewImageUrl)}" width="400" alt="Preview of your personalised ${esc(ctx.brand)} ${esc(ctx.product)}" style="display:block;width:100%;max-width:400px;height:auto;border:0;background:#eef0f4"><div style="font-size:11px;color:${muted};margin-top:8px;letter-spacing:0.5px">Preview for approval. Final print colours and position may vary slightly.</div></td></tr>` : ''}
+${ctx.previewImageUrl ? `<tr><td style="padding:6px 32px 14px" align="center"><img src="${esc(ctx.previewImageUrl)}" width="400" alt="Preview of your personalised ${esc(ctx.brand)} ${esc(ctx.product)}" style="display:block;width:100%;max-width:400px;height:auto;border:0;background:#eef0f4"><div style="font-size:11px;color:${muted};margin-top:8px;letter-spacing:0.5px">Preview for approval. Final colours, stitching and position may vary slightly.</div></td></tr>` : ''}
 <tr><td style="padding:6px 32px 8px"><div style="border:1px solid #e6e4df;border-left:4px solid ${b.headerBg};padding:18px 20px">
 ${ctx.fit ? fitHtml(ctx.fit, { ink, muted, font: b.headingFont }) : `<div style="font-family:${b.headingFont};font-weight:600;font-size:17px;margin-bottom:4px;color:${ink}">${esc(ctx.brand)} ${esc(ctx.product)}</div>
 <div style="color:${muted};font-size:13px;line-height:1.55;margin-bottom:10px;white-space:pre-line">${esc(ctx.specification)}</div>`}
@@ -172,12 +172,16 @@ function commercialRows(ctx: EmailContext): Block[] {
 
 export function renderEmail(type: EmailAutomationKey, ctx: EmailContext): RenderedEmail {
   const s = ctx.store.storeName;
-  const print = ctx.journey === 'print';
+  const crest = ctx.journey === 'cresting';
+  // In-house jobs (printed balls, crested clothing): approved proof → production → ready to collect.
+  const print = ctx.journey === 'print' || crest;
+  const thing = crest ? 'personalised clothing' : 'golf balls';
+  const goneInto = crest ? 'gone into production' : 'gone into print';
   switch (type) {
     case 'order_confirmation': {
       const backorder = !print && ctx.outOfStock;
       const intro = print
-        ? ['Thank you for approving your proof. Your personalised golf balls have gone into print, and we’ll let you know as soon as they’re ready to collect.']
+        ? [`Thank you for approving your proof. Your ${crest ? thing : `personalised ${thing}`} ${crest ? 'has' : 'have'} ${goneInto}, and we’ll let you know as soon as ${crest ? 'it’s' : 'they’re'} ready to collect.`]
         : backorder
           ? [
               `Thank you for your order. We’ve placed it with ${ctx.brand}, but it’s currently out of stock with them, so it’s on back order.`,
@@ -187,15 +191,15 @@ export function renderEmail(type: EmailAutomationKey, ctx: EmailContext): Render
       if (backorder && ctx.etaReason) intro.push(ctx.etaReason);
       const etaRow = { label: print ? 'Estimated ready date' : backorder ? 'Expected from the manufacturer' : 'Estimated arrival', value: ctx.etaDate ? longDate(ctx.etaDate) : 'To be confirmed' };
       const r = layout(ctx, {
-        preheader: print ? 'Your personalised golf balls have gone into print.' : backorder ? `Your ${ctx.brand} order is placed — currently on back order.` : `Your ${ctx.brand} order has been placed.`,
-        heading: print ? 'Your golf balls have gone into print' : backorder ? 'Your order is placed — on back order' : 'Your order has been placed',
+        preheader: print ? `Your ${crest ? thing : `personalised ${thing}`} ${crest ? 'has' : 'have'} ${goneInto}.` : backorder ? `Your ${ctx.brand} order is placed — currently on back order.` : `Your ${ctx.brand} order has been placed.`,
+        heading: print ? `Your ${crest ? 'clothing has' : 'golf balls have'} ${goneInto}` : backorder ? 'Your order is placed — on back order' : 'Your order has been placed',
         intro,
         rows: [...commercialRows(ctx), etaRow],
         cta: ctx.actionUrl ? { label: 'Track your order', url: ctx.actionUrl } : undefined,
       });
       return {
         subject: print
-          ? `Your golf balls have gone into print (${ctx.reference})`
+          ? `Your ${crest ? 'clothing has' : 'golf balls have'} ${goneInto} (${ctx.reference})`
           : backorder
             ? `Your order is placed — ${ctx.brand} ${ctx.product} is on back order (${ctx.reference})`
             : `Your order has been placed — ${ctx.brand} ${ctx.product} (${ctx.reference})`,
@@ -209,22 +213,24 @@ export function renderEmail(type: EmailAutomationKey, ctx: EmailContext): Render
       if (ctx.validUntil) rows.push({ label: 'Quote valid until', value: longDate(ctx.validUntil) });
       const proof = Boolean(ctx.previewImageUrl);
       const r = layout(ctx, {
-        preheader: proof ? `Your personalised golf ball proof from ${s}.` : `Your personalised quotation from ${s}.`,
-        heading: proof ? 'Your personalised golf balls' : 'Your personalised quotation',
+        preheader: proof ? `Your ${crest ? 'cresting' : 'golf ball'} proof from ${s}.` : `Your personalised quotation from ${s}.`,
+        heading: proof ? (crest ? 'Your personalised clothing' : 'Your personalised golf balls') : 'Your personalised quotation',
         intro: proof
-          ? ['Here is a preview of your personalised golf balls. Please check the artwork, quantity and price, then approve online and we will send them for printing.']
+          ? crest
+            ? ['Here is a preview of your crested clothing. Please check the logo or text, the positions, sizes and price, then approve online and we will put it into production.']
+            : ['Here is a preview of your personalised golf balls. Please check the artwork, quantity and price, then approve online and we will send them for printing.']
           : ['We have prepared your quote. Please review the specification and price, then approve it online and we will place your order.'],
         rows,
         cta: ctx.actionUrl ? { label: proof ? 'Review and approve your proof' : 'Review and approve your quote', url: ctx.actionUrl } : undefined,
         outro: ['No account is needed. If anything needs changing, just reply to this email.'],
       });
-      return { subject: proof ? `Please approve your golf ball proof — ${s}` : `Your quote from ${s} — ${ctx.brand} ${ctx.product}`, ...r };
+      return { subject: proof ? `Please approve your ${crest ? 'cresting' : 'golf ball'} proof — ${s}` : `Your quote from ${s} — ${ctx.brand} ${ctx.product}`, ...r };
     }
     case 'eta_revised': {
       const rows: Block[] = [];
       if (ctx.previousEtaDate) rows.push({ label: 'Previous estimate', value: longDate(ctx.previousEtaDate) });
       rows.push({ label: print ? 'New estimated ready date' : 'New estimated arrival', value: longDate(ctx.etaDate) });
-      const intro = [print ? 'The date your golf balls will be ready has changed. We will continue to keep you updated.' : 'The estimated arrival date for your order has changed. We will continue to keep you updated.'];
+      const intro = [print ? `The date your ${crest ? 'clothing' : 'golf balls'} will be ready has changed. We will continue to keep you updated.` : 'The estimated arrival date for your order has changed. We will continue to keep you updated.'];
       if (ctx.etaReason) intro.push(ctx.etaReason);
       const r = layout(ctx, {
         preheader: `${print ? 'New estimated ready date' : 'New estimated arrival'}: ${longDate(ctx.etaDate)}.`,
@@ -303,12 +309,12 @@ export function renderEmail(type: EmailAutomationKey, ctx: EmailContext): Render
       if (ctx.store.openingHours) rows.push({ label: 'Opening hours', value: ctx.store.openingHours });
       rows.push({ label: 'Balance due on collection', value: money(ctx.balancePence ?? 0) });
       const r = layout(ctx, {
-        preheader: reminder ? 'Your order is still waiting for you.' : print ? 'Your personalised golf balls are ready.' : 'Your order has arrived in store.',
-        heading: reminder ? 'A friendly reminder — your order is waiting' : print ? 'Your golf balls are ready to collect' : 'Your order has arrived in store',
+        preheader: reminder ? 'Your order is still waiting for you.' : print ? `Your ${crest ? thing : `personalised ${thing}`} ${crest ? 'is' : 'are'} ready.` : 'Your order has arrived in store.',
+        heading: reminder ? 'A friendly reminder — your order is waiting' : print ? `Your ${crest ? 'clothing is' : 'golf balls are'} ready to collect` : 'Your order has arrived in store',
         intro: reminder
           ? ['Your order is ready and waiting for you in store. Pop in whenever suits you.']
           : print
-            ? ['Great news. Your personalised golf balls have been printed and are ready to collect from our store.']
+            ? [crest ? 'Great news. Your crested clothing is finished and ready to collect from our store.' : 'Great news. Your personalised golf balls have been printed and are ready to collect from our store.']
             : ['Great news. Your order has arrived and is ready to collect from our store.'],
         rows,
         cta: ctx.actionUrl ? { label: 'View your order', url: ctx.actionUrl } : undefined,
@@ -317,7 +323,7 @@ export function renderEmail(type: EmailAutomationKey, ctx: EmailContext): Render
         subject: reminder
           ? `Reminder: your order ${ctx.reference} is ready to collect`
           : print
-            ? `Your golf balls are ready to collect — ${ctx.reference}`
+            ? `Your ${crest ? 'clothing is' : 'golf balls are'} ready to collect — ${ctx.reference}`
             : `Your order has arrived in store — ${ctx.reference}`,
         ...r,
       };

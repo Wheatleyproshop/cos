@@ -497,6 +497,59 @@ describe('golf ball printing', () => {
   });
 });
 
+describe('clothing cresting', () => {
+  const jpeg = (name = 'photo.jpg') => new File([new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 0, 16, 74, 70, 73, 70, 0, 1])], name, { type: 'image/jpeg' });
+
+  it('prices per position, emails a cresting proof and goes into production when approved', async () => {
+    const { createCrestQuote, updateCrestPrices } = await import('@/lib/services/cresting');
+    await expect(updateCrestPrices(staff, { 'back.print': '9' })).rejects.toThrow(/manager/);
+    await updateCrestPrices(admin, { 'left_chest.embroidery': '7.50', setupFeePence: '20' });
+    const [fresh] = await systemDb().select().from(organisations).where(eq(organisations.id, org.id));
+    const ctx = { ...admin, org: fresh };
+    const q = await createCrestQuote(
+      ctx,
+      {
+        customerName: 'Society Sam', email: 'society@example.com', phone: '', garmentType: 'apparel', garmentBrand: 'FootJoy',
+        garmentDescription: 'Performance polo', garmentColour: 'Navy', garmentPricePence: '35.00', setupFeePence: '20.00',
+        placements: JSON.stringify([
+          { position: 'left_chest', method: 'embroidery', colour: 'white', x: 0.64, y: 0.33, w: 0.15, artwork: { type: 'logo', logo: 0 } },
+          { position: 'back', method: 'print', colour: 'white', x: 0.5, y: 0.3, w: 0.4, artwork: { type: 'text', lines: ['WHEATLEY SOCIETY', ''], font: 'bold' } },
+        ]),
+        sizes: JSON.stringify({ M: 4, L: 5, XL: 1, Huge: 3 }),
+      },
+      { front: jpeg('front.jpg'), back: jpeg('back.jpg'), logos: [jpeg('club-logo.jpg'), null, null], proof: jpeg('proof.jpg') },
+      { send: true },
+    );
+    // 10 items × (35.00 + 7.50 left chest + 9.00 back print) + 20.00 setup
+    expect(q.totalGrossPence).toBe(10 * (3500 + 750 + 900) + 2000);
+    expect(q.specificationText).toContain('Sizes: M × 4, L × 5, XL × 1 (10 items)');
+    expect(q.specificationText).toContain('Back: Print — “WHEATLEY SOCIETY”');
+    const [msg] = await withTenant(org.id, (tx) => tx.select().from(messages).where(eq(messages.quoteId, q.id)));
+    expect(msg.subject).toContain('cresting proof');
+    expect(msg.bodyHtml).toContain(`/api/public/ball-proof/${q.id}/`);
+
+    const { acceptQuoteInStore } = await import('@/lib/services/quotes');
+    const order = await acceptQuoteInStore(ctx, q.id, 'Society Sam');
+    expect(order.status).toBe('ordered');
+    const [confirm] = await withTenant(org.id, (tx) => tx.select().from(messages).where(eq(messages.orderId, order.id)));
+    expect(confirm.subject).toContain('gone into production');
+    expect(confirm.bodyHtml).not.toContain('manufacturer');
+  });
+
+  it('needs a garment photo, a back photo for back positions, and sizes', async () => {
+    const { createCrestQuote } = await import('@/lib/services/cresting');
+    const base = {
+      customerName: 'X', email: 'x-crest@example.com', garmentType: 'apparel', garmentDescription: 'Polo', garmentPricePence: '0', setupFeePence: '0',
+      placements: JSON.stringify([{ position: 'back', method: 'print', x: 0.5, y: 0.3, w: 0.4, artwork: { type: 'text', lines: ['Hi'] } }]),
+      sizes: JSON.stringify({ M: 1 }),
+    };
+    const files = { front: jpeg(), back: null, logos: [], proof: jpeg() };
+    await expect(createCrestQuote(admin, base, { ...files, front: null }, { send: false })).rejects.toThrow(/photo of the garment/);
+    await expect(createCrestQuote(admin, base, files, { send: false })).rejects.toThrow(/back photo/);
+    await expect(createCrestQuote(admin, { ...base, sizes: '{}' }, { ...files, back: jpeg() }, { send: false })).rejects.toThrow(/how many/);
+  });
+});
+
 describe('catalogue prices', () => {
   it('lets a manager change a head price, with the change in the audit trail', async () => {
     const { getCatalog, updateModelPrice } = await import('@/lib/services/fitting');

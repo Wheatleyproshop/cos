@@ -35,6 +35,7 @@ import { addAccountsForCatalogueBrands, clearAccountLogo, saveAccount, setAccoun
 import { sendReportNow, updatePerformanceReport } from '@/lib/services/performance-report';
 import { addWorkshopItem, checkInClubs, removeWorkshopItem, updateWorkshopProgress } from '@/lib/services/workshop';
 import { addLine, archivePrebook, createPrebook, receiveStock, removeLine, setPrebookStatus, updatePrebook } from '@/lib/services/prebooks';
+import { createCrestQuote, updateCrestPrices } from '@/lib/services/cresting';
 import { addBall, addStarterBalls, createBallPrintQuote, setBallActive, setBallDesignLink, setBallPhoto, updateBall, updateBallPrice, updateSetupFee } from '@/lib/services/ball-printing';
 
 const obj = (fd: FormData) => Object.fromEntries([...fd.entries()].filter(([, v]) => typeof v === 'string'));
@@ -317,6 +318,39 @@ export async function ballPrintAction(_: FormState, fd: FormData): Promise<FormS
   );
   if (res?.ok && target) redirect(target);
   return res;
+}
+
+/* ── Clothing cresting ──────────────────────────────────────────────── */
+
+export async function crestingAction(_: FormState, fd: FormData): Promise<FormState> {
+  let target = '';
+  const file = (name: string) => {
+    const v = fd.get(name);
+    return v instanceof File && v.size ? v : null;
+  };
+  const res = await act(
+    'staff',
+    async (ctx) => {
+      const data = obj(fd);
+      const q = await createCrestQuote(
+        ctx,
+        { ...data, garmentBrand: data.brand ?? '' },
+        { front: file('front'), back: file('back'), logos: [file('logo0'), file('logo1'), file('logo2')], proof: file('proof') },
+        { send: fd.get('intent') === 'send' },
+      );
+      target = `/quotes/${q.quoteNumber}`;
+    },
+    fd,
+  );
+  if (res?.ok && target) redirect(target);
+  return res;
+}
+
+export async function crestPricesAction(_: FormState, fd: FormData) {
+  return act('manager', async (ctx) => {
+    await updateCrestPrices(ctx, obj(fd));
+    return 'Cresting prices saved.';
+  }, fd);
 }
 
 export async function addBallAction(_: FormState, fd: FormData) {

@@ -104,11 +104,15 @@ export function badgeClass(status: OrderStatus | 'quote'): string {
  * What the customer is told depends on how the order is fulfilled: club orders go to the
  * manufacturer; personalised balls come from stock and go to the printer.
  */
-export type Journey = 'supplier' | 'print';
+export type Journey = 'supplier' | 'print' | 'cresting';
 
 export function journeyFor(specificationJson: unknown): Journey {
-  return (specificationJson as { kind?: string } | null)?.kind === 'cos-ball-print' ? 'print' : 'supplier';
+  const kind = (specificationJson as { kind?: string } | null)?.kind;
+  return kind === 'cos-ball-print' ? 'print' : kind === 'cos-cresting' ? 'cresting' : 'supplier';
 }
+
+/** Made in-house (printing, cresting): goes straight into production when the proof is approved. */
+export const inHouse = (j: Journey) => j !== 'supplier';
 
 export const JOURNEY_WORDS: Record<
   Journey,
@@ -129,6 +133,15 @@ export const JOURNEY_WORDS: Record<
     ready: 'Ready to collect',
     readyLong: 'Printed — ready to collect',
     created: (store) => `Proof approved — order placed with ${store} and sent for printing`,
+    etaLabel: 'Estimated ready date',
+    doneValue: 'Ready in store',
+  },
+  cresting: {
+    placed: 'In production',
+    delayed: 'Delayed in production',
+    ready: 'Ready to collect',
+    readyLong: 'Crested — ready to collect',
+    created: (store) => `Proof approved — order placed with ${store} and gone into production`,
     etaLabel: 'Estimated ready date',
     doneValue: 'Ready in store',
   },

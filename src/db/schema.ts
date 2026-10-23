@@ -23,6 +23,7 @@ import {
   uniqueIndex,
   uuid,
 } from 'drizzle-orm/pg-core';
+import type { CrestPrices } from '../lib/cresting';
 
 const id = () => uuid('id').primaryKey().default(sql`gen_random_uuid()`);
 const orgId = () => uuid('organisation_id').notNull().references(() => organisations.id);
@@ -87,6 +88,8 @@ export const organisations = pgTable('organisations', {
   ballSetupFeePence: integer('ball_setup_fee_pence').notNull().default(0),
   /** Public “design your own balls” page at /design/<slug>. */
   ballDesignLink: boolean('ball_design_link').notNull().default(true),
+  /** Clothing cresting: price per position per method, and the setup / digitising fee. Gaps use DEFAULT_CREST_PRICES. */
+  crestingPrices: jsonb('cresting_prices').$type<Partial<CrestPrices>>().notNull().default({}),
   readyUncollectedDays: integer('ready_uncollected_days').notNull().default(7),
   quoteFollowupDays: integer('quote_followup_days').notNull().default(5),
   missingSupplierRefDays: integer('missing_supplier_ref_days').notNull().default(2),

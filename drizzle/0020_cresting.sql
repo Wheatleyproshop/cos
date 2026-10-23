@@ -1,0 +1,1 @@
+ALTER TABLE "organisations" ADD COLUMN "cresting_prices" jsonb DEFAULT '{}'::jsonb NOT NULL;

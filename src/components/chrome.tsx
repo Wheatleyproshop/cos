@@ -10,6 +10,7 @@ const NAV = [
   { href: '/quotes', icon: '◇', label: 'Quotes' },
   { href: '/fitting', icon: '✎', label: 'Custom Fitting' },
   { href: '/ball-printing', icon: '◎', label: 'Ball Printing' },
+  { href: '/cresting', icon: '✂', label: 'Clothing Cresting' },
   { href: '/workshop', icon: '⚒', label: 'Workshop' },
   { href: '/prebook', icon: '◷', label: 'Pre-book' },
   { href: '/customers', icon: '☺', label: 'Customers' },

@@ -1,7 +1,7 @@
 import { and, asc, eq, gt, inArray, isNull } from 'drizzle-orm';
 import { systemDb, withTenant } from '@/db';
 import { attachments, auditEvents, customers, orders, organisations, trackingTokens, workshopItems, workshopJobs } from '@/db/schema';
-import { asBallPrintSpec } from '../ball-print';
+import { proofOf } from '../proofs';
 import { fitSpec } from '../fit-spec';
 import { journeyFor } from '../status';
 import { hashToken } from '../tokens';
@@ -53,7 +53,7 @@ export async function findOrderByTrackingToken(token: string) {
         specificationJson: fitSpec(o.specificationJson),
       },
       journey: journeyFor(o.specificationJson),
-      proofUrl: o.quoteId && asBallPrintSpec(o.specificationJson) ? proofPathFor(o.quoteId) : null,
+      proofUrl: o.quoteId && proofOf(o.specificationJson) ? proofPathFor(o.quoteId) : null,
       customerName: row.customerName,
       paid: totals.paid,
       credit: totals.credit,

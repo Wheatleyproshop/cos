@@ -1,6 +1,6 @@
 import type { Organisation, OrderStatus } from '@/db/schema';
 import { longDate, money, niceDate, stamp } from '@/lib/format';
-import { JOURNEY_WORDS, type Journey } from '@/lib/status';
+import { inHouse, JOURNEY_WORDS, type Journey } from '@/lib/status';
 import { fitSpec } from '@/lib/fit-spec';
 import { PublicShell } from './public-shell';
 import { SpecView } from './spec-view';
@@ -60,7 +60,7 @@ export function TrackingView({
   org: Organisation; order: TrackingOrder; customerName: string; paid: number; credit?: number; balance: number;
   events: TrackingEvent[]; files: { id: string; filename: string }[]; token: string | null; approved?: boolean; banner?: React.ReactNode;
 }) {
-  const current = o.status === 'delayed' || (o.status === 'place_order' && journey === 'print') ? 'ordered' : o.status;
+  const current = o.status === 'delayed' || (o.status === 'place_order' && inHouse(journey)) ? 'ordered' : o.status;
   const w = JOURNEY_WORDS[journey];
   const STEPS = steps(journey);
   const idx = STEPS.findIndex((s) => s.key === current);

@@ -2,7 +2,7 @@ import type { Metadata } from 'next';
 import { InvalidLink } from '@/components/public-shell';
 import { QuoteView } from '@/components/quote-view';
 import { money } from '@/lib/format';
-import { asBallPrintSpec } from '@/lib/ball-print';
+import { proofOf } from '@/lib/proofs';
 import { findQuoteByToken, isExpired, proofPathFor } from '@/lib/services/quotes';
 import { AcceptForm } from './accept-form';
 
@@ -30,5 +30,5 @@ export default async function QuotePage({ params }: { params: Promise<{ token: s
   ) : (
     <AcceptForm token={token} defaultName={c.name} total={money(q.totalGrossPence)} />
   );
-  return <QuoteView org={org} quote={q} customerName={c.name} action={action} previewUrl={asBallPrintSpec(q.specificationJson) ? proofPathFor(q.id) : null} />;
+  return <QuoteView org={org} quote={q} customerName={c.name} action={action} previewUrl={proofOf(q.specificationJson) ? proofPathFor(q.id) : null} />;
 }

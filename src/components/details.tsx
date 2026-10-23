@@ -20,6 +20,7 @@ import { hasRole, type Staff } from '@/lib/auth';
 import { templateName } from '@/lib/audit';
 import { PAYMENT_KIND_LABELS } from '@/db/schema';
 import { asBallPrintSpec } from '@/lib/ball-print';
+import { asCrestSpec, positionOf, type CrestSpec } from '@/lib/cresting';
 import { bytes, longDate, money, niceDate, penceToInput, stamp, titleCase } from '@/lib/format';
 import { getBrandOptions, getCustomerDetail, getOrderDetail, getQuoteDetail } from '@/lib/queries';
 import { canTransition, DEFAULT_WORKFLOW, QUOTE_STATUS_LABELS, statusLabel } from '@/lib/status';
@@ -32,7 +33,46 @@ import { SpecView } from './spec-view';
 import { Badge, DetailBox, MessageBadge, Timeline } from './views';
 
 /** Ball Printing proof and the customer's original artwork, for staff. */
+function CrestProof({ quoteId, spec }: { quoteId: string; spec: CrestSpec }) {
+  const base = `/api/cresting/${quoteId}`;
+  const logos = [...new Map(spec.placements.flatMap((p) => (p.artwork.type === 'logo' ? [[p.artwork.logo, p.artwork] as const] : []))).values()];
+  return (
+    <div className="bp-proofbox">
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img src={`${base}/proof`} alt={`Proof: ${spec.garment.description}`} className="cr-proof" />
+      <div>
+        <small>Cresting proof</small>
+        <b>
+          {spec.garment.description}
+          {spec.garment.colour ? ` · ${spec.garment.colour}` : ''} · {spec.quantity} item{spec.quantity === 1 ? '' : 's'}
+        </b>
+        <div className="muted">{spec.placements.map((p) => `${positionOf(p.position)?.label} (${p.method})`).join(' · ')}</div>
+        <div className="actions" style={{ marginTop: 10 }}>
+          <a className="btn small" href={`${base}/proof`} target="_blank" rel="noreferrer">
+            Open proof
+          </a>
+          <a className="btn small" href={`${base}/front`} target="_blank" rel="noreferrer">
+            Garment photo
+          </a>
+          {spec.photos.back ? (
+            <a className="btn small" href={`${base}/back`} target="_blank" rel="noreferrer">
+              Back photo
+            </a>
+          ) : null}
+          {logos.map((l) => (
+            <a key={l.logo} className="btn small" href={`${base}/logo-${l.logo + 1}`} download={l.filename}>
+              Download {l.filename}
+            </a>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function BallProof({ quoteId, spec }: { quoteId: string | null; spec: unknown }) {
+  const crest = asCrestSpec(spec);
+  if (crest && quoteId) return <CrestProof quoteId={quoteId} spec={crest} />;
   const p = asBallPrintSpec(spec);
   if (!p || !quoteId) return null;
   return (

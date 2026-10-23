@@ -184,7 +184,7 @@ const printSchema = z.object({
   validUntil: z.string().trim().default(''),
 });
 
-async function readImage(file: File | null, what: string, maxBytes: number) {
+export async function readImage(file: File | null, what: string, maxBytes: number) {
   if (!file || file.size === 0) return null;
   if (file.size > maxBytes) throw new ServiceError(`The ${what} must be ${Math.round(maxBytes / 1024 / 1024)} MB or smaller.`);
   const buf = Buffer.from(await file.arrayBuffer());

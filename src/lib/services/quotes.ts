@@ -3,11 +3,11 @@ import { systemDb, withTenant, type DB } from '@/db';
 import { customers, organisations, orders, quotes, type Customer, type Organisation, type Quote } from '@/db/schema';
 import { recordEvent, type Actor } from '../audit';
 import { dispatchMessages, enqueueEmail } from '../email/outbox';
-import { asBallPrintSpec } from '../ball-print';
+import { proofOf } from '../proofs';
 import { fitSpec } from '../fit-spec';
 import { todayInTz } from '../format';
 import { composeSpec } from '../order-details';
-import { journeyFor } from '../status';
+import { inHouse, journeyFor } from '../status';
 import { appUrl, hashToken, newToken, signValue } from '../tokens';
 import { parse, quoteCreateSchema, quoteEditSchema } from '../validation';
 import { findOrCreateCustomer, issueTrackingLink, nextNumber, ServiceError, type Ctx } from './common';
@@ -31,9 +31,9 @@ export function proofPathFor(quoteId: string) {
 }
 
 function quoteEmailContext(q: Quote, c: Customer, url: string) {
-  const isPrint = asBallPrintSpec(q.specificationJson);
   return {
-    previewImageUrl: isPrint ? appUrl(proofPathFor(q.id)) : undefined,
+    previewImageUrl: proofOf(q.specificationJson) ? appUrl(proofPathFor(q.id)) : undefined,
+    journey: journeyFor(q.specificationJson),
     fit: fitSpec(q.specificationJson),
     customerName: c.name,
     reference: q.quoteNumber,
@@ -247,7 +247,7 @@ async function acceptAndConvert(
   assertOpen(quote);
   if (isExpired(quote, ctx.org.timezone)) throw new ServiceError('This quote has expired.');
   const now = new Date();
-  const print = journeyFor(quote.specificationJson) === 'print';
+  const print = inHouse(journeyFor(quote.specificationJson));
   const orderNumber = await nextNumber(tx, ctx.org.id, 'order');
   const [order] = await tx
     .insert(orders)
