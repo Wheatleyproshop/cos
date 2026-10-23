@@ -4,7 +4,7 @@ import { redirect, RedirectType } from 'next/navigation';
 import { act, type FormState } from '@/lib/action-utils';
 import { logout } from '@/lib/auth';
 import type { BackupProvider, EmailAutomationKey } from '@/db/schema';
-import { addAttachment, addNote, archiveAttachment, createOrder, createTrackingLink, editOrderDetails, recordPayment, restoreAttachment, setArchived, setOrderDeleted, updateOrderProgress, voidPayment } from '@/lib/services/orders';
+import { addAttachment, addNote, archiveAttachment, createOrder, createTrackingLink, editOrderDetails, recordPayment, restoreAttachment, setArchived, setNoteDeleted, setOrderDeleted, updateOrderProgress, voidPayment } from '@/lib/services/orders';
 import { acceptQuoteInStore, closeQuote, createApprovalLink, createQuote, editQuote, sendQuote, setQuoteDeleted } from '@/lib/services/quotes';
 import {
   changeOwnPassword,
@@ -678,5 +678,12 @@ export async function deleteUserAction(userId: string, deleted: boolean) {
   return act('admin', async (ctx) => {
     await setUserDeleted(ctx, userId, deleted);
     return deleted ? 'Team member deleted.' : 'Team member restored.';
+  });
+}
+
+export async function deleteNoteAction(orderId: string, noteEventId: string, deleted: boolean) {
+  return act('staff', async (ctx) => {
+    await setNoteDeleted(ctx, orderId, noteEventId, deleted);
+    return deleted ? 'Note deleted.' : 'Note restored.';
   });
 }

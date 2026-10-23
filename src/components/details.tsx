@@ -7,6 +7,7 @@ import {
   archiveAttachmentAction,
   restoreAttachmentAction,
   archiveOrderAction,
+  deleteNoteAction,
   deleteOrderAction,
   voidPaymentAction,
   deleteQuoteAction,
@@ -354,7 +355,11 @@ export async function OrderDetail({ staff, number, inModal }: { staff: Staff; nu
 
       <h3>Activity timeline</h3>
       <NoteForm action={addNoteAction.bind(null, o.id)} />
-      <Timeline events={d.events} tz={tz} />
+      <Timeline
+        events={d.events}
+        tz={tz}
+        notes={{ canEdit: (n) => n.actorUserId === staff.id || manager, action: (id, del) => deleteNoteAction.bind(null, o.id, id, del) }}
+      />
 
       {o.removedAt ? (
         <div className="notice warn">

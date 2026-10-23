@@ -173,6 +173,24 @@ describe('order lifecycle', () => {
     expect(msgs.some((m) => m.status === 'sent')).toBe(true); // notify=false ignored for staff
   });
 
+  it('deletes a note (author or manager) without erasing it, and restores it', async () => {
+    const { addNote, setNoteDeleted } = await import('@/lib/services/orders');
+    const [o] = await withTenant(org.id, (tx) => tx.select().from(orders).where(eq(orders.orderNumber, 'COS-1048')));
+    await addNote(admin, o.id, { note: 'Wrong customer, ignore' });
+    const [note] = await withTenant(org.id, (tx) =>
+      tx.select().from(auditEvents).where(and(eq(auditEvents.orderId, o.id), eq(auditEvents.eventType, 'note_added'))).orderBy(sql`${auditEvents.createdAt} desc`).limit(1),
+    );
+    await expect(setNoteDeleted(staff, o.id, note.id, true)).rejects.toThrow(/manager/);
+    await setNoteDeleted(admin, o.id, note.id, true);
+    const types = async () =>
+      (await withTenant(org.id, (tx) => tx.select().from(auditEvents).where(sql`${auditEvents.metadataJson}->>'noteEventId' = ${note.id}`))).map((e) => e.eventType);
+    expect(await types()).toEqual(['note_deleted']);
+    // The note itself is still in the ledger.
+    expect((await withTenant(org.id, (tx) => tx.select().from(auditEvents).where(eq(auditEvents.id, note.id))))).toHaveLength(1);
+    await setNoteDeleted(admin, o.id, note.id, false);
+    expect((await types()).sort()).toEqual(['note_deleted', 'note_restored']);
+  });
+
   it('deletes an attachment (only the uploader or a manager) and restores it', async () => {
     const { addAttachment, archiveAttachment, restoreAttachment } = await import('@/lib/services/orders');
     const [o] = await withTenant(org.id, (tx) => tx.select().from(orders).where(eq(orders.orderNumber, 'COS-1048')));

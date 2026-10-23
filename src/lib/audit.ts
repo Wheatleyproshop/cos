@@ -26,6 +26,8 @@ export type EventType =
   | 'payment_recorded'
   | 'payment_voided'
   | 'note_added'
+  | 'note_deleted'
+  | 'note_restored'
   | 'attachment_added'
   | 'attachment_archived'
   | 'attachment_restored'
@@ -211,6 +213,10 @@ export function describeEvent(e: Pick<AuditEvent, 'eventType' | 'oldValueJson' |
       return `${titleCase(o.kind)} of ${money(o.amountPence)} voided — ${n.reason}`;
     case 'note_added':
       return `Note: ${n.note}`;
+    case 'note_deleted':
+      return 'Note deleted';
+    case 'note_restored':
+      return 'Note restored';
     case 'attachment_added':
       return `Attached ${n.filename} (${titleCase(n.category)}, ${n.visibility})`;
     case 'attachment_archived':

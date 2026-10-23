@@ -1,6 +1,6 @@
-import { and, desc, eq, isNotNull, isNull } from 'drizzle-orm';
+import { and, desc, eq, inArray, isNotNull, isNull, sql } from 'drizzle-orm';
 import { withTenant, type DB } from '@/db';
-import { attachments, customers, orders, payments, type Customer, type Order } from '@/db/schema';
+import { attachments, auditEvents, customers, orders, payments, type Customer, type Order } from '@/db/schema';
 import { recordEvent } from '../audit';
 import { dispatchMessages, enqueueEmail } from '../email/outbox';
 import type { EmailContext } from '../email/templates';
@@ -345,6 +345,40 @@ export async function voidPayment(ctx: Ctx, orderId: string, paymentId: string, 
       oldValue: { paymentId: p.id, kind: p.kind, amountPence: p.amountPence, method: p.method }, newValue: { voidId: v.id, reason },
     });
   });
+}
+
+/**
+ * Deletes (or restores) a note on an order. The timeline is append-only, so the note itself is never
+ * erased: a 'note_deleted' entry hides it from the timeline. The note's author or a manager can do this.
+ */
+export async function setNoteDeleted(ctx: Ctx, orderId: string, noteEventId: string, deleted: boolean) {
+  await withTenant(ctx.org.id, async (tx) => {
+    const { order } = await loadOrder(tx, ctx, orderId);
+    const [note] = await tx
+      .select()
+      .from(auditEvents)
+      .where(and(eq(auditEvents.id, noteEventId), eq(auditEvents.orderId, orderId), eq(auditEvents.eventType, 'note_added')))
+      .limit(1);
+    if (!note) throw new ServiceError('Note not found.');
+    if (note.actorUserId !== ctx.userId) requireRole(ctx, 'manager', deleted ? "delete another staff member's note" : "restore another staff member's note");
+    const state = await noteDeletedState(tx, noteEventId);
+    if (state === deleted) return;
+    await recordEvent(tx, {
+      organisationId: ctx.org.id, actor: ctx.actor, eventType: deleted ? 'note_deleted' : 'note_restored', entityType: 'order',
+      orderId, customerId: order.customerId, metadata: { noteEventId },
+    });
+  });
+}
+
+/** Whether a note is currently deleted: the latest delete/restore entry for it wins. */
+async function noteDeletedState(tx: DB, noteEventId: string) {
+  const [last] = await tx
+    .select({ type: auditEvents.eventType })
+    .from(auditEvents)
+    .where(and(inArray(auditEvents.eventType, ['note_deleted', 'note_restored']), sql`${auditEvents.metadataJson}->>'noteEventId' = ${noteEventId}`))
+    .orderBy(desc(auditEvents.createdAt))
+    .limit(1);
+  return last?.type === 'note_deleted';
 }
 
 export async function addNote(ctx: Ctx, orderId: string, raw: unknown) {

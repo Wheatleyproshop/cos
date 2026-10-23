@@ -1,12 +1,14 @@
 import Link from 'next/link';
 import type { ReactNode } from 'react';
 import type { AuditEvent } from '@/db/schema';
+import type { FormState } from '@/lib/action-utils';
 import type { Staff } from '@/lib/auth';
 import { describeEvent } from '@/lib/audit';
 import { money, niceDate, stamp } from '@/lib/format';
 import type { WorkRow } from '@/lib/queries';
 import { badgeClass } from '@/lib/status';
 import { RowLink } from './chrome';
+import { ActionButton } from './forms';
 import { NotificationBell } from './notifications';
 import { RefreshButton } from './refresh-button';
 
@@ -115,18 +117,51 @@ export function WorkTable({ rows, empty }: { rows: WorkRow[]; empty: ReactNode }
   );
 }
 
-export function Timeline({ events, tz }: { events: AuditEvent[]; tz: string }) {
+type NoteControls = {
+  /** Who may delete/restore this note (its author or a manager). */
+  canEdit: (note: AuditEvent) => boolean;
+  action: (noteEventId: string, deleted: boolean) => () => Promise<FormState>;
+};
+
+export function Timeline({ events, tz, notes }: { events: AuditEvent[]; tz: string; notes?: NoteControls }) {
   if (!events.length) return <p className="muted">No activity yet.</p>;
+  // Notes are never erased: the latest delete/restore entry for each note decides how it shows.
+  const noteState = new Map<string, AuditEvent>();
+  for (const e of [...events].sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime())) {
+    const id = (e.metadataJson as { noteEventId?: string } | null)?.noteEventId;
+    if (id && (e.eventType === 'note_deleted' || e.eventType === 'note_restored')) noteState.set(id, e);
+  }
   return (
     <ol className="timeline" aria-label="Activity timeline">
-      {events.map((e) => (
-        <li key={e.id} className={e.actorType}>
-          <div>{describeEvent(e)}</div>
-          <div className="when">
-            {stamp(e.createdAt, tz)} — {e.actorLabel}
-          </div>
-        </li>
-      ))}
+      {events
+        .filter((e) => e.eventType !== 'note_deleted' && e.eventType !== 'note_restored')
+        .map((e) => {
+          const isNote = e.eventType === 'note_added';
+          const del = isNote ? noteState.get(e.id) : undefined;
+          const deleted = del?.eventType === 'note_deleted';
+          const mine = isNote && notes?.canEdit(e);
+          return (
+            <li key={e.id} className={`${e.actorType}${deleted ? ' note-deleted' : ''}`}>
+              <div>{deleted ? `Note deleted by ${del!.actorLabel} · ${stamp(del!.createdAt, tz)}` : describeEvent(e)}</div>
+              <div className="when">
+                {stamp(e.createdAt, tz)} — {e.actorLabel}
+                {mine ? (
+                  <span className="note-btn">
+                    {deleted ? (
+                      <ActionButton action={notes!.action(e.id, false)} className="linkbtn">
+                        Restore
+                      </ActionButton>
+                    ) : (
+                      <ActionButton action={notes!.action(e.id, true)} className="linkbtn danger" confirm="Delete this note? It disappears from the timeline, and you can restore it.">
+                        Delete
+                      </ActionButton>
+                    )}
+                  </span>
+                ) : null}
+              </div>
+            </li>
+          );
+        })}
     </ol>
   );
 }
