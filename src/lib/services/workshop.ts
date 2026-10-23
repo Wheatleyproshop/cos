@@ -259,6 +259,37 @@ export async function removeWorkshopItem(ctx: Ctx, id: string, itemId: string) {
   });
 }
 
+/** Edit or delete (empty) a job's internal notes. The previous text stays in the audit trail. */
+export async function updateJobNotes(ctx: Ctx, id: string, rawNotes: unknown, opts: { restored?: boolean } = {}) {
+  const notes = String(rawNotes ?? '').trim().slice(0, 2000);
+  await withTenant(ctx.org.id, async (tx) => {
+    const { job } = await load(tx, ctx, id);
+    if (notes === job.notes) return;
+    await tx.update(workshopJobs).set({ notes, updatedAt: new Date() }).where(eq(workshopJobs.id, id));
+    await recordEvent(tx, {
+      organisationId: ctx.org.id, actor: ctx.actor, eventType: 'workshop_notes_changed', entityType: 'workshop_job', entityId: id,
+      customerId: job.customerId, oldValue: { notes: job.notes }, newValue: { notes, ...(opts.restored ? { restored: true } : {}) },
+    });
+  });
+}
+
+/** Puts back notes that were just deleted (from the most recent change). */
+export async function restoreJobNotes(ctx: Ctx, id: string) {
+  const previous = await withTenant(ctx.org.id, async (tx) => {
+    const [last] = await tx
+      .select({ o: auditEvents.oldValueJson, n: auditEvents.newValueJson })
+      .from(auditEvents)
+      .where(and(eq(auditEvents.entityId, id), eq(auditEvents.eventType, 'workshop_notes_changed')))
+      .orderBy(desc(auditEvents.createdAt))
+      .limit(1);
+    const was = (last?.o as { notes?: string } | null)?.notes ?? '';
+    const now = (last?.n as { notes?: string } | null)?.notes ?? '';
+    return !now && was ? was : null;
+  });
+  if (!previous) throw new ServiceError('There are no deleted notes to restore.');
+  await updateJobNotes(ctx, id, previous, { restored: true });
+}
+
 /** Brings back a club deleted from a job (until the job is collected). */
 export async function restoreWorkshopItem(ctx: Ctx, id: string, itemId: string) {
   await withTenant(ctx.org.id, async (tx) => {

@@ -1116,6 +1116,19 @@ describe('workshop', () => {
     expect(n.items.find((i) => i.title === 'Workshop job ready')!.href).toMatch(/^\/workshop\/WS-/);
   });
 
+  it('edits, deletes and restores a job’s internal notes', async () => {
+    const ws = await import('@/lib/services/workshop');
+    const job = await ws.checkInClubs(staff, { customerName: 'Notes Nell', email: 'notes@example.com', etaDate: '', notes: 'Bag tag 7', items: [{ club: 'Driver', work: 'Regrip', pricePence: '10' }] });
+    const notes = async () => (await ws.getJob(org.id, job.reference))!.job.notes;
+    await ws.updateJobNotes(staff, job.id, 'Bag tag 7, customer bringing own grips');
+    expect(await notes()).toBe('Bag tag 7, customer bringing own grips');
+    await ws.updateJobNotes(staff, job.id, '');
+    expect(await notes()).toBe('');
+    await ws.restoreJobNotes(staff, job.id);
+    expect(await notes()).toBe('Bag tag 7, customer bringing own grips');
+    await expect(ws.restoreJobNotes(staff, job.id)).rejects.toThrow(/no deleted notes/);
+  });
+
   it('deletes a club from a job (even once ready) and restores it', async () => {
     const ws = await import('@/lib/services/workshop');
     const job = await ws.checkInClubs(admin, {

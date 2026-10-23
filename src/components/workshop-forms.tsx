@@ -1,6 +1,6 @@
 'use client';
 
-import { useActionState, useState } from 'react';
+import { useActionState, useEffect, useState } from 'react';
 import type { WorkshopStatus } from '@/db/schema';
 import type { FormState } from '@/lib/action-utils';
 import { money, parseMoneyToPence } from '@/lib/format';
@@ -183,4 +183,43 @@ export function AddWorkshopItemForm({ action }: { action: BoundAction }) {
       )}
     </ActionForm>
   );
+}
+
+/** Edit a job's internal notes in place. */
+export function WorkshopNotesForm({ action, notes }: { action: BoundAction; notes: string }) {
+  const [open, setOpen] = useState(false);
+  if (!open) {
+    return (
+      <button type="button" className="linkbtn" onClick={() => setOpen(true)}>
+        {notes ? 'Edit' : 'Add internal notes'}
+      </button>
+    );
+  }
+  return (
+    <ActionForm action={action}>
+      {(s) => (
+        <>
+          <CloseWhenSaved state={s} close={() => setOpen(false)} />
+          <label className="field">
+            <span className="sr-only">Internal notes</span>
+            <textarea name="notes" defaultValue={notes} maxLength={2000} rows={3} placeholder="Not shown to the customer — e.g. bag tag no. 12" autoFocus />
+          </label>
+          <FormMessage state={s} />
+          <div className="actions" style={{ marginTop: 6 }}>
+            <Submit className="btn small">Save notes</Submit>
+            <button type="button" className="btn small" onClick={() => setOpen(false)}>
+              Cancel
+            </button>
+          </div>
+        </>
+      )}
+    </ActionForm>
+  );
+}
+
+function CloseWhenSaved({ state, close }: { state: FormState; close: () => void }) {
+  useEffect(() => {
+    if (state?.ok) close();
+  }, [state, close]);
+  return null;
 }

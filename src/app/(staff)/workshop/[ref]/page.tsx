@@ -5,13 +5,16 @@ import { ActionButton } from '@/components/forms';
 import { BuildTable } from '@/components/spec-view';
 import { MessageBadge } from '@/components/views';
 import { PageHeader } from '@/components/views';
-import { AddWorkshopItemForm, WorkshopProgressForm } from '@/components/workshop-forms';
+import { AddWorkshopItemForm, WorkshopNotesForm, WorkshopProgressForm } from '@/components/workshop-forms';
 import { describeEvent, templateName } from '@/lib/audit';
 import { hasRole, requireStaff } from '@/lib/auth';
 import { money, stamp, todayInTz } from '@/lib/format';
 import { shortDate } from '@/lib/short-date';
 import { getJob, jobSpec, WORKSHOP_STATUS_LABELS } from '@/lib/services/workshop';
-import { addWorkshopItemAction, deleteJobAction, removeWorkshopItemAction, restoreWorkshopItemAction, workshopProgressAction } from '../../actions';
+import {
+  addWorkshopItemAction, deleteJobAction, removeWorkshopItemAction, restoreWorkshopItemAction, workshopProgressAction,
+  workshopNotesAction, clearWorkshopNotesAction, restoreWorkshopNotesAction,
+} from '../../actions';
 
 export async function generateMetadata({ params }: { params: Promise<{ ref: string }> }): Promise<Metadata> {
   return { title: decodeURIComponent((await params).ref) };
@@ -30,6 +33,10 @@ export default async function WorkshopJobPage({ params }: { params: Promise<{ re
   const open = !deleted && ['checked_in', 'in_progress', 'waiting_parts'].includes(j.status);
   // Clubs can be corrected until the job is collected.
   const editable = open || (!deleted && j.status === 'ready');
+  // Notes deleted by the latest change can be put back.
+  const lastNotes = events.find((e) => e.eventType === 'workshop_notes_changed');
+  const notesCanRestore =
+    !j.notes && Boolean((lastNotes?.oldValueJson as { notes?: string } | null)?.notes) && !(lastNotes?.newValueJson as { notes?: string } | null)?.notes;
   const today = todayInTz(tz);
   const late = open && j.etaDate && j.etaDate < today;
   const spec = jobSpec(j, items);
@@ -85,10 +92,28 @@ export default async function WorkshopJobPage({ params }: { params: Promise<{ re
             {c.email ? <a href={`mailto:${c.email}?subject=${encodeURIComponent(`Your clubs (${j.reference})`)}`}>{c.email}</a> : null}
           </div>
         </div>
-        {j.notes ? (
+        {j.notes || editable || notesCanRestore ? (
           <div className="detailbox">
             <small>Internal notes</small>
-            <div style={{ whiteSpace: 'pre-line' }}>{j.notes}</div>
+            {j.notes ? <div style={{ whiteSpace: 'pre-line' }}>{j.notes}</div> : <div className="muted">{notesCanRestore ? 'Notes deleted.' : 'None.'}</div>}
+            {!deleted ? (
+              <div className="note-tools">
+                {editable || j.notes ? <WorkshopNotesForm action={workshopNotesAction.bind(null, j.id)} notes={j.notes} /> : null}
+                {j.notes ? (
+                  <ActionButton
+                    action={clearWorkshopNotesAction.bind(null, j.id)}
+                    className="linkbtn danger"
+                    confirm="Delete the internal notes on this job? You can restore them straight after."
+                  >
+                    Delete
+                  </ActionButton>
+                ) : notesCanRestore ? (
+                  <ActionButton action={restoreWorkshopNotesAction.bind(null, j.id)} className="linkbtn">
+                    Restore notes
+                  </ActionButton>
+                ) : null}
+              </div>
+            ) : null}
           </div>
         ) : null}
       </div>

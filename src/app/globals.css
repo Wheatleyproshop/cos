@@ -631,3 +631,5 @@ details.section[open] { padding-bottom: 16px; }
 .note-btn { margin-left: 8px; }
 .linkbtn { background: none; border: 0; padding: 0; color: var(--link, #2f5fd0); cursor: pointer; font: inherit; font-size: 12px; text-decoration: underline; }
 .linkbtn.danger { color: var(--err-ink); }
+.note-tools { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin-top: 6px; font-weight: 400; }
+.note-tools textarea { width: 100%; }

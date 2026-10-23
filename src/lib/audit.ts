@@ -84,6 +84,7 @@ export type EventType =
   | 'workshop_item_removed'
   | 'workshop_item_restored'
   | 'workshop_job_deleted'
+  | 'workshop_notes_changed'
   | 'workshop_job_restored'
   | 'ball_design_submitted'
   | 'crest_design_submitted';
@@ -177,6 +178,8 @@ export function describeEvent(e: Pick<AuditEvent, 'eventType' | 'oldValueJson' |
       return 'Pre-book deleted';
     case 'prebook_restored':
       return 'Pre-book restored';
+    case 'workshop_notes_changed':
+      return n.restored ? 'Internal notes restored' : n.notes ? (o.notes ? 'Internal notes edited' : 'Internal notes added') : 'Internal notes deleted';
     case 'workshop_job_deleted':
       return 'Job deleted';
     case 'workshop_job_restored':

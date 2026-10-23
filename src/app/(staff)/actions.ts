@@ -26,7 +26,7 @@ import { sendTestEmail } from '@/lib/services/test-email';
 import { addBrand, addComponent, addModel, createFittingQuote, setCatalogActive, setCatalogRemoved, updateComponentUpcharge, updateModelPrice } from '@/lib/services/fitting';
 import { addAccountsForCatalogueBrands, clearAccountLogo, saveAccount, setAccountActive, setAccountDeleted, setAccountLogo } from '@/lib/services/accounts';
 import { sendReportNow, updatePerformanceReport } from '@/lib/services/performance-report';
-import { addWorkshopItem, checkInClubs, removeWorkshopItem, restoreWorkshopItem, setJobDeleted, updateWorkshopProgress } from '@/lib/services/workshop';
+import { addWorkshopItem, checkInClubs, removeWorkshopItem, restoreJobNotes, restoreWorkshopItem, setJobDeleted, updateJobNotes, updateWorkshopProgress } from '@/lib/services/workshop';
 import { addLine, archivePrebook, createPrebook, receiveStock, removeLine, restoreLine, setPrebookDeleted, setPrebookStatus, updatePrebook } from '@/lib/services/prebooks';
 import { TEMPLATE_KEYS } from '@/lib/email/templates';
 import { createCrestQuote, setCrestDesignLink, setCrestPositionRemoved, updateCrestPrices } from '@/lib/services/cresting';
@@ -685,5 +685,26 @@ export async function deleteNoteAction(orderId: string, noteEventId: string, del
   return act('staff', async (ctx) => {
     await setNoteDeleted(ctx, orderId, noteEventId, deleted);
     return deleted ? 'Note deleted.' : 'Note restored.';
+  });
+}
+
+export async function workshopNotesAction(jobId: string, _: FormState, fd: FormData) {
+  return act('staff', async (ctx) => {
+    await updateJobNotes(ctx, jobId, fd.get('notes'));
+    return 'Notes saved.';
+  }, fd);
+}
+
+export async function clearWorkshopNotesAction(jobId: string) {
+  return act('staff', async (ctx) => {
+    await updateJobNotes(ctx, jobId, '');
+    return 'Notes deleted.';
+  });
+}
+
+export async function restoreWorkshopNotesAction(jobId: string) {
+  return act('staff', async (ctx) => {
+    await restoreJobNotes(ctx, jobId);
+    return 'Notes restored.';
   });
 }
