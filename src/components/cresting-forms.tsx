@@ -1,11 +1,19 @@
 'use client';
 
-import { CREST_METHODS, CREST_POSITIONS, type CrestPrices } from '@/lib/cresting';
+import type { FormState } from '@/lib/action-utils';
+import { CREST_METHODS, CREST_POSITIONS, offeredPositions, type CrestPrices } from '@/lib/cresting';
 import { penceToInput } from '@/lib/format';
-import { ActionForm, FormMessage, Submit, type BoundAction } from './forms';
+import { ActionButton, ActionForm, FormMessage, Submit, type BoundAction } from './forms';
 
 /** Price per position per method (per item), plus the one-off setup / digitising fee. */
-export function CrestPricesForm({ action, prices }: { action: BoundAction; prices: CrestPrices }) {
+export function CrestPricesForm({
+  action, prices, removeAction,
+}: {
+  action: BoundAction;
+  prices: CrestPrices;
+  removeAction: (key: string, removed: boolean) => Promise<FormState>;
+}) {
+  const deleted = CREST_POSITIONS.filter((p) => prices.removed?.includes(p.key));
   return (
     <ActionForm action={action}>
       {(s) => (
@@ -20,10 +28,11 @@ export function CrestPricesForm({ action, prices }: { action: BoundAction; price
                       {m.label} (£ each)
                     </th>
                   ))}
+                  <th />
                 </tr>
               </thead>
               <tbody>
-                {CREST_POSITIONS.map((p) => (
+                {offeredPositions(prices).map((p) => (
                   <tr key={p.key}>
                     <td>
                       <b>{p.label}</b>
@@ -40,11 +49,38 @@ export function CrestPricesForm({ action, prices }: { action: BoundAction; price
                         />
                       </td>
                     ))}
+                    <td className="num">
+                      <ActionButton
+                        action={removeAction.bind(null, p.key, true)}
+                        className="btn small danger"
+                        confirm={`Delete ${p.label}? It won’t be offered in the cresting designer or on your customer design page. You can restore it below.`}
+                      >
+                        Delete
+                      </ActionButton>
+                    </td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
+          {deleted.length ? (
+            <details className="section">
+              <summary>Deleted positions ({deleted.length})</summary>
+              <ul className="attention">
+                {deleted.map((p) => (
+                  <li key={p.key}>
+                    <span>
+                      <b>{p.label}</b>
+                      <div className="muted">Not offered · prices kept for if you restore it</div>
+                    </span>
+                    <ActionButton action={removeAction.bind(null, p.key, false)} className="btn small">
+                      Restore
+                    </ActionButton>
+                  </li>
+                ))}
+              </ul>
+            </details>
+          ) : null}
           <label className="field" style={{ marginTop: 14, maxWidth: 320 }}>
             <span>Setup / digitising fee per job (£)</span>
             <input name="setupFeePence" inputMode="decimal" defaultValue={penceToInput(prices.setupFeePence)} />

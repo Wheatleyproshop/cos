@@ -572,6 +572,26 @@ describe('clothing cresting', () => {
     await expect(submitCrestDesign('desirable-golf', design, { front: jpeg(), back: null, logos: [], proof: jpeg() }, { ip: '198.51.100.8' })).rejects.toThrow(/isn’t available/);
   });
 
+  it('deletes a position the shop does not offer, and restores it', async () => {
+    const { createCrestQuote, setCrestPositionRemoved, updateCrestPrices } = await import('@/lib/services/cresting');
+    const { crestPrices, offeredPositions } = await import('@/lib/cresting');
+    const fresh = async () => (await systemDb().select().from(organisations).where(eq(organisations.id, org.id)))[0];
+    await expect(setCrestPositionRemoved(staff, 'cap_side', true)).rejects.toThrow(/manager/);
+    await setCrestPositionRemoved({ ...admin, org: await fresh() }, 'cap_side', true);
+    // Saving prices afterwards keeps it deleted.
+    await updateCrestPrices({ ...admin, org: await fresh() }, { 'cap_front.print': '5.50' });
+    const o = await fresh();
+    expect(offeredPositions(crestPrices(o.crestingPrices)).some((p) => p.key === 'cap_side')).toBe(false);
+    const cap = {
+      customerName: 'Cap Carl', email: 'cap@example.com', garmentType: 'cap', garmentDescription: 'Cap', garmentPricePence: '0', setupFeePence: '0',
+      placements: JSON.stringify([{ position: 'cap_side', method: 'print', x: 0.5, y: 0.5, w: 0.2, artwork: { type: 'text', lines: ['C'] } }]),
+      sizes: JSON.stringify({ 'One size': 1 }),
+    };
+    await expect(createCrestQuote({ ...admin, org: o }, cap, { front: jpeg(), back: jpeg(), logos: [], proof: jpeg() }, { send: false })).rejects.toThrow(/isn’t offered/);
+    await setCrestPositionRemoved({ ...admin, org: o }, 'cap_side', false);
+    expect(offeredPositions(crestPrices((await fresh()).crestingPrices)).some((p) => p.key === 'cap_side')).toBe(true);
+  });
+
   it('needs a garment photo, a back photo for back positions, and sizes', async () => {
     const { createCrestQuote } = await import('@/lib/services/cresting');
     const base = {

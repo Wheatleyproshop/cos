@@ -63,6 +63,23 @@ export async function updateCrestPrices(ctx: Ctx, raw: Record<string, unknown>) 
   });
 }
 
+/** Delete a position the shop doesn't offer (hidden from both designers), or restore it. Its prices are kept. */
+export async function setCrestPositionRemoved(ctx: Ctx, key: string, removed: boolean) {
+  requireRole(ctx, 'manager', 'change cresting prices');
+  const pos = positionOf(key);
+  if (!pos) throw new ServiceError('Unknown position.');
+  const before = crestPrices(ctx.org.crestingPrices);
+  const others = (before.removed ?? []).filter((k) => k !== key);
+  const next = { ...before, removed: removed ? [...others, key] : others };
+  await withTenant(ctx.org.id, async (tx) => {
+    await tx.update(organisations).set({ crestingPrices: next }).where(eq(organisations.id, ctx.org.id));
+    await recordEvent(tx, {
+      organisationId: ctx.org.id, actor: ctx.actor, eventType: 'settings_changed', entityType: 'organisation', entityId: ctx.org.id,
+      oldValue: { removed: before.removed }, newValue: { removed: next.removed }, metadata: { section: removed ? 'cresting.position_deleted' : 'cresting.position_restored', position: pos.label },
+    });
+  });
+}
+
 /* ───────────────────────────── Quotes ───────────────────────────── */
 
 const fontKeys = PRINT_FONTS.map((f) => f.key) as [string, ...string[]];
@@ -147,6 +164,7 @@ export async function createCrestQuote(
 
   for (const p of input.placements) {
     const pos = positionOf(p.position)!;
+    if (prices.removed?.includes(pos.key)) throw new ServiceError(`${pos.label} isn’t offered at the moment.`);
     if (pos.garment !== input.garmentType) throw new ServiceError(`${pos.label} isn’t a position on this garment.`);
     if (pos.view === 'back' && !back) {
       throw new ServiceError(`Add a ${input.garmentType === 'cap' ? 'side' : 'back'} photo for the ${pos.label.toLowerCase()} position.`, { back: 'Required' });

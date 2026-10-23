@@ -3,9 +3,9 @@ import Link from 'next/link';
 import { CrestPricesForm } from '@/components/cresting-forms';
 import { PageHeader } from '@/components/views';
 import { hasRole, requireStaff } from '@/lib/auth';
-import { CREST_METHODS, CREST_POSITIONS, crestPrices } from '@/lib/cresting';
+import { CREST_METHODS, crestPrices, offeredPositions } from '@/lib/cresting';
 import { money } from '@/lib/format';
-import { crestPricesAction } from '../../actions';
+import { crestPositionAction, crestPricesAction } from '../../actions';
 
 export const metadata: Metadata = { title: 'Cresting prices' };
 
@@ -26,10 +26,10 @@ export default async function CrestPricesPage() {
       />
       <section className="panel">
         {hasRole(staff, 'manager') ? (
-          <CrestPricesForm action={crestPricesAction} prices={prices} />
+          <CrestPricesForm action={crestPricesAction} prices={prices} removeAction={crestPositionAction} />
         ) : (
           <ul className="attention">
-            {CREST_POSITIONS.map((p) => (
+            {offeredPositions(prices).map((p) => (
               <li key={p.key}>
                 <span>{p.label}</span>
                 <span className="muted">{CREST_METHODS.map((m) => `${m.label} ${money(prices.positions[p.key][m.key])}`).join(' · ')}</span>

@@ -8,6 +8,7 @@ import {
   CAP_SIZES,
   CREST_METHODS,
   CREST_POSITIONS,
+  offeredPositions,
   THREAD_COLOURS,
   type CrestMethod,
   type CrestPositionKey,
@@ -140,7 +141,7 @@ export function CrestingBuilder({
   const [setup, setSetup] = useState(penceToInput(prices.setupFeePence));
   const [busy, setBusy] = useState(false);
 
-  const positions = CREST_POSITIONS.filter((p) => p.garment === garment);
+  const positions = offeredPositions(prices).filter((p) => p.garment === garment);
   const free = positions.filter((p) => !placements.some((x) => x.position === p.key));
   const sel = placements.find((p) => p.id === selected) ?? null;
   const sizeList: readonly string[] = garment === 'cap' ? CAP_SIZES : APPAREL_SIZES;

@@ -35,7 +35,7 @@ import { addAccountsForCatalogueBrands, clearAccountLogo, saveAccount, setAccoun
 import { sendReportNow, updatePerformanceReport } from '@/lib/services/performance-report';
 import { addWorkshopItem, checkInClubs, removeWorkshopItem, updateWorkshopProgress } from '@/lib/services/workshop';
 import { addLine, archivePrebook, createPrebook, receiveStock, removeLine, setPrebookStatus, updatePrebook } from '@/lib/services/prebooks';
-import { createCrestQuote, setCrestDesignLink, updateCrestPrices } from '@/lib/services/cresting';
+import { createCrestQuote, setCrestDesignLink, setCrestPositionRemoved, updateCrestPrices } from '@/lib/services/cresting';
 import { addBall, addStarterBalls, createBallPrintQuote, setBallActive, setBallDesignLink, setBallPhoto, setBallRemoved, updateBall, updateBallPrice, updateSetupFee } from '@/lib/services/ball-printing';
 
 const obj = (fd: FormData) => Object.fromEntries([...fd.entries()].filter(([, v]) => typeof v === 'string'));
@@ -357,6 +357,13 @@ export async function crestDesignLinkAction(enabled: boolean) {
   return act('manager', async (ctx) => {
     await setCrestDesignLink(ctx, enabled);
     return enabled ? 'Design link switched on.' : 'Design link switched off.';
+  });
+}
+
+export async function crestPositionAction(key: string, removed: boolean) {
+  return act('manager', async (ctx) => {
+    await setCrestPositionRemoved(ctx, key, removed);
+    return removed ? 'Position deleted.' : 'Position restored.';
   });
 }
 

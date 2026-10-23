@@ -45,8 +45,8 @@ export type ThreadKey = (typeof THREAD_COLOURS)[number]['key'];
 export const APPAREL_SIZES = ['XS', 'S', 'M', 'L', 'XL', '2XL', '3XL', '4XL'] as const;
 export const CAP_SIZES = ['One size'] as const;
 
-/** Per position, per method, per item; plus a one-off setup / digitising fee per job. */
-export type CrestPrices = { positions: Record<string, Record<CrestMethod, number>>; setupFeePence: number };
+/** Per position, per method, per item; plus a one-off setup / digitising fee per job. `removed` = positions the shop doesn't offer. */
+export type CrestPrices = { positions: Record<string, Record<CrestMethod, number>>; setupFeePence: number; removed?: string[] };
 
 export const DEFAULT_CREST_PRICES: CrestPrices = {
   positions: {
@@ -65,8 +65,11 @@ export const DEFAULT_CREST_PRICES: CrestPrices = {
 export function crestPrices(saved: Partial<CrestPrices> | null | undefined): CrestPrices {
   const positions: CrestPrices['positions'] = {};
   for (const p of CREST_POSITIONS) positions[p.key] = { ...DEFAULT_CREST_PRICES.positions[p.key], ...(saved?.positions?.[p.key] ?? {}) };
-  return { positions, setupFeePence: saved?.setupFeePence ?? DEFAULT_CREST_PRICES.setupFeePence };
+  return { positions, setupFeePence: saved?.setupFeePence ?? DEFAULT_CREST_PRICES.setupFeePence, removed: saved?.removed ?? [] };
 }
+
+/** Positions the shop currently offers. */
+export const offeredPositions = (prices: CrestPrices) => CREST_POSITIONS.filter((p) => !prices.removed?.includes(p.key));
 
 export type CrestArtwork =
   | { type: 'logo'; logo: number; filename: string; mimeType: string; storageKey: string }
