@@ -4,9 +4,9 @@ import { ActionButton } from '@/components/forms';
 import { AccountForm, AccountLogoForm } from '@/components/prebook-forms';
 import { PageHeader } from '@/components/views';
 import { hasRole, requireStaff } from '@/lib/auth';
-import { money } from '@/lib/format';
-import { accountLogoUrl, listAccounts, type AccountRow } from '@/lib/services/accounts';
-import { accountActiveAction, accountLogoAction, catalogueAccountsAction, clearAccountLogoAction, saveAccountAction } from '../actions';
+import { money, stamp } from '@/lib/format';
+import { accountLogoUrl, listAccounts, listDeletedAccounts, type AccountRow } from '@/lib/services/accounts';
+import { accountActiveAction, accountLogoAction, deleteAccountAction, catalogueAccountsAction, clearAccountLogoAction, saveAccountAction } from '../actions';
 
 export const metadata: Metadata = { title: 'Accounts' };
 
@@ -95,6 +95,13 @@ function AccountCard({ a, manager }: { a: AccountRow; manager: boolean }) {
             <ActionButton action={accountActiveAction.bind(null, a.id, !a.active)} className="btn small">
               {a.active ? 'Hide account' : 'Restore'}
             </ActionButton>
+            <ActionButton
+              action={deleteAccountAction.bind(null, a.id, true)}
+              className="btn small danger"
+              confirm={`Delete the ${a.brand} account card? Pre-books with ${a.brand} keep their details, and you can restore it from Deleted accounts.`}
+            >
+              Delete
+            </ActionButton>
           </span>
         </div>
       ) : null}
@@ -106,7 +113,7 @@ export default async function AccountsPage({ searchParams }: { searchParams: Pro
   const staff = await requireStaff();
   const manager = hasRole(staff, 'manager');
   const { hidden } = await searchParams;
-  const accounts = await listAccounts(staff.organisationId, { includeInactive: hidden === '1' });
+  const [accounts, deleted] = await Promise.all([listAccounts(staff.organisationId, { includeInactive: hidden === '1' }), listDeletedAccounts(staff.organisationId)]);
   return (
     <>
       <PageHeader
@@ -140,6 +147,26 @@ export default async function AccountsPage({ searchParams }: { searchParams: Pro
             <summary>Add an account</summary>
             <AccountForm action={saveAccountAction.bind(null, null)} submitLabel="Add account" />
           </details>
+          {deleted.length ? (
+            <details className="section">
+              <summary>Deleted accounts ({deleted.length})</summary>
+              <ul className="attention">
+                {deleted.map((a) => (
+                  <li key={a.id}>
+                    <span>
+                      <b>{a.brand}</b>
+                      <div className="muted">
+                        {a.accountNumber ? `Account ${a.accountNumber} · ` : ''}deleted {stamp(a.removedAt!, staff.org.timezone)}
+                      </div>
+                    </span>
+                    <ActionButton action={deleteAccountAction.bind(null, a.id, false)} className="btn small">
+                      Restore
+                    </ActionButton>
+                  </li>
+                ))}
+              </ul>
+            </details>
+          ) : null}
           {accounts.length ? (
             <div style={{ marginTop: 10 }}>
               <ActionButton action={catalogueAccountsAction} className="btn small">

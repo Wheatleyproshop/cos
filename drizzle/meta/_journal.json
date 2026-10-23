@@ -176,6 +176,13 @@
       "when": 1792746828191,
       "tag": "0024_prebook_removed",
       "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1792747456591,
+      "tag": "0025_account_removed",
+      "breakpoints": true
     }
   ]
 }

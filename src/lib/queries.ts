@@ -456,7 +456,7 @@ export async function getBrandOptions(orgId: string): Promise<string[]> {
   const [cat, accounts, used] = await withTenant(orgId, (tx) =>
     Promise.all([
       tx.select({ name: brands.name }).from(brands).where(eq(brands.active, true)),
-      tx.select({ name: supplierAccounts.brand }).from(supplierAccounts),
+      tx.select({ name: supplierAccounts.brand }).from(supplierAccounts).where(isNull(supplierAccounts.removedAt)),
       tx.selectDistinct({ name: orders.brand }).from(orders).where(sql`${orders.createdAt} > now() - interval '2 years'`),
     ]),
   );

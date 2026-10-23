@@ -1,0 +1,1 @@
+ALTER TABLE "supplier_accounts" ADD COLUMN "removed_at" timestamp with time zone;

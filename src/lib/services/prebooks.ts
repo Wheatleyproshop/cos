@@ -140,7 +140,7 @@ async function load(tx: DB, ctx: Ctx, id: string) {
 async function resolveBrand(tx: DB, accountId: string | null, brand: string) {
   if (accountId) {
     const [a] = await tx.select().from(supplierAccounts).where(eq(supplierAccounts.id, accountId));
-    if (!a) throw new ServiceError('That account no longer exists.', { supplierAccountId: 'Choose another' });
+    if (!a || a.removedAt) throw new ServiceError('That account no longer exists.', { supplierAccountId: 'Choose another' });
     return a.brand;
   }
   if (!brand) throw new ServiceError('Choose the brand account or type a brand.', { supplierAccountId: 'Required' });

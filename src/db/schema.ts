@@ -562,6 +562,8 @@ export const supplierAccounts = pgTable('supplier_accounts', {
   logoKey: text('logo_key'),
   logoMime: text('logo_mime'),
   active: boolean('active').notNull().default(true),
+  /** Deleted (hidden everywhere, even "show hidden"; restorable). Pre-books keep their brand. */
+  removedAt: timestamp('removed_at', { withTimezone: true }),
   createdAt: createdAt(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 });

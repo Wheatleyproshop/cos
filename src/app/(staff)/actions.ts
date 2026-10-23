@@ -31,7 +31,7 @@ import {
 import { runBackup } from '@/lib/services/backups';
 import { sendTestEmail } from '@/lib/services/test-email';
 import { addBrand, addComponent, addModel, createFittingQuote, setCatalogActive, setCatalogRemoved, updateComponentUpcharge, updateModelPrice } from '@/lib/services/fitting';
-import { addAccountsForCatalogueBrands, clearAccountLogo, saveAccount, setAccountActive, setAccountLogo } from '@/lib/services/accounts';
+import { addAccountsForCatalogueBrands, clearAccountLogo, saveAccount, setAccountActive, setAccountDeleted, setAccountLogo } from '@/lib/services/accounts';
 import { sendReportNow, updatePerformanceReport } from '@/lib/services/performance-report';
 import { addWorkshopItem, checkInClubs, removeWorkshopItem, setJobDeleted, updateWorkshopProgress } from '@/lib/services/workshop';
 import { addLine, archivePrebook, createPrebook, receiveStock, removeLine, setPrebookDeleted, setPrebookStatus, updatePrebook } from '@/lib/services/prebooks';
@@ -613,5 +613,12 @@ export async function deletePrebookAction(id: string, deleted: boolean) {
   return act('manager', async (ctx) => {
     await setPrebookDeleted(ctx, id, deleted);
     return deleted ? 'Pre-book deleted.' : 'Pre-book restored.';
+  });
+}
+
+export async function deleteAccountAction(id: string, deleted: boolean) {
+  return act('manager', async (ctx) => {
+    await setAccountDeleted(ctx, id, deleted);
+    return deleted ? 'Account deleted.' : 'Account restored.';
   });
 }

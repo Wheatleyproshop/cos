@@ -1,4 +1,4 @@
-import { and, asc, eq, isNull, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, isNotNull, isNull, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import { withTenant } from '@/db';
 import { brands, prebookLines, prebooks, supplierAccounts } from '@/db/schema';
@@ -45,7 +45,7 @@ export async function listAccounts(orgId: string, opts: { includeInactive?: bool
     const accounts = await tx
       .select()
       .from(supplierAccounts)
-      .where(opts.includeInactive ? undefined : eq(supplierAccounts.active, true))
+      .where(and(isNull(supplierAccounts.removedAt), opts.includeInactive ? undefined : eq(supplierAccounts.active, true)))
       .orderBy(asc(supplierAccounts.brand));
     const open = await tx
       .select({
@@ -72,10 +72,14 @@ export async function saveAccount(ctx: Ctx, id: string | null, raw: unknown) {
   const v = parse(accountSchema, raw);
   await withTenant(ctx.org.id, async (tx) => {
     const dupe = await tx
-      .select({ id: supplierAccounts.id })
+      .select({ id: supplierAccounts.id, removedAt: supplierAccounts.removedAt })
       .from(supplierAccounts)
       .where(sql`lower(${supplierAccounts.brand}) = ${v.brand.toLowerCase()}`);
-    if (dupe.some((d) => d.id !== id)) throw new ServiceError(`There’s already an account for ${v.brand}.`, { brand: 'Already added' });
+    const other = dupe.find((d) => d.id !== id);
+    if (other?.removedAt) {
+      throw new ServiceError(`There’s a deleted account for ${v.brand}. Restore it from Deleted accounts instead.`, { brand: 'Restore the deleted one' });
+    }
+    if (other) throw new ServiceError(`There’s already an account for ${v.brand}.`, { brand: 'Already added' });
     let before: Record<string, unknown> | null = null;
     let accountId = id;
     if (id) {
@@ -106,7 +110,29 @@ export async function setAccountActive(ctx: Ctx, id: string, active: boolean) {
   });
 }
 
-/** One empty account card per catalogue brand that doesn't have one yet. */
+/** Deletes an account card (or restores it). Nothing is erased; pre-books keep their brand and details. */
+export async function setAccountDeleted(ctx: Ctx, id: string, deleted: boolean) {
+  requireRole(ctx, 'manager', 'delete supplier accounts');
+  await withTenant(ctx.org.id, async (tx) => {
+    const [a] = await tx.select().from(supplierAccounts).where(and(eq(supplierAccounts.id, id), eq(supplierAccounts.organisationId, ctx.org.id))).limit(1);
+    if (!a) throw new ServiceError('Account not found.');
+    if (Boolean(a.removedAt) === deleted) return;
+    await tx
+      .update(supplierAccounts)
+      .set(deleted ? { removedAt: new Date(), updatedAt: new Date() } : { removedAt: null, active: true, updatedAt: new Date() })
+      .where(eq(supplierAccounts.id, id));
+    await recordEvent(tx, {
+      organisationId: ctx.org.id, actor: ctx.actor, eventType: 'supplier_account_saved', entityType: 'supplier_account', entityId: id,
+      newValue: { brand: a.brand, deleted },
+    });
+  });
+}
+
+export async function listDeletedAccounts(orgId: string) {
+  return withTenant(orgId, (tx) => tx.select().from(supplierAccounts).where(isNotNull(supplierAccounts.removedAt)).orderBy(desc(supplierAccounts.removedAt)));
+}
+
+/** One empty account card per catalogue brand that doesn't have one yet (a deleted card counts: it isn't re-added). */
 export async function addAccountsForCatalogueBrands(ctx: Ctx) {
   requireRole(ctx, 'manager', 'edit supplier accounts');
   return withTenant(ctx.org.id, async (tx) => {

@@ -833,6 +833,19 @@ describe('supplier accounts and pre-books', () => {
     expect(events.map((e) => e.eventType)).toEqual(expect.arrayContaining(['prebook_created', 'prebook_line_added', 'prebook_status_changed', 'prebook_received']));
   });
 
+  it('deletes an account card and restores it', async () => {
+    const acc = await import('@/lib/services/accounts');
+    await acc.saveAccount(admin, null, { brand: 'Wilson' });
+    const w = (await acc.listAccounts(org.id)).find((x) => x.brand === 'Wilson')!;
+    await expect(acc.setAccountDeleted(staff, w.id, true)).rejects.toThrow(/manager/);
+    await acc.setAccountDeleted(admin, w.id, true);
+    expect((await acc.listAccounts(org.id, { includeInactive: true })).some((x) => x.id === w.id)).toBe(false);
+    expect((await acc.listDeletedAccounts(org.id)).map((x) => x.id)).toContain(w.id);
+    await expect(acc.saveAccount(admin, null, { brand: 'wilson' })).rejects.toThrow(/Restore it/);
+    await acc.setAccountDeleted(admin, w.id, false);
+    expect((await acc.listAccounts(org.id)).some((x) => x.id === w.id)).toBe(true);
+  });
+
   it('deletes a pre-book entered by mistake and restores it', async () => {
     const { listAccounts } = await import('@/lib/services/accounts');
     const p = await import('@/lib/services/prebooks');
