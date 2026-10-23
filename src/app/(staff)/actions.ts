@@ -11,6 +11,7 @@ import {
   createUser,
   recheckSender,
   resetUserPassword,
+  setAutomation,
   setCustomerDeleted,
   setUserDeleted,
   updateAutomations,
@@ -27,6 +28,7 @@ import { addAccountsForCatalogueBrands, clearAccountLogo, saveAccount, setAccoun
 import { sendReportNow, updatePerformanceReport } from '@/lib/services/performance-report';
 import { addWorkshopItem, checkInClubs, removeWorkshopItem, restoreWorkshopItem, setJobDeleted, updateWorkshopProgress } from '@/lib/services/workshop';
 import { addLine, archivePrebook, createPrebook, receiveStock, removeLine, restoreLine, setPrebookDeleted, setPrebookStatus, updatePrebook } from '@/lib/services/prebooks';
+import { TEMPLATE_KEYS } from '@/lib/email/templates';
 import { createCrestQuote, setCrestDesignLink, setCrestPositionRemoved, updateCrestPrices } from '@/lib/services/cresting';
 import { addBall, addStarterBalls, createBallPrintQuote, setBallActive, setBallDesignLink, setBallPhoto, setBallRemoved, updateBall, updateBallPrice, updateSetupFee } from '@/lib/services/ball-printing';
 
@@ -183,9 +185,17 @@ export async function recheckSenderAction() {
 
 export async function automationsAction(_: FormState, fd: FormData) {
   return act('admin', async (ctx) => {
-    const keys: EmailAutomationKey[] = ['order_confirmation', 'quote_approval', 'eta_revised', 'ready_for_collection', 'collection_reminder'];
-    await updateAutomations(ctx, Object.fromEntries(keys.map((k) => [k, flag(fd, k)])));
+    // Every email on the form: a key left out here would be saved as switched off.
+    await updateAutomations(ctx, Object.fromEntries(TEMPLATE_KEYS.map((k) => [k, flag(fd, k)])));
     return 'Automations saved.';
+  });
+}
+
+/** Switch one automatic email off (the template is built in, so "deleting" it means it's never sent) or back on. */
+export async function emailOnOffAction(key: EmailAutomationKey, enabled: boolean) {
+  return act('admin', async (ctx) => {
+    await setAutomation(ctx, key, enabled);
+    return enabled ? 'Email switched on.' : 'Email switched off.';
   });
 }
 

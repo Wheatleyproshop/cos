@@ -12,7 +12,8 @@ import { getMessage, listMessages } from '@/lib/queries';
 import { renderSample } from '@/lib/email/preview';
 import { TestEmailForm } from '@/components/test-email-form';
 import { hasRole } from '@/lib/auth';
-import { sendTestEmailAction } from '../actions';
+import { ActionButton } from '@/components/forms';
+import { emailOnOffAction, sendTestEmailAction } from '../actions';
 
 export const metadata: Metadata = { title: 'Email previews' };
 
@@ -66,6 +67,33 @@ export default async function EmailsPage({ searchParams }: { searchParams: Promi
             </nav>
             <div className="muted">
               <b>Subject:</b> {preview.subject}
+            </div>
+            <div className="email-onoff">
+              {staff.org.emailAutomations[template] === false ? (
+                <>
+                  <span className="badge pb-cancelled">Off</span>
+                  <span className="muted">Customers don’t get this email.</span>
+                  {hasRole(staff, 'admin') ? (
+                    <ActionButton action={emailOnOffAction.bind(null, template, true)} className="btn small">
+                      Turn back on
+                    </ActionButton>
+                  ) : null}
+                </>
+              ) : (
+                <>
+                  <span className="badge ready">On</span>
+                  <span className="muted">Sent automatically.</span>
+                  {hasRole(staff, 'admin') ? (
+                    <ActionButton
+                      action={emailOnOffAction.bind(null, template, false)}
+                      className="btn small danger"
+                      confirm={`Turn off the “${templateName(template)}” email? Customers won’t receive it until you turn it back on. Everything else carries on as normal.`}
+                    >
+                      Turn off this email
+                    </ActionButton>
+                  ) : null}
+                </>
+              )}
             </div>
             {hasRole(staff, 'admin') ? <TestEmailForm action={sendTestEmailAction.bind(null, template)} defaultTo={staff.email} /> : null}
           </>

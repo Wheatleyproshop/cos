@@ -905,6 +905,21 @@ describe('supplier accounts and pre-books', () => {
     expect(events.map((e) => e.eventType)).toEqual(expect.arrayContaining(['prebook_created', 'prebook_line_added', 'prebook_status_changed', 'prebook_received']));
   });
 
+  it('turns one automatic email off and back on without touching the others', async () => {
+    const { setAutomation } = await import('@/lib/services/admin');
+    const { TEMPLATE_KEYS } = await import('@/lib/email/templates');
+    const fresh = async () => (await systemDb().select().from(organisations).where(eq(organisations.id, org.id)))[0];
+    await expect(setAutomation(staff, 'workshop_ready', false)).rejects.toThrow(/admin/);
+    await setAutomation({ ...admin, org: await fresh() }, 'workshop_ready', false);
+    let a = (await fresh()).emailAutomations;
+    expect(a.workshop_ready).toBe(false);
+    // Every other email stays on (including ones added after the shop's settings were first saved).
+    expect(TEMPLATE_KEYS.filter((k) => k !== 'workshop_ready').every((k) => a[k] !== false)).toBe(true);
+    await setAutomation({ ...admin, org: await fresh() }, 'workshop_ready', true);
+    a = (await fresh()).emailAutomations;
+    expect(TEMPLATE_KEYS.every((k) => a[k] === true)).toBe(true);
+  });
+
   it('deletes a team member (not yourself) and restores them', async () => {
     const { setUserDeleted, listDeletedUsers, createUser } = await import('@/lib/services/admin');
     await expect(setUserDeleted(staff, admin.userId!, true)).rejects.toThrow(/admin/);

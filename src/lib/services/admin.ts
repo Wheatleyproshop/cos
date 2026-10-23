@@ -6,6 +6,7 @@ import { customers, organisations, users, type EmailAutomationKey, type EmailAut
 import { recordEvent } from '../audit';
 import { revokeUserSessions } from '../sessions';
 import { checkSenderDomain } from '../email/sender';
+import { TEMPLATE_KEYS } from '../email/templates';
 import { PLANS } from '../plans';
 import {
   customerEditSchema,
@@ -165,6 +166,14 @@ export async function updateAutomations(ctx: Ctx, enabled: Partial<Record<EmailA
     ball_design_received: Boolean(enabled.ball_design_received),
   };
   await updateOrg(ctx, 'automations', { emailAutomations: next });
+}
+
+/** Turns one automatic email on or off, leaving the others as they are. */
+export async function setAutomation(ctx: Ctx, key: EmailAutomationKey, enabled: boolean) {
+  requireRole(ctx, 'admin', 'change email automations');
+  if (!TEMPLATE_KEYS.includes(key)) throw new ServiceError('Unknown email.');
+  const current = Object.fromEntries(TEMPLATE_KEYS.map((k) => [k, ctx.org.emailAutomations?.[k] !== false]));
+  await updateAutomations(ctx, { ...current, [key]: enabled });
 }
 
 export async function updatePaymentTracking(ctx: Ctx, enabled: boolean) {
