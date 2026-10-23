@@ -10,6 +10,7 @@ import { hasRole, requireStaff, ROLE_LABELS } from '@/lib/auth';
 import { bytes, stamp } from '@/lib/format';
 import { hasFeature, PLANS } from '@/lib/plans';
 import { getSettingsData } from '@/lib/queries';
+import { listDeletedUsers } from '@/lib/services/admin';
 import { reportRecipients } from '@/lib/services/performance-report';
 import {
   automationsAction,
@@ -17,6 +18,7 @@ import {
   changePasswordAction,
   recheckSenderAction,
   createUserAction,
+  deleteUserAction,
   storeSettingsAction,
   thresholdsAction,
   paymentTrackingAction,
@@ -32,7 +34,7 @@ export default async function SettingsPage() {
   const staff = await requireStaff();
   const org = staff.org;
   const admin = hasRole(staff, 'admin');
-  const { team, runs } = await getSettingsData(org);
+  const [{ team, runs }, deletedTeam] = await Promise.all([getSettingsData(org), listDeletedUsers(org.id)]);
   const tz = org.timezone;
   const plan = PLANS[org.plan];
   const brand = resolveBrand(org);
@@ -141,13 +143,26 @@ export default async function SettingsPage() {
                   <td>{u.sharedLogin || u.loginEnabled ? (u.lastLoginAt ? stamp(u.lastLoginAt, tz) : 'Never') : '—'}</td>
                   <td>
                     {admin ? (
-                      <TeamMemberControls
-                        role={u.role}
-                        active={u.active}
-                        isSelf={u.id === staff.id}
-                        update={updateUserAction.bind(null, u.id)}
-                        resetPassword={u.loginEnabled || u.sharedLogin ? resetUserPasswordAction.bind(null, u.id) : undefined}
-                      />
+                      <>
+                        <TeamMemberControls
+                          role={u.role}
+                          active={u.active}
+                          isSelf={u.id === staff.id}
+                          update={updateUserAction.bind(null, u.id)}
+                          resetPassword={u.loginEnabled || u.sharedLogin ? resetUserPasswordAction.bind(null, u.id) : undefined}
+                        />
+                        {u.id !== staff.id ? (
+                          <div style={{ marginTop: 6 }}>
+                            <ActionButton
+                              action={deleteUserAction.bind(null, u.id, true)}
+                              className="btn small danger"
+                              confirm={`Delete ${u.name} from your team? They’ll be signed out and can’t sign in. Their name stays on orders and history, and you can restore them from Deleted team members.`}
+                            >
+                              Delete
+                            </ActionButton>
+                          </div>
+                        ) : null}
+                      </>
                     ) : u.active ? (
                       'Active'
                     ) : (
@@ -159,6 +174,26 @@ export default async function SettingsPage() {
             </tbody>
           </table>
         </div>
+        {admin && deletedTeam.length ? (
+          <details className="section">
+            <summary>Deleted team members ({deletedTeam.length})</summary>
+            <ul className="attention">
+              {deletedTeam.map((u) => (
+                <li key={u.id}>
+                  <span>
+                    <b>{u.name}</b>
+                    <div className="muted">
+                      {u.email} · {ROLE_LABELS[u.role]} · deleted {stamp(u.removedAt!, tz)}
+                    </div>
+                  </span>
+                  <ActionButton action={deleteUserAction.bind(null, u.id, false)} className="btn small">
+                    Restore
+                  </ActionButton>
+                </li>
+              ))}
+            </ul>
+          </details>
+        ) : null}
         {admin ? (
           <details className="section">
             <summary>Add a team member</summary>

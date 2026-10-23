@@ -12,6 +12,7 @@ import {
   recheckSender,
   resetUserPassword,
   setCustomerDeleted,
+  setUserDeleted,
   updateAutomations,
   updateCustomer,
   updatePaymentTracking,
@@ -660,5 +661,12 @@ export async function restoreAttachmentAction(attachmentId: string) {
   return act('staff', async (ctx) => {
     await restoreAttachment(ctx, attachmentId);
     return 'Attachment restored.';
+  });
+}
+
+export async function deleteUserAction(userId: string, deleted: boolean) {
+  return act('admin', async (ctx) => {
+    await setUserDeleted(ctx, userId, deleted);
+    return deleted ? 'Team member deleted.' : 'Team member restored.';
   });
 }

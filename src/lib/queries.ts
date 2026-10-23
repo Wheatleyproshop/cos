@@ -435,6 +435,7 @@ export async function getSettingsData(org: Organisation) {
           loginEnabled: users.loginEnabled, sharedLogin: users.sharedLogin,
         })
         .from(users)
+        .where(isNull(users.removedAt))
         .orderBy(desc(users.active), asc(users.name)),
       tx.select({ provider: backupDestinations.provider, status: backupDestinations.status }).from(backupDestinations),
       tx.select().from(backupRuns).orderBy(desc(backupRuns.startedAt)).limit(5),

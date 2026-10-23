@@ -905,6 +905,20 @@ describe('supplier accounts and pre-books', () => {
     expect(events.map((e) => e.eventType)).toEqual(expect.arrayContaining(['prebook_created', 'prebook_line_added', 'prebook_status_changed', 'prebook_received']));
   });
 
+  it('deletes a team member (not yourself) and restores them', async () => {
+    const { setUserDeleted, listDeletedUsers, createUser } = await import('@/lib/services/admin');
+    await expect(setUserDeleted(staff, admin.userId!, true)).rejects.toThrow(/admin/);
+    await expect(setUserDeleted(admin, admin.userId!, true)).rejects.toThrow(/your own account/);
+    await setUserDeleted(admin, staff.userId!, true);
+    const [will] = await systemDb().select().from(users).where(eq(users.id, staff.userId!));
+    expect(will.active).toBe(false);
+    expect((await listDeletedUsers(org.id)).map((u) => u.id)).toContain(staff.userId);
+    await expect(createUser(admin, { name: 'Will Again', email: will.email, role: 'staff', canSignIn: 'on', password: 'long-enough-pass' })).rejects.toThrow(/Restore them/);
+    await setUserDeleted(admin, staff.userId!, false);
+    const [back] = await systemDb().select().from(users).where(eq(users.id, staff.userId!));
+    expect(back).toMatchObject({ active: true, removedAt: null });
+  });
+
   it('deletes a customer with nothing open, and restores them when they come back', async () => {
     const { setCustomerDeleted, listDeletedCustomers } = await import('@/lib/services/admin');
     const order = await createOrder(staff, { customerName: 'Gone Gary', email: 'gary@example.com', brand: 'PING', product: 'Glove', totalGrossPence: '20' });

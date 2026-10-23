@@ -190,6 +190,10 @@ export async function createUser(ctx: Ctx, raw: unknown) {
     if (count >= PLANS[ctx.org.plan].staffLimit) {
       throw new ServiceError(`Your ${PLANS[ctx.org.plan].label} plan includes ${PLANS[ctx.org.plan].staffLimit} active staff accounts.`);
     }
+    const [gone] = await tx.select({ removedAt: users.removedAt }).from(users).where(sql`lower(${users.email}) = ${input.email.toLowerCase()}`).limit(1);
+    if (gone?.removedAt) {
+      throw new ServiceError('That person was deleted from your team. Restore them from Deleted team members instead.', { email: 'Restore them instead' });
+    }
     // Members without their own login get an unusable random password.
     const passwordHash = await bcrypt.hash(input.canSignIn ? input.password : randomBytes(24).toString('base64url'), 12);
     let created;
@@ -210,6 +214,50 @@ export async function createUser(ctx: Ctx, raw: unknown) {
       newValue: { name: created.name, email: created.email, role: created.role, ownLogin: created.loginEnabled },
     });
   });
+}
+
+/**
+ * Deletes a team member (or restores them). Nothing is erased: they can't sign in, they're signed out
+ * now, and they leave the team list, but orders, quotes and history keep their name. You can't
+ * delete yourself or the last admin.
+ */
+export async function setUserDeleted(ctx: Ctx, userId: string, deleted: boolean) {
+  requireRole(ctx, 'admin', 'delete team members');
+  if (deleted && userId === ctx.userId) throw new ServiceError('You can’t delete your own account. Ask another admin.');
+  await withTenant(ctx.org.id, async (tx) => {
+    const [u] = await tx.select().from(users).where(eq(users.id, userId)).limit(1);
+    if (!u) throw new ServiceError('Team member not found.');
+    if (Boolean(u.removedAt) === deleted) return;
+    if (deleted && u.role === 'admin' && u.active) {
+      const [{ admins }] = await tx
+        .select({ admins: sql<number>`count(*)::int` })
+        .from(users)
+        .where(and(eq(users.role, 'admin'), eq(users.active, true), sql`${users.removedAt} is null`, ne(users.id, userId)));
+      if (!admins) throw new ServiceError('This is the only active admin. Make someone else an admin first.');
+    }
+    if (!deleted) {
+      const [{ count }] = await tx.select({ count: sql<number>`count(*)::int` }).from(users).where(eq(users.active, true));
+      if (count >= PLANS[ctx.org.plan].staffLimit) {
+        throw new ServiceError(`Your ${PLANS[ctx.org.plan].label} plan includes ${PLANS[ctx.org.plan].staffLimit} active staff accounts. Deactivate someone first.`);
+      }
+    }
+    await tx.update(users).set(deleted ? { removedAt: new Date(), active: false } : { removedAt: null, active: true }).where(eq(users.id, userId));
+    await recordEvent(tx, {
+      organisationId: ctx.org.id, actor: ctx.actor, eventType: deleted ? 'user_deleted' : 'user_restored', entityType: 'user', entityId: userId,
+      newValue: { name: u.name, email: u.email },
+    });
+  });
+  if (deleted) await revokeUserSessions(userId);
+}
+
+export async function listDeletedUsers(orgId: string) {
+  return withTenant(orgId, (tx) =>
+    tx
+      .select({ id: users.id, name: users.name, email: users.email, role: users.role, removedAt: users.removedAt })
+      .from(users)
+      .where(sql`${users.removedAt} is not null`)
+      .orderBy(sql`${users.removedAt} desc`),
+  );
 }
 
 /** Role / active changes. Accounts are deactivated, never deleted, so audit history keeps its actors. */

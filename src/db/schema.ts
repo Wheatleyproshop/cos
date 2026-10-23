@@ -115,6 +115,8 @@ export const users = pgTable(
     role: text('role', { enum: ['admin', 'manager', 'staff'] }).notNull().default('staff'),
     passwordHash: text('password_hash').notNull(),
     active: boolean('active').notNull().default(true),
+    /** Deleted from the team: can't sign in, hidden from the team list; their name stays on records. Restorable. */
+    removedAt: timestamp('removed_at', { withTimezone: true }),
     /** False for team members who only pick their name on a shared shop login. */
     loginEnabled: boolean('login_enabled').notNull().default(true),
     /** A shared counter login (e.g. "Pro Shop"): asks who's working, then acts as that member. */
