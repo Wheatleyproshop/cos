@@ -2,17 +2,21 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { Suspense } from 'react';
 import { RowLink, SearchBox } from '@/components/chrome';
+import { ActionButton } from '@/components/forms';
 import { PageHeader } from '@/components/views';
 import { hasRole, requireStaff } from '@/lib/auth';
 import { money, stamp } from '@/lib/format';
 import { listCustomers } from '@/lib/queries';
+import { listDeletedCustomers } from '@/lib/services/admin';
+import { deleteCustomerAction } from '../actions';
 
 export const metadata: Metadata = { title: 'Customers' };
 
 export default async function CustomersPage({ searchParams }: { searchParams: Promise<{ q?: string }> }) {
   const staff = await requireStaff();
   const { q } = await searchParams;
-  const rows = await listCustomers(staff.org, q);
+  const [rows, deleted] = await Promise.all([listCustomers(staff.org, q), listDeletedCustomers(staff.organisationId)]);
+  const manager = hasRole(staff, 'manager');
   return (
     <>
       <PageHeader
@@ -83,6 +87,32 @@ export default async function CustomersPage({ searchParams }: { searchParams: Pr
           </tbody>
         </table>
       </div>
+      {deleted.length ? (
+        <section className="panel" style={{ marginTop: 18 }}>
+          <details className="section">
+            <summary>Deleted customers ({deleted.length})</summary>
+            <ul className="attention">
+              {deleted.map((c) => (
+                <li key={c.id}>
+                  <span>
+                    <Link href={`/customers/${c.id}`} className="rowtitle">
+                      {c.name}
+                    </Link>
+                    <div className="muted">
+                      {c.email || 'No email'} · deleted {stamp(c.archivedAt!, staff.org.timezone)}
+                    </div>
+                  </span>
+                  {manager ? (
+                    <ActionButton action={deleteCustomerAction.bind(null, c.id, false)} className="btn small">
+                      Restore
+                    </ActionButton>
+                  ) : null}
+                </li>
+              ))}
+            </ul>
+          </details>
+        </section>
+      ) : null}
     </>
   );
 }

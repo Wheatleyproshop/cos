@@ -833,6 +833,25 @@ describe('supplier accounts and pre-books', () => {
     expect(events.map((e) => e.eventType)).toEqual(expect.arrayContaining(['prebook_created', 'prebook_line_added', 'prebook_status_changed', 'prebook_received']));
   });
 
+  it('deletes a customer with nothing open, and restores them when they come back', async () => {
+    const { setCustomerDeleted, listDeletedCustomers } = await import('@/lib/services/admin');
+    const order = await createOrder(staff, { customerName: 'Gone Gary', email: 'gary@example.com', brand: 'PING', product: 'Glove', totalGrossPence: '20' });
+    const id = order.customerId;
+    await expect(setCustomerDeleted(staff, id, true)).rejects.toThrow(/manager/);
+    await expect(setCustomerDeleted(admin, id, true)).rejects.toThrow(/1 open order/);
+    await updateOrderProgress(admin, order.id, { status: 'ready', etaDate: '', supplierReference: '' });
+    await recordPayment(admin, order.id, { kind: 'payment', amountPence: '20', method: 'card' });
+    await updateOrderProgress(admin, order.id, { status: 'collected', etaDate: '', supplierReference: '' });
+    await setCustomerDeleted(admin, id, true);
+    const archived = async () => (await withTenant(org.id, (tx) => tx.select().from(customers).where(eq(customers.id, id))))[0].archivedAt;
+    expect(await archived()).not.toBeNull();
+    expect((await listDeletedCustomers(org.id)).map((c) => c.id)).toContain(id);
+    // Taking a new order with their email brings them back, rather than failing on a duplicate email.
+    const again = await createOrder(staff, { customerName: 'Gary', email: 'GARY@example.com', brand: 'PING', product: 'Tees', totalGrossPence: '5' });
+    expect(again.customerId).toBe(id);
+    expect(await archived()).toBeNull();
+  });
+
   it('deletes an account card and restores it', async () => {
     const acc = await import('@/lib/services/accounts');
     await acc.saveAccount(admin, null, { brand: 'Wilson' });

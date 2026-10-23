@@ -45,6 +45,8 @@ export type EventType =
   | 'email_suppressed'
   | 'customer_created'
   | 'customer_updated'
+  | 'customer_deleted'
+  | 'customer_restored'
   | 'customers_imported'
   | 'settings_changed'
   | 'user_created'
@@ -147,6 +149,10 @@ export function describeEvent(e: Pick<AuditEvent, 'eventType' | 'oldValueJson' |
       return `Ready date ${o.etaDate ? `changed from ${o.etaDate} ` : 'set '}to ${n.etaDate ?? 'none'}${n.reason ? ` — ${n.reason}` : ''}`;
     case 'workshop_item_added':
       return `Added ${n.club}: ${n.work}${n.parts ? ` (${n.parts})` : ''}`;
+    case 'customer_deleted':
+      return 'Customer deleted';
+    case 'customer_restored':
+      return n.automatic ? 'Customer restored (new order or job with their details)' : 'Customer restored';
     case 'prebook_deleted':
       return 'Pre-book deleted';
     case 'prebook_restored':

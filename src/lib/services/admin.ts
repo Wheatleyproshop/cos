@@ -19,6 +19,47 @@ import { requireRole, ServiceError, type Ctx } from './common';
 
 /* ─────────────────────────────── Customers ─────────────────────────────── */
 
+/**
+ * Deletes a customer (or restores them). Nothing is erased: they disappear from the customer list,
+ * search and export, while past orders, quotes and jobs keep their name. Customers with anything
+ * still open can't be deleted. Taking a new order with their email restores them.
+ */
+export async function setCustomerDeleted(ctx: Ctx, customerId: string, deleted: boolean) {
+  requireRole(ctx, 'manager', 'delete customers');
+  await withTenant(ctx.org.id, async (tx) => {
+    const [c] = await tx.select().from(customers).where(eq(customers.id, customerId)).for('update').limit(1);
+    if (!c) throw new ServiceError('Customer not found.');
+    if (Boolean(c.archivedAt) === deleted) return;
+    if (deleted) {
+      const [open] = await tx
+        .select({
+          orders: sql<number>`(select count(*)::int from orders o where o.customer_id = ${customerId} and o.archived_at is null and o.status <> 'collected')`,
+          quotes: sql<number>`(select count(*)::int from quotes q where q.customer_id = ${customerId} and q.archived_at is null and q.status in ('draft', 'sent'))`,
+          jobs: sql<number>`(select count(*)::int from workshop_jobs w where w.customer_id = ${customerId} and w.archived_at is null and w.status in ('checked_in', 'in_progress', 'waiting_parts', 'ready'))`,
+        })
+        .from(customers)
+        .where(eq(customers.id, customerId));
+      const busy = [
+        open.orders ? `${open.orders} open order${open.orders === 1 ? '' : 's'}` : '',
+        open.quotes ? `${open.quotes} open quote${open.quotes === 1 ? '' : 's'}` : '',
+        open.jobs ? `${open.jobs} open workshop job${open.jobs === 1 ? '' : 's'}` : '',
+      ].filter(Boolean);
+      if (busy.length) throw new ServiceError(`${c.name} has ${busy.join(', ')}. Finish or close ${busy.length > 1 || /s$/.test(busy[0]) ? 'them' : 'it'} before deleting.`);
+    }
+    await tx.update(customers).set({ archivedAt: deleted ? new Date() : null, updatedAt: new Date() }).where(eq(customers.id, customerId));
+    await recordEvent(tx, {
+      organisationId: ctx.org.id, actor: ctx.actor, eventType: deleted ? 'customer_deleted' : 'customer_restored', entityType: 'customer', customerId,
+      newValue: { name: c.name },
+    });
+  });
+}
+
+export async function listDeletedCustomers(orgId: string) {
+  return withTenant(orgId, (tx) =>
+    tx.select().from(customers).where(sql`${customers.archivedAt} is not null`).orderBy(sql`${customers.archivedAt} desc`).limit(100),
+  );
+}
+
 export async function updateCustomer(ctx: Ctx, customerId: string, raw: unknown) {
   const input = parse(customerEditSchema, raw);
   await withTenant(ctx.org.id, async (tx) => {

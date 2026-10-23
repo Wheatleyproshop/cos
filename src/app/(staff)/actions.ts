@@ -18,14 +18,15 @@ import {
 import { acceptQuoteInStore, closeQuote, createApprovalLink, createQuote, editQuote, sendQuote } from '@/lib/services/quotes';
 import {
   changeOwnPassword,
+  createUser,
   recheckSender,
   resetUserPassword,
-  createUser,
+  setCustomerDeleted,
   updateAutomations,
   updateCustomer,
+  updatePaymentTracking,
   updateStoreSettings,
   updateThresholds,
-  updatePaymentTracking,
   updateUser,
 } from '@/lib/services/admin';
 import { runBackup } from '@/lib/services/backups';
@@ -620,5 +621,12 @@ export async function deleteAccountAction(id: string, deleted: boolean) {
   return act('manager', async (ctx) => {
     await setAccountDeleted(ctx, id, deleted);
     return deleted ? 'Account deleted.' : 'Account restored.';
+  });
+}
+
+export async function deleteCustomerAction(id: string, deleted: boolean) {
+  return act('manager', async (ctx) => {
+    await setCustomerDeleted(ctx, id, deleted);
+    return deleted ? 'Customer deleted.' : 'Customer restored.';
   });
 }

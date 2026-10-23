@@ -3,14 +3,15 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { CustomerForm } from '@/components/misc-forms';
 import { Badge, DetailBox, PageHeader } from '@/components/views';
-import { requireStaff } from '@/lib/auth';
+import { ActionButton } from '@/components/forms';
+import { hasRole, requireStaff } from '@/lib/auth';
 import { listJobs, WORKSHOP_STATUS_LABELS } from '@/lib/services/workshop';
 import { shortDate } from '@/lib/short-date';
 import { money, niceDate, stamp, todayInTz } from '@/lib/format';
 import { getCustomerDetail } from '@/lib/queries';
 import { QUOTE_STATUS_LABELS, statusLabel } from '@/lib/status';
 import type { Order } from '@/db/schema';
-import { updateCustomerAction } from '../../actions';
+import { deleteCustomerAction, updateCustomerAction } from '../../actions';
 
 export const metadata: Metadata = { title: 'Customer' };
 
@@ -47,6 +48,8 @@ export default async function CustomerPage({ params }: { params: Promise<{ id: s
   const tz = staff.org.timezone;
   const jobs = (await listJobs(staff.organisationId, { customerId: c.id })).sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
   const today = todayInTz(tz);
+  const manager = hasRole(staff, 'manager');
+  const deleted = Boolean(c.archivedAt);
   return (
     <>
       <PageHeader
@@ -67,6 +70,19 @@ export default async function CustomerPage({ params }: { params: Promise<{ id: s
           </>
         }
       />
+      {deleted ? (
+        <div className="notice warn">
+          <b>This customer was deleted {stamp(c.archivedAt!, tz)}</b>
+          They’re hidden from the customer list, search and export. Taking a new order or job with their email restores them automatically.
+          {manager ? (
+            <div style={{ marginTop: 8 }}>
+              <ActionButton action={deleteCustomerAction.bind(null, c.id, false)} className="btn small">
+                Restore customer
+              </ActionButton>
+            </div>
+          ) : null}
+        </div>
+      ) : null}
       <div className="detailgrid three" style={{ marginBottom: 18 }}>
         <DetailBox label="Contact" sub={c.phone || 'No phone'}>
           <a href={`mailto:${c.email}`}>{c.email}</a>
@@ -183,6 +199,17 @@ export default async function CustomerPage({ params }: { params: Promise<{ id: s
             <h2>Contact details</h2>
             <CustomerForm action={updateCustomerAction.bind(null, c.id)} values={{ name: c.name, email: c.email, phone: c.phone, notes: c.notes }} />
           </section>
+          {manager && !deleted ? (
+            <div className="actions">
+              <ActionButton
+                action={deleteCustomerAction.bind(null, c.id, true)}
+                className="btn danger"
+                confirm={`Delete ${c.name}? They’ll disappear from the customer list, search and export. Past orders, quotes and jobs keep their name, and you can restore them from Deleted customers.`}
+              >
+                Delete customer
+              </ActionButton>
+            </div>
+          ) : null}
         </div>
       </div>
     </>

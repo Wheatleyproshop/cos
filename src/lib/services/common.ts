@@ -88,6 +88,15 @@ export async function findOrCreateCustomer(tx: DB, ctx: Ctx, input: CustomerInpu
     .where(and(eq(customers.organisationId, ctx.org.id), sql`lower(${customers.email}) = ${email}`))
     .limit(1);
   if (existing) {
+    // A deleted customer who comes back is restored rather than duplicated.
+    if (existing.archivedAt) {
+      await tx.update(customers).set({ archivedAt: null, updatedAt: new Date() }).where(eq(customers.id, existing.id));
+      await recordEvent(tx, {
+        organisationId: ctx.org.id, actor: ctx.actor, eventType: 'customer_restored', entityType: 'customer', customerId: existing.id,
+        newValue: { automatic: true },
+      });
+      existing.archivedAt = null;
+    }
     const phone = input.phone?.trim();
     if (phone && !existing.phone) {
       await tx.update(customers).set({ phone, updatedAt: new Date() }).where(eq(customers.id, existing.id));
