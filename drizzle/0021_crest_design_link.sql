@@ -1,0 +1,1 @@
+ALTER TABLE "organisations" ADD COLUMN "crest_design_link" boolean DEFAULT true NOT NULL;

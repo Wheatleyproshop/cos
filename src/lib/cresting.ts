@@ -95,6 +95,8 @@ export type CrestSpec = {
   proofKey: string;
   notes: string;
   totalPence: number;
+  /** Designed by the customer on the public design page (garment price still to be confirmed). */
+  submittedOnline?: boolean;
 };
 
 export function asCrestSpec(json: unknown): CrestSpec | null {

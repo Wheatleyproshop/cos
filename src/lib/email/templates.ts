@@ -243,15 +243,17 @@ export function renderEmail(type: EmailAutomationKey, ctx: EmailContext): Render
     }
     case 'ball_design_received': {
       const r = layout(ctx, {
-        preheader: `We’ve received your golf ball design.`,
+        preheader: `We’ve received your ${crest ? 'clothing' : 'golf ball'} design.`,
         heading: 'Thanks — we’ve received your design',
         intro: [
-          'Thank you for designing your personalised golf balls with us. Our team will check your artwork and be in touch shortly to confirm everything before it goes into print.',
+          crest
+            ? 'Thank you for designing your personalised clothing with us. Our team will check your artwork, positions and sizes, confirm the garment price and be in touch shortly before anything goes into production.'
+            : 'Thank you for designing your personalised golf balls with us. Our team will check your artwork and be in touch shortly to confirm everything before it goes into print.',
           'You don’t need to do anything else for now. If you’d like to change anything, just reply to this email.',
         ],
-        rows: [{ label: 'Estimated price (incl. VAT)', value: money(ctx.totalPence) }],
+        rows: [{ label: crest ? 'Cresting estimate (incl. VAT, garments extra)' : 'Estimated price (incl. VAT)', value: money(ctx.totalPence) }],
       });
-      return { subject: `We’ve received your golf ball design (${ctx.reference})`, ...r };
+      return { subject: `We’ve received your ${crest ? 'clothing' : 'golf ball'} design (${ctx.reference})`, ...r };
     }
     case 'workshop_checked_in': {
       const rows: Block[] = [{ label: 'Estimated ready', value: ctx.etaDate ? longDate(ctx.etaDate) : 'We’ll confirm shortly' }];

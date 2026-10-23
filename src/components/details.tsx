@@ -335,6 +335,7 @@ export async function QuoteDetail({ staff, number, inModal }: { staff: Staff; nu
   const { quote: q, customer: c } = d;
   const tz = staff.org.timezone;
   const open = ['draft', 'sent'].includes(q.status) && !q.archivedAt;
+  const onlineDesign = Boolean((asBallPrintSpec(q.specificationJson) ?? asCrestSpec(q.specificationJson))?.submittedOnline);
 
   return (
     <>
@@ -362,10 +363,12 @@ export async function QuoteDetail({ staff, number, inModal }: { staff: Staff; nu
         </div>
       ) : null}
 
-      {open && asBallPrintSpec(q.specificationJson)?.submittedOnline ? (
+      {open && onlineDesign ? (
         <div className="notice">
           <b>Designed online by {c.name}</b>
-          Check the artwork, quantity and price. Approve it in store below to put it into print, or edit it and email a proof back for them to approve.
+          {asCrestSpec(q.specificationJson)
+            ? 'The price covers the cresting only. Add the garment price under Edit quote if you’re supplying them, check the artwork and sizes, then email the proof back for approval or approve it in store.'
+            : 'Check the artwork, quantity and price. Approve it in store below to put it into print, or edit it and email a proof back for them to approve.'}
         </div>
       ) : null}
       <BallProof quoteId={q.id} spec={q.specificationJson} />
@@ -379,7 +382,7 @@ export async function QuoteDetail({ staff, number, inModal }: { staff: Staff; nu
           {q.estimatedLeadTime || '—'} / {q.validUntil ? longDate(q.validUntil) : 'No expiry'}
         </DetailBox>
         <DetailBox label="Quote created by" sub={stamp(q.createdAt, tz)}>
-          {asBallPrintSpec(q.specificationJson)?.submittedOnline ? `${c.name} (online)` : d.createdByName}
+          {onlineDesign ? `${c.name} (online)` : d.createdByName}
         </DetailBox>
         <DetailBox label="Sent to customer">{q.sentAt ? stamp(q.sentAt, tz) : 'Not sent yet'}</DetailBox>
       </div>

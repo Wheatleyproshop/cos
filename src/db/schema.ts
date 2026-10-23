@@ -90,6 +90,8 @@ export const organisations = pgTable('organisations', {
   ballDesignLink: boolean('ball_design_link').notNull().default(true),
   /** Clothing cresting: price per position per method, and the setup / digitising fee. Gaps use DEFAULT_CREST_PRICES. */
   crestingPrices: jsonb('cresting_prices').$type<Partial<CrestPrices>>().notNull().default({}),
+  /** Public "design your own clothing" page at /design/<slug>/clothing. */
+  crestDesignLink: boolean('crest_design_link').notNull().default(true),
   readyUncollectedDays: integer('ready_uncollected_days').notNull().default(7),
   quoteFollowupDays: integer('quote_followup_days').notNull().default(5),
   missingSupplierRefDays: integer('missing_supplier_ref_days').notNull().default(2),

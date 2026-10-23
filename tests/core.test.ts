@@ -536,6 +536,31 @@ describe('clothing cresting', () => {
     expect(confirm.bodyHtml).not.toContain('manufacturer');
   });
 
+  it('lets a customer send in their own cresting design: shop prices, garment to confirm, review by the shop', async () => {
+    const { submitCrestDesign, findCrestShop, setCrestDesignLink } = await import('@/lib/services/cresting');
+    const design = {
+      customerName: 'Online Olivia', email: 'olivia@example.com', garmentType: 'cap', garmentDescription: 'Tour cap', garmentColour: 'White',
+      // No prices on the customer's form, and any sent are ignored.
+      placements: JSON.stringify([{ position: 'cap_front', method: 'embroidery', colour: 'navy', x: 0.5, y: 0.42, w: 0.3, artwork: { type: 'text', lines: ['OLIVIA'] } }]),
+      sizes: JSON.stringify({ 'One size': 6 }),
+    };
+    const q = await submitCrestDesign('desirable-golf', design, { front: jpeg(), back: null, logos: [], proof: jpeg() }, { ip: '198.51.100.7' });
+    const [fresh] = await systemDb().select().from(organisations).where(eq(organisations.id, org.id));
+    const { crestPrices } = await import('@/lib/cresting');
+    const p = crestPrices(fresh.crestingPrices);
+    expect(q.status).toBe('draft');
+    expect(q.totalGrossPence).toBe(6 * p.positions.cap_front.embroidery + p.setupFeePence);
+    expect(q.specificationText).toContain('garment price to be confirmed');
+    const [msg] = await withTenant(org.id, (tx) => tx.select().from(messages).where(eq(messages.quoteId, q.id)));
+    expect(msg.subject).toContain('clothing design');
+    const { listNotifications } = await import('@/lib/services/notifications');
+    expect((await listNotifications(org.id, admin.userId!)).items[0].title).toBe('New cresting design to review');
+
+    await setCrestDesignLink(admin, false);
+    expect(await findCrestShop('desirable-golf')).toBeNull();
+    await expect(submitCrestDesign('desirable-golf', design, { front: jpeg(), back: null, logos: [], proof: jpeg() }, { ip: '198.51.100.8' })).rejects.toThrow(/isn’t available/);
+  });
+
   it('needs a garment photo, a back photo for back positions, and sizes', async () => {
     const { createCrestQuote } = await import('@/lib/services/cresting');
     const base = {

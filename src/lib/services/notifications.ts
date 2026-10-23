@@ -4,7 +4,7 @@ import { auditEvents, customers, orders, quotes, users, workshopJobs } from '@/d
 import { templateName } from '../audit';
 
 /** Ledger events worth interrupting staff for. Your own actions are never notified back to you. */
-const NOTIFY = ['order_created', 'quote_accepted', 'order_ready', 'email_failed', 'backup_failed', 'workshop_job_created', 'ball_design_submitted'];
+const NOTIFY = ['order_created', 'quote_accepted', 'order_ready', 'email_failed', 'backup_failed', 'workshop_job_created', 'ball_design_submitted', 'crest_design_submitted'];
 
 export type NotificationItem = { id: string; title: string; body: string; href: string; at: string; unread: boolean };
 
@@ -38,7 +38,9 @@ export async function listNotifications(orgId: string, userId: string, limit = 2
       const href = orderNumber ? `/orders/${orderNumber}` : quoteNumber ? `/quotes/${quoteNumber}` : jobRef ? `/workshop/${jobRef}` : '/settings';
       const who = customer ? ` for ${customer}` : '';
       const [title, body] =
-        e.eventType === 'ball_design_submitted'
+        e.eventType === 'crest_design_submitted'
+          ? ['New cresting design to review', `${ref}${customer ? ` from ${customer}` : ''} — designed online`]
+          : e.eventType === 'ball_design_submitted'
           ? ['New golf ball design to review', `${ref}${customer ? ` from ${customer}` : ''} — designed online`]
           : e.eventType === 'workshop_job_created'
           ? ['Clubs checked in to the workshop', `${ref}${who} — checked in by ${e.actorLabel}`]

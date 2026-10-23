@@ -1,12 +1,8 @@
-import { and, asc, desc, eq, gt, isNull, sql } from 'drizzle-orm';
-import { Resend } from 'resend';
+import { and, asc, eq, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import { systemDb, withTenant, type DB } from '@/db';
-import { auditEvents, customers, organisations, printBalls, quotes, users, type Organisation } from '@/db/schema';
+import { organisations, printBalls, type Organisation } from '@/db/schema';
 import { recordEvent } from '../audit';
-import { dispatchMessages, enqueueEmail } from '../email/outbox';
-import { resendApiKey } from '../email/resend-key';
-import { fromHeader } from '../email/sender';
 import {
   INK_COLOURS,
   LOGO_TYPES,
@@ -21,10 +17,11 @@ import {
 } from '../ball-print';
 import { money, parseMoneyToPence } from '../format';
 import { storage } from '../storage';
-import { appUrl, newToken } from '../tokens';
+import { newToken } from '../tokens';
 import { customerFields, parse } from '../validation';
 import { requireRole, ServiceError, type Ctx } from './common';
-import { createQuote, proofPathFor } from './quotes';
+import { checkDesignLimits, customerDesignCtx, designSubmitted } from './online-designs';
+import { createQuote } from './quotes';
 
 export async function getBallRange(orgId: string, opts: { includeInactive?: boolean } = {}) {
   return withTenant(orgId, (tx) =>
@@ -292,7 +289,7 @@ export async function createBallPrintQuote(
 
 /* ─────────────────────── Customer design link (/design/<slug>) ─────────────────────── */
 
-export const DESIGN_LIMITS = { perIpPerHour: 5, perShopPerDay: 60 };
+export { DESIGN_LIMITS } from './online-designs';
 
 /** The shop behind a public design link, if the link is switched on and there are balls to choose from. */
 export async function findDesignShop(slug: string) {
@@ -315,75 +312,16 @@ export const publicBallPhotoPath = (org: Pick<Organisation, 'slug'>, ballId: str
 export async function submitBallDesign(slug: string, raw: Record<string, unknown>, files: { logo: File | null; proof: File | null }, meta: { ip: string | null }) {
   const shop = await findDesignShop(slug);
   if (!shop) throw new ServiceError('This design page isn’t available at the moment. Please contact the shop.');
-  const { org } = shop;
-
-  const recent = await withTenant(org.id, (tx) =>
-    tx
-      .select({
-        shop: sql<number>`count(*)::int`,
-        ip: sql<number>`count(*) filter (where ${auditEvents.metadataJson}->>'ip' = ${meta.ip ?? ''} and ${auditEvents.createdAt} > now() - interval '1 hour')::int`,
-      })
-      .from(auditEvents)
-      .where(and(eq(auditEvents.eventType, 'ball_design_submitted'), gt(auditEvents.createdAt, sql`now() - interval '1 day'`))),
-  );
-  if ((meta.ip && recent[0].ip >= DESIGN_LIMITS.perIpPerHour) || recent[0].shop >= DESIGN_LIMITS.perShopPerDay) {
-    throw new ServiceError('We’ve had a lot of designs in a short time. Please try again later or contact the shop.');
-  }
-
-  // Quotes belong to a staff member; online designs are assigned to the shop owner until someone picks them up.
-  const [owner] = await withTenant(org.id, (tx) =>
-    tx.select({ id: users.id }).from(users).where(and(eq(users.role, 'admin'), eq(users.active, true))).orderBy(asc(users.createdAt)).limit(1),
-  );
-  if (!owner) throw new ServiceError('This design page isn’t available at the moment. Please contact the shop.');
-
-  const name = String(raw.customerName ?? '').trim().slice(0, 120);
-  const ctx: Ctx = { org, actor: { type: 'customer', name: name || 'Customer' }, userId: owner.id, role: null };
+  await checkDesignLimits(shop.org.id, meta.ip);
+  const ctx = await customerDesignCtx(shop.org, String(raw.customerName ?? ''));
   const quote = await createBallPrintQuote(
     ctx,
     { ...raw, customerId: '', pricePerDozenPence: '1', setupFeePence: '0', validUntil: '' },
     files,
     { send: false, source: 'customer' },
   );
-
-  const messageId = await withTenant(org.id, async (tx) => {
-    const [customer] = await tx.select().from(customers).where(eq(customers.id, quote.customerId)).limit(1);
-    await recordEvent(tx, {
-      organisationId: org.id, actor: ctx.actor, eventType: 'ball_design_submitted', entityType: 'quote', quoteId: quote.id,
-      customerId: quote.customerId, newValue: { product: `${quote.brand} ${quote.product}`, totalPence: quote.totalGrossPence },
-      metadata: { ip: meta.ip ?? '' },
-    });
-    return enqueueEmail(tx, {
-      org, template: 'ball_design_received', recipient: customer.email, customerId: customer.id, quoteId: quote.id, actor: ctx.actor,
-      context: {
-        customerName: customer.name, reference: quote.quoteNumber, brand: quote.brand, product: quote.product,
-        specification: quote.specificationText, totalPence: quote.totalGrossPence, previewImageUrl: appUrl(proofPathFor(quote.id)),
-      },
-    });
-  });
-  await dispatchMessages(org, [messageId]);
-  await alertShop(org, quote, name).catch((e) => console.error('[COS ball design alert]', e));
+  await designSubmitted('ball', ctx, quote, meta.ip);
   return quote;
-}
-
-const escHtml = (v: string) => v.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
-
-/** Short internal heads-up to the shop's own address. */
-async function alertShop(org: Organisation, quote: { id: string; quoteNumber: string; brand: string; product: string; totalGrossPence: number; specificationText: string }, name: string) {
-  if (!org.replyToEmail) return;
-  const link = appUrl(`/quotes/${quote.quoteNumber}`);
-  const subject = `New golf ball design from ${name} (${quote.quoteNumber})`;
-  const text = `${name} has designed personalised golf balls online.\n\n${quote.specificationText}\n\nList price: ${money(quote.totalGrossPence)}\n\nReview it: ${link}`;
-  const html = `<div style="font-family:system-ui,-apple-system,Segoe UI,sans-serif;font-size:15px;color:#1d2a22;max-width:560px">
-<p><b>${escHtml(name)}</b> has designed personalised golf balls online.</p>
-<p><img src="${escHtml(appUrl(proofPathFor(quote.id)))}" width="320" alt="Design preview" style="max-width:100%;border-radius:12px;background:#eef0f4"></p>
-<p style="white-space:pre-line;color:#4b5a51">${escHtml(quote.specificationText)}</p>
-<p>List price: <b>${money(quote.totalGrossPence)}</b></p>
-<p><a href="${escHtml(link)}" style="display:inline-block;background:#193b2c;color:#fff;padding:10px 18px;border-radius:999px;text-decoration:none">Review ${quote.quoteNumber}</a></p>
-<p style="color:#7a857e;font-size:13px">Approve it in store to put it into print, or edit it and email a proof back.</p></div>`;
-  const key = resendApiKey();
-  if (!key) return console.log(`[COS email · simulated] ball design alert to=${org.replyToEmail} subject="${subject}"`);
-  const res = await new Resend(key).emails.send({ from: fromHeader(org), to: [org.replyToEmail], subject, html, text, tags: [{ name: 'cos_alert', value: 'ball_design' }] });
-  if (res.error) console.error('[COS ball design alert]', res.error.message);
 }
 
 export async function setBallDesignLink(ctx: Ctx, enabled: boolean) {
@@ -397,16 +335,4 @@ export async function setBallDesignLink(ctx: Ctx, enabled: boolean) {
   });
 }
 
-/** Online designs still waiting for the shop to act on them. */
-export async function listSubmittedDesigns(orgId: string) {
-  return withTenant(orgId, (tx) =>
-    tx
-      .select({ quoteNumber: quotes.quoteNumber, product: quotes.product, brand: quotes.brand, totalGrossPence: quotes.totalGrossPence, createdAt: quotes.createdAt, customer: customers.name })
-      .from(auditEvents)
-      .innerJoin(quotes, eq(quotes.id, auditEvents.quoteId))
-      .innerJoin(customers, eq(customers.id, quotes.customerId))
-      .where(and(eq(auditEvents.eventType, 'ball_design_submitted'), eq(quotes.status, 'draft'), isNull(quotes.archivedAt)))
-      .orderBy(desc(quotes.createdAt))
-      .limit(20),
-  );
-}
+export { listSubmittedDesigns } from './online-designs';

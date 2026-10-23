@@ -1,12 +1,10 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { BallPrintBuilder } from '@/components/ball-print-builder';
-import { CopyLink } from '@/components/copy-link';
-import { ActionButton } from '@/components/forms';
+import { DesignLinkPanel, SubmittedDesigns } from '@/components/design-link-panel';
 import { PageHeader } from '@/components/views';
 import { hasRole, requireStaff } from '@/lib/auth';
 import { getCustomerDetail } from '@/lib/queries';
-import { money, stamp } from '@/lib/format';
 import { designPathFor, getBallRange, listSubmittedDesigns } from '@/lib/services/ball-printing';
 import { appUrl } from '@/lib/tokens';
 import { ballPrintAction, designLinkAction } from '../actions';
@@ -35,47 +33,9 @@ export default async function BallPrintingPage({ searchParams }: { searchParams:
           </Link>
         }
       />
-      {submitted.length ? (
-        <section className="panel">
-          <h2>Designs sent in by customers · {submitted.length} to review</h2>
-          <p className="muted" style={{ marginTop: 0 }}>Open one to check the artwork, then approve it in store to put it into print, or edit it and email a proof back.</p>
-          <ul className="attention">
-            {submitted.map((d) => (
-              <li key={d.quoteNumber}>
-                <span>
-                  <Link href={`/quotes/${d.quoteNumber}`} className="rowtitle">
-                    {d.customer} · {d.brand} {d.product}
-                  </Link>
-                  <div className="muted">
-                    {d.quoteNumber} · sent {stamp(d.createdAt, staff.org.timezone)}
-                  </div>
-                </span>
-                <span className="muted">{money(d.totalGrossPence)}</span>
-              </li>
-            ))}
-          </ul>
-        </section>
-      ) : null}
+      <SubmittedDesigns rows={submitted} tz={staff.org.timezone} what="Designs" />
       {balls.length ? (
-        <section className="panel">
-          <div className="panel-head">
-            <h2>Customer design link</h2>
-            <span className={`badge ${linkOn ? 'ready' : 'pb-cancelled'}`}>{linkOn ? 'On' : 'Off'}</span>
-          </div>
-          <p className="muted" style={{ marginTop: 0 }}>
-            {linkOn
-              ? 'Share this on your website, socials or by email. Customers design their own balls and send them to you to check. You’ll get an email and a notification for each one.'
-              : 'Switched off: customers who open the link are asked to contact the shop.'}
-          </p>
-          {linkOn ? <CopyLink url={appUrl(designPathFor(staff.org))} label="Customer design link" /> : null}
-          {manager ? (
-            <div style={{ marginTop: 10 }}>
-              <ActionButton action={designLinkAction.bind(null, !linkOn)} className="btn small">
-                {linkOn ? 'Switch link off' : 'Switch link on'}
-              </ActionButton>
-            </div>
-          ) : null}
-        </section>
+        <DesignLinkPanel url={appUrl(designPathFor(staff.org))} on={linkOn} manager={manager} toggle={designLinkAction.bind(null, !linkOn)} what="golf balls" />
       ) : null}
       {balls.length ? (
         <BallPrintBuilder

@@ -112,13 +112,16 @@ function toDraw(placements: Placement[], logos: Logo[]): DrawPlacement[] {
 }
 
 export function CrestingBuilder({
-  prices, action, defaults, brands,
+  prices, action, defaults, brands, variant = 'staff',
 }: {
   prices: CrestPrices;
   action: (prev: FormState, fd: FormData) => Promise<FormState>;
   defaults: PickerDefaults;
   brands: string[];
+  /** 'public' = the customer's own design page: no garment price, their own details, sent to the shop to review. */
+  variant?: 'staff' | 'public';
 }) {
+  const isPublic = variant === 'public';
   const [state, formAction, pending] = useActionState(action, null);
   const [step, setStep] = useState(0);
   const [garment, setGarment] = useState<GarmentType>('apparel');
@@ -287,7 +290,11 @@ export function CrestingBuilder({
         {step === 0 ? (
           <div>
             <h2>The garment</h2>
-            <p className="muted">Take or upload a straight-on photo of the garment. Add the back (or side of a cap) if anything goes there.</p>
+            <p className="muted">
+              {isPublic
+                ? 'Upload a straight-on photo of the garment you’d like crested: one of yours, or one you’d like from the shop. Add the back (or side of a cap) if anything goes there.'
+                : 'Take or upload a straight-on photo of the garment. Add the back (or side of a cap) if anything goes there.'}
+            </p>
             <div className="seg wide" role="tablist" aria-label="Garment type" style={{ marginTop: 14 }}>
               <button type="button" role="tab" aria-selected={garment === 'apparel'} className={garment === 'apparel' ? 'on' : ''} onClick={() => switchGarment('apparel')}>
                 Clothing
@@ -320,10 +327,12 @@ export function CrestingBuilder({
                 <span>Colour</span>
                 <input value={colourName} onChange={(e) => setColourName(e.target.value)} placeholder="e.g. Navy" maxLength={60} />
               </label>
-              <label className="field">
-                <span>Garment price each (GBP)</span>
-                <input inputMode="decimal" value={garmentPrice} onChange={(e) => setGarmentPrice(e.target.value)} placeholder="0.00 if the customer supplies it" />
-              </label>
+              {isPublic ? null : (
+                <label className="field">
+                  <span>Garment price each (GBP)</span>
+                  <input inputMode="decimal" value={garmentPrice} onChange={(e) => setGarmentPrice(e.target.value)} placeholder="0.00 if the customer supplies it" />
+                </label>
+              )}
             </div>
           </div>
         ) : step === 1 ? (
@@ -460,6 +469,58 @@ export function CrestingBuilder({
               </p>
             ) : null}
           </div>
+        ) : isPublic && state?.ok ? (
+          <div className="bp-thanks" role="status">
+            <span className="bp-thanks-tick" aria-hidden="true">✓</span>
+            <h2>Design sent</h2>
+            <p>{state.message}</p>
+          </div>
+        ) : isPublic ? (
+          <form onSubmit={submit}>
+            <h2>Sizes &amp; your details</h2>
+            <p className="muted">How many of each size, and how we can reach you. We’ll check everything and confirm the price before anything is made.</p>
+            <input type="hidden" name="garmentType" value={garment} />
+            <input type="hidden" name="garmentDescription" value={description} />
+            <input type="hidden" name="garmentColour" value={colourName} />
+            <FormMessage state={state} />
+            <div className="cr-sizes" role="group" aria-label="Quantities by size">
+              {sizeList.map((s) => (
+                <label key={s}>
+                  <span>{s}</span>
+                  <input
+                    inputMode="numeric"
+                    value={sizes[s] ?? ''}
+                    placeholder="0"
+                    onChange={(e) => setSizes((x) => ({ ...x, [s]: Math.min(999, Number(e.target.value.replace(/\D/g, '')) || 0) }))}
+                  />
+                </label>
+              ))}
+            </div>
+            <div className="fields" style={{ marginTop: 14 }}>
+              <Field state={state} name="customerName" label="Your name" required autoComplete="name" />
+              <Field state={state} name="email" label="Email" type="email" required autoComplete="email" />
+              <Field state={state} name="phone" label="Mobile" type="tel" autoComplete="tel" />
+              <Field state={state} name="notes" label="Anything we should know?" wide textarea placeholder="e.g. 12 polos for our society day on 14 May. Please supply navy FootJoy polos." />
+            </div>
+            <label className="bp-hp" aria-hidden="true">
+              Website <input name="website" tabIndex={-1} autoComplete="off" />
+            </label>
+            <div className="bp-total">
+              <div>
+                <span>
+                  Cresting: {qty} item{qty === 1 ? '' : 's'} × {money(crestEach)}
+                </span>
+                {prices.setupFeePence ? <span>Setup / digitising {money(prices.setupFeePence)}</span> : null}
+                <span>Garments extra if we supply them: we’ll confirm</span>
+              </div>
+              <b>{money(qty * crestEach + prices.setupFeePence)}</b>
+            </div>
+            <div className="actions">
+              <button className="btn primary" type="submit" disabled={working || !qty}>
+                {working ? 'Sending…' : 'Send my design for approval →'}
+              </button>
+            </div>
+          </form>
         ) : (
           <form onSubmit={submit}>
             <h2>Sizes &amp; send</h2>
@@ -513,7 +574,7 @@ export function CrestingBuilder({
           </form>
         )}
 
-        {step < STEPS.length - 1 ? (
+        {step < STEPS.length - 1 && !(isPublic && state?.ok) ? (
           <div className="actions">
             {step > 0 ? (
               <button type="button" className="btn" onClick={() => setStep(step - 1)}>

@@ -1,7 +1,7 @@
 import { eq } from 'drizzle-orm';
 import { z } from 'zod';
-import { withTenant } from '@/db';
-import { organisations } from '@/db/schema';
+import { systemDb, withTenant } from '@/db';
+import { organisations, type Organisation } from '@/db/schema';
 import { recordEvent } from '../audit';
 import { LOGO_TYPES, MAX_LOGO_BYTES, MAX_PROOF_BYTES, PRINT_FONTS, type PrintFontKey } from '../ball-print';
 import {
@@ -25,6 +25,7 @@ import { newToken } from '../tokens';
 import { customerFields, parse } from '../validation';
 import { readImage } from './ball-printing';
 import { requireRole, ServiceError, type Ctx } from './common';
+import { checkDesignLimits, customerDesignCtx, designSubmitted } from './online-designs';
 import { createQuote } from './quotes';
 
 export const MAX_CREST_LOGOS = 3;
@@ -121,10 +122,18 @@ export async function createCrestQuote(
   ctx: Ctx,
   raw: unknown,
   files: { front: File | null; back: File | null; logos: (File | null)[]; proof: File | null },
-  opts: { send: boolean },
+  opts: { send: boolean; source?: 'staff' | 'customer' },
 ) {
+  const fromCustomer = opts.source === 'customer';
   const input = parse(crestSchema, raw);
   const prices = crestPrices(ctx.org.crestingPrices);
+  // Online designs: the shop's own prices; the garment price is confirmed by staff when they review it.
+  if (fromCustomer) {
+    input.garmentPricePence = 0;
+    input.setupFeePence = prices.setupFeePence;
+    input.validUntil = '';
+    input.customerId = null;
+  }
   const sizeList: readonly string[] = input.garmentType === 'cap' ? CAP_SIZES : APPAREL_SIZES;
   const sizes = Object.fromEntries(Object.entries(input.sizes).filter(([s, n]) => sizeList.includes(s) && n > 0));
   const quantity = Object.values(sizes).reduce((a, b) => a + b, 0);
@@ -198,7 +207,9 @@ export async function createCrestQuote(
           : `“${p.artwork.lines.join(' / ')}” in ${PRINT_FONTS.find((f) => f.key === (p.artwork as { font: string }).font)!.label.toLowerCase()}, ${colourLabel(p.colour).toLowerCase()}`;
       return `${positionOf(p.position)!.label}: ${methodLabel(p.method)} — ${what} (${money(p.pricePence)} each)`;
     }),
-    `Price each: ${money(each)} (garment ${money(input.garmentPricePence)} + cresting ${money(each - input.garmentPricePence)})`,
+    fromCustomer
+      ? `Cresting each: ${money(each)} — garment price to be confirmed by the shop`
+      : `Price each: ${money(each)} (garment ${money(input.garmentPricePence)} + cresting ${money(each - input.garmentPricePence)})`,
     ...(input.setupFeePence ? [`Setup / digitising: ${money(input.setupFeePence)}`] : []),
     ...(input.notes ? ['', input.notes] : []),
   ];
@@ -215,6 +226,7 @@ export async function createCrestQuote(
     proofKey: proofStored.storageKey,
     notes: input.notes,
     totalPence: total,
+    ...(fromCustomer ? { submittedOnline: true } : {}),
   };
 
   return createQuote(
@@ -233,8 +245,49 @@ export async function createCrestQuote(
       depositRequiredPence: '0',
       estimatedLeadTime: '',
       validUntil: input.validUntil,
-      internalNotes: 'Created with Clothing Cresting.',
+      internalNotes: fromCustomer
+        ? 'Designed and submitted online by the customer. Add the garment price (Edit quote), check the artwork, then email the proof back or approve it in store.'
+        : 'Created with Clothing Cresting.',
     },
     { send: opts.send, specificationJson: spec },
   );
+}
+
+/* ─────────────────── Customer design link (/design/<slug>/clothing) ─────────────────── */
+
+export const crestDesignPathFor = (org: Pick<Organisation, 'slug'>) => `/design/${org.slug}/clothing`;
+
+/** The shop behind a public cresting link, if it's switched on. */
+export async function findCrestShop(slug: string) {
+  if (!/^[a-z0-9-]{1,80}$/.test(slug)) return null;
+  const [org] = await systemDb().select().from(organisations).where(eq(organisations.slug, slug)).limit(1);
+  return org?.crestDesignLink ? { org } : null;
+}
+
+/** A customer sends in their own cresting design: a draft quote (cresting priced, garment to confirm) for the shop to review. */
+export async function submitCrestDesign(
+  slug: string,
+  raw: Record<string, unknown>,
+  files: { front: File | null; back: File | null; logos: (File | null)[]; proof: File | null },
+  meta: { ip: string | null },
+) {
+  const shop = await findCrestShop(slug);
+  if (!shop) throw new ServiceError('This design page isn’t available at the moment. Please contact the shop.');
+  await checkDesignLimits(shop.org.id, meta.ip);
+  const ctx = await customerDesignCtx(shop.org, String(raw.customerName ?? ''));
+  // Prices aren't on the customer's form: the shop's own are applied in createCrestQuote.
+  const quote = await createCrestQuote(ctx, { ...raw, customerId: '', garmentPricePence: '0', setupFeePence: '0', validUntil: '' }, files, { send: false, source: 'customer' });
+  await designSubmitted('cresting', ctx, quote, meta.ip);
+  return quote;
+}
+
+export async function setCrestDesignLink(ctx: Ctx, enabled: boolean) {
+  requireRole(ctx, 'manager', 'change the design link');
+  await withTenant(ctx.org.id, async (tx) => {
+    await tx.update(organisations).set({ crestDesignLink: enabled }).where(eq(organisations.id, ctx.org.id));
+    await recordEvent(tx, {
+      organisationId: ctx.org.id, actor: ctx.actor, eventType: 'settings_changed', entityType: 'organisation', entityId: ctx.org.id,
+      oldValue: { crestDesignLink: ctx.org.crestDesignLink }, newValue: { crestDesignLink: enabled }, metadata: { section: 'cresting.design_link' },
+    });
+  });
 }
