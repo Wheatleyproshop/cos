@@ -832,6 +832,20 @@ describe('supplier accounts and pre-books', () => {
     const events = await withTenant(org.id, (tx) => tx.select().from(auditEvents).where(eq(auditEvents.entityId, pb.id)));
     expect(events.map((e) => e.eventType)).toEqual(expect.arrayContaining(['prebook_created', 'prebook_line_added', 'prebook_status_changed', 'prebook_received']));
   });
+
+  it('deletes a pre-book entered by mistake and restores it', async () => {
+    const { listAccounts } = await import('@/lib/services/accounts');
+    const p = await import('@/lib/services/prebooks');
+    const acct = (await listAccounts(org.id)).find((x) => x.brand === 'Titleist')!;
+    const pb = await p.createPrebook(admin, { supplierAccountId: acct.id, season: 'Oops' });
+    await expect(p.setPrebookDeleted(staff, pb.id, true)).rejects.toThrow(/manager/);
+    await p.setPrebookDeleted(admin, pb.id, true);
+    expect((await p.listPrebooks(org.id, { includeArchived: true })).some((x) => x.id === pb.id)).toBe(false);
+    expect((await p.listDeletedPrebooks(org.id)).map((x) => x.id)).toContain(pb.id);
+    await expect(p.addLine(admin, pb.id, { product: 'X', quantity: '1' })).rejects.toThrow(/deleted/);
+    await p.setPrebookDeleted(admin, pb.id, false);
+    expect((await p.listPrebooks(org.id)).some((x) => x.id === pb.id)).toBe(true);
+  });
 });
 
 describe('performance: pre-book arrivals', () => {

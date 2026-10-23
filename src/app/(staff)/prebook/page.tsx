@@ -1,12 +1,13 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
+import { ActionButton } from '@/components/forms';
 import { PrebookDetailsForm } from '@/components/prebook-forms';
 import { PageHeader } from '@/components/views';
 import { hasRole, requireStaff } from '@/lib/auth';
-import { money, todayInTz } from '@/lib/format';
+import { money, stamp, todayInTz } from '@/lib/format';
 import { listAccounts } from '@/lib/services/accounts';
-import { listPrebooks, PREBOOK_STATUS_LABELS, upcomingLines } from '@/lib/services/prebooks';
-import { createPrebookAction } from '../actions';
+import { listDeletedPrebooks, listPrebooks, PREBOOK_STATUS_LABELS, upcomingLines } from '@/lib/services/prebooks';
+import { createPrebookAction, deletePrebookAction } from '../actions';
 
 export const metadata: Metadata = { title: 'Pre-book' };
 
@@ -26,7 +27,12 @@ export default async function PrebookPage({ searchParams }: { searchParams: Prom
   const manager = hasRole(staff, 'manager');
   const sp = await searchParams;
   const filter = FILTERS.some((f) => f.key === sp.filter) ? sp.filter! : 'open';
-  const [all, accounts, upcoming] = await Promise.all([listPrebooks(staff.organisationId), listAccounts(staff.organisationId), upcomingLines(staff.organisationId)]);
+  const [all, accounts, upcoming, deleted] = await Promise.all([
+    listPrebooks(staff.organisationId),
+    listAccounts(staff.organisationId),
+    upcomingLines(staff.organisationId),
+    listDeletedPrebooks(staff.organisationId),
+  ]);
   const today = todayInTz(staff.org.timezone);
   const in30 = new Date(Date.now() + 30 * 86_400_000).toISOString().slice(0, 10);
 
@@ -196,6 +202,33 @@ export default async function PrebookPage({ searchParams }: { searchParams: Prom
           <p className="muted">{all.length ? 'Nothing matches this filter.' : 'No pre-books yet.'}</p>
         )}
       </section>
+
+      {deleted.length ? (
+        <section className="panel">
+          <details className="section">
+            <summary>Deleted pre-books ({deleted.length})</summary>
+            <ul className="attention">
+              {deleted.map((p) => (
+                <li key={p.id}>
+                  <span>
+                    <Link href={`/prebook/${p.reference}`} className="rowtitle">
+                      {p.reference} · {p.brand} {p.season}
+                    </Link>
+                    <div className="muted">
+                      {p.title ? `${p.title} · ` : ''}deleted {stamp(p.removedAt!, staff.org.timezone)}
+                    </div>
+                  </span>
+                  {manager ? (
+                    <ActionButton action={deletePrebookAction.bind(null, p.id, false)} className="btn small">
+                      Restore
+                    </ActionButton>
+                  ) : null}
+                </li>
+              ))}
+            </ul>
+          </details>
+        </section>
+      ) : null}
 
       {manager ? (
         <section className="panel">

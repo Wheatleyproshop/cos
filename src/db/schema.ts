@@ -590,6 +590,8 @@ export const prebooks = pgTable(
     createdAt: createdAt(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
     archivedAt: timestamp('archived_at', { withTimezone: true }),
+    /** Deleted (entered by mistake): hidden everywhere incl. reports; restorable. Archive is for finished pre-books. */
+    removedAt: timestamp('removed_at', { withTimezone: true }),
   },
   (t) => [uniqueIndex('prebooks_org_ref_idx').on(t.organisationId, t.reference)],
 );

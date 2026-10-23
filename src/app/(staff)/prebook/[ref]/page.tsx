@@ -5,11 +5,11 @@ import { ActionButton } from '@/components/forms';
 import { PrebookDetailsForm, PrebookLineForm, ReceiveForm } from '@/components/prebook-forms';
 import { PageHeader } from '@/components/views';
 import { hasRole, requireStaff } from '@/lib/auth';
-import { money } from '@/lib/format';
+import { money, stamp } from '@/lib/format';
 import { accountLogoUrl, listAccounts } from '@/lib/services/accounts';
 import { getPrebook, PREBOOK_STATUS_LABELS } from '@/lib/services/prebooks';
 import {
-  addPrebookLineAction, archivePrebookAction, prebookStatusAction, receivePrebookAction, removePrebookLineAction, updatePrebookAction,
+  addPrebookLineAction, archivePrebookAction, deletePrebookAction, prebookStatusAction, receivePrebookAction, removePrebookLineAction, updatePrebookAction,
 } from '../../actions';
 
 export async function generateMetadata({ params }: { params: Promise<{ ref: string }> }): Promise<Metadata> {
@@ -26,7 +26,8 @@ export default async function PrebookDetail({ params }: { params: Promise<{ ref:
   if (!d) notFound();
   const { prebook: p, account: a, lines } = d;
   const accounts = manager ? await listAccounts(staff.organisationId) : [];
-  const editable = !['delivered', 'cancelled'].includes(p.status) && !p.archivedAt;
+  const deleted = Boolean(p.removedAt);
+  const editable = !deleted && !['delivered', 'cancelled'].includes(p.status) && !p.archivedAt;
   const qty = lines.reduce((s, l) => s + l.quantity, 0);
   const got = lines.reduce((s, l) => s + Math.min(l.quantityReceived, l.quantity), 0);
   const value = lines.reduce((s, l) => s + l.quantity * l.unitCostPence, 0);
@@ -49,13 +50,26 @@ export default async function PrebookDetail({ params }: { params: Promise<{ ref:
         }
       />
 
+      {deleted ? (
+        <div className="notice warn">
+          <b>This pre-book was deleted {stamp(p.removedAt!, staff.org.timezone)}</b>
+          It’s hidden from the pre-book list, arriving soon, accounts and Performance.
+          {manager ? (
+            <div style={{ marginTop: 8 }}>
+              <ActionButton action={deletePrebookAction.bind(null, p.id, false)} className="btn small">
+                Restore pre-book
+              </ActionButton>
+            </div>
+          ) : null}
+        </div>
+      ) : null}
       <div className="pb-status">
         <span className={`badge pb-${p.status}`}>{PREBOOK_STATUS_LABELS[p.status]}</span>
         {p.archivedAt ? <span className="badge">Archived</span> : null}
         <span className="muted">
           {got} of {qty} received · {money(value)} at cost
         </span>
-        {manager ? (
+        {manager && !deleted ? (
           <span className="pb-buttons">
             {statusButtons.map((b) => (
               <ActionButton key={b.to} action={prebookStatusAction.bind(null, p.id, b.to)} className={`btn small${b.primary ? ' primary' : ''}`} confirm={b.confirm}>
@@ -122,7 +136,7 @@ export default async function PrebookDetail({ params }: { params: Promise<{ ref:
           <ReceiveForm
             action={receivePrebookAction.bind(null, p.id)}
             lines={lines}
-            canReceive={['placed', 'confirmed', 'part_delivered', 'delivered'].includes(p.status) && !p.archivedAt}
+            canReceive={['placed', 'confirmed', 'part_delivered', 'delivered'].includes(p.status) && !p.archivedAt && !deleted}
             removeButtons={
               manager && editable
                 ? Object.fromEntries(
@@ -149,7 +163,7 @@ export default async function PrebookDetail({ params }: { params: Promise<{ ref:
         ) : null}
       </section>
 
-      {manager && !p.archivedAt ? (
+      {manager && !p.archivedAt && !deleted ? (
         <section className="panel">
           <details className="section">
             <summary>Edit pre-book details</summary>
@@ -161,6 +175,17 @@ export default async function PrebookDetail({ params }: { params: Promise<{ ref:
             />
           </details>
         </section>
+      ) : null}
+      {manager && !deleted ? (
+        <div className="actions">
+          <ActionButton
+            action={deletePrebookAction.bind(null, p.id, true)}
+            className="btn danger"
+            confirm={`Delete ${p.reference} (${p.brand})? Use this for pre-books entered by mistake: it disappears from the list, arriving soon and Performance. You can restore it from Deleted pre-books.`}
+          >
+            Delete pre-book
+          </ActionButton>
+        </div>
       ) : null}
     </>
   );

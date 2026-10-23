@@ -56,7 +56,7 @@ export async function listAccounts(orgId: string, opts: { includeInactive?: bool
       })
       .from(prebooks)
       .leftJoin(prebookLines, and(eq(prebookLines.prebookId, prebooks.id), isNull(prebookLines.removedAt)))
-      .where(and(isNull(prebooks.archivedAt), sql`${prebooks.status} not in ('delivered', 'cancelled')`))
+      .where(and(isNull(prebooks.archivedAt), isNull(prebooks.removedAt), sql`${prebooks.status} not in ('delivered', 'cancelled')`))
       .groupBy(prebooks.supplierAccountId, prebooks.brand);
     return accounts.map((a) => {
       const mine = open.filter((o) => o.accountId === a.id || (!o.accountId && o.brand.toLowerCase() === a.brand.toLowerCase()));

@@ -169,6 +169,13 @@
       "when": 1792745243812,
       "tag": "0023_ball_removed",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1792746828191,
+      "tag": "0024_prebook_removed",
+      "breakpoints": true
     }
   ]
 }

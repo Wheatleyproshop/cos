@@ -62,6 +62,8 @@ export type EventType =
   | 'prebook_line_added'
   | 'prebook_line_removed'
   | 'prebook_received'
+  | 'prebook_deleted'
+  | 'prebook_restored'
   | 'workshop_job_created'
   | 'workshop_status_changed'
   | 'workshop_eta_changed'
@@ -145,6 +147,10 @@ export function describeEvent(e: Pick<AuditEvent, 'eventType' | 'oldValueJson' |
       return `Ready date ${o.etaDate ? `changed from ${o.etaDate} ` : 'set '}to ${n.etaDate ?? 'none'}${n.reason ? ` — ${n.reason}` : ''}`;
     case 'workshop_item_added':
       return `Added ${n.club}: ${n.work}${n.parts ? ` (${n.parts})` : ''}`;
+    case 'prebook_deleted':
+      return 'Pre-book deleted';
+    case 'prebook_restored':
+      return 'Pre-book restored';
     case 'workshop_job_deleted':
       return 'Job deleted';
     case 'workshop_job_restored':

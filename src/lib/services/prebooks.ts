@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, isNull, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, isNotNull, isNull, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import { withTenant, type DB } from '@/db';
 import { organisations, prebookLines, prebooks, supplierAccounts, type Prebook, type PrebookLine, type PrebookStatus } from '@/db/schema';
@@ -86,7 +86,7 @@ export async function listPrebooks(orgId: string, opts: { includeArchived?: bool
       .from(prebooks)
       .leftJoin(supplierAccounts, eq(supplierAccounts.id, prebooks.supplierAccountId))
       .leftJoin(prebookLines, and(eq(prebookLines.prebookId, prebooks.id), isNull(prebookLines.removedAt)))
-      .where(opts.includeArchived ? undefined : isNull(prebooks.archivedAt))
+      .where(and(isNull(prebooks.removedAt), opts.includeArchived ? undefined : isNull(prebooks.archivedAt)))
       .groupBy(prebooks.id, supplierAccounts.accountNumber)
       .orderBy(asc(sql`coalesce(${prebooks.expectedFrom}, '9999-12-31')`), desc(prebooks.createdAt));
     return rows.map(({ p, ...t }) => ({ ...p, ...t }));
@@ -104,6 +104,7 @@ export async function upcomingLines(orgId: string) {
         and(
           isNull(prebookLines.removedAt),
           isNull(prebooks.archivedAt),
+          isNull(prebooks.removedAt),
           sql`${prebooks.status} not in ('draft', 'cancelled', 'delivered')`,
           sql`${prebookLines.quantityReceived} < ${prebookLines.quantity}`,
         ),
@@ -132,6 +133,7 @@ export async function getPrebook(orgId: string, reference: string) {
 async function load(tx: DB, ctx: Ctx, id: string) {
   const [p] = await tx.select().from(prebooks).where(and(eq(prebooks.id, id), eq(prebooks.organisationId, ctx.org.id))).for('update').limit(1);
   if (!p) throw new ServiceError('Pre-book not found.');
+  if (p.removedAt) throw new ServiceError('This pre-book was deleted. Restore it before changing it.');
   return p;
 }
 
@@ -277,6 +279,30 @@ export async function receiveStock(ctx: Ctx, id: string, received: Record<string
     });
     return status;
   });
+}
+
+/**
+ * Deletes a pre-book entered by mistake (or restores it). Nothing is erased: it's hidden from the
+ * pre-book list, arriving soon, accounts and Performance, and can be restored. Archive is for finished ones.
+ */
+export async function setPrebookDeleted(ctx: Ctx, id: string, deleted: boolean) {
+  requireRole(ctx, 'manager', 'delete pre-books');
+  await withTenant(ctx.org.id, async (tx) => {
+    const [p] = await tx.select().from(prebooks).where(and(eq(prebooks.id, id), eq(prebooks.organisationId, ctx.org.id))).limit(1);
+    if (!p) throw new ServiceError('Pre-book not found.');
+    if (Boolean(p.removedAt) === deleted) return;
+    await tx.update(prebooks).set({ removedAt: deleted ? new Date() : null, updatedAt: new Date() }).where(eq(prebooks.id, id));
+    await recordEvent(tx, {
+      organisationId: ctx.org.id, actor: ctx.actor, eventType: deleted ? 'prebook_deleted' : 'prebook_restored', entityType: 'prebook', entityId: id,
+      newValue: { reference: p.reference, brand: p.brand },
+    });
+  });
+}
+
+export async function listDeletedPrebooks(orgId: string) {
+  return withTenant(orgId, (tx) =>
+    tx.select().from(prebooks).where(isNotNull(prebooks.removedAt)).orderBy(desc(prebooks.removedAt)).limit(50),
+  );
 }
 
 export async function archivePrebook(ctx: Ctx, id: string, archived: boolean) {

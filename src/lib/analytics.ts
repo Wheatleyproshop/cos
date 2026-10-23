@@ -134,6 +134,7 @@ async function prebookArrivals(orgId: string, from: Date, end: Date, inclusiveEn
       .where(
         and(
           eq(auditEvents.eventType, 'prebook_received'),
+          isNull(prebooks.removedAt),
           gte(auditEvents.createdAt, from),
           inclusiveEnd ? sql`${auditEvents.createdAt} <= ${end}` : lt(auditEvents.createdAt, end),
         ),
@@ -178,7 +179,7 @@ async function prebookArrivals(orgId: string, from: Date, end: Date, inclusiveEn
       .innerJoin(prebooks, eq(prebooks.id, prebookLines.prebookId))
       .where(
         and(
-          isNull(prebookLines.removedAt), isNull(prebooks.archivedAt),
+          isNull(prebookLines.removedAt), isNull(prebooks.archivedAt), isNull(prebooks.removedAt),
           sql`${prebooks.status} not in ('draft', 'cancelled', 'delivered')`,
           sql`${prebookLines.quantityReceived} < ${prebookLines.quantity}`,
         ),
