@@ -1,7 +1,7 @@
 import { and, asc, desc, eq, isNotNull, isNull, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import { withTenant } from '@/db';
-import { brands, prebookLines, prebooks, supplierAccounts } from '@/db/schema';
+import { auditEvents, brands, prebookLines, prebooks, supplierAccounts } from '@/db/schema';
 import { recordEvent } from '../audit';
 import { LOGO_TYPES, MAX_LOGO_BYTES, sniffImage } from '../ball-print';
 import { storage } from '../storage';
@@ -130,6 +130,49 @@ export async function setAccountDeleted(ctx: Ctx, id: string, deleted: boolean) 
 
 export async function listDeletedAccounts(orgId: string) {
   return withTenant(orgId, (tx) => tx.select().from(supplierAccounts).where(isNotNull(supplierAccounts.removedAt)).orderBy(desc(supplierAccounts.removedAt)));
+}
+
+/** Edit or delete (empty) an account's notes. The previous text stays in the audit trail. */
+export async function updateAccountNotes(ctx: Ctx, id: string, rawNotes: unknown, opts: { restored?: boolean } = {}) {
+  requireRole(ctx, 'manager', 'edit supplier accounts');
+  const notes = String(rawNotes ?? '').trim().slice(0, 2000);
+  await withTenant(ctx.org.id, async (tx) => {
+    const [a] = await tx.select().from(supplierAccounts).where(and(eq(supplierAccounts.id, id), isNull(supplierAccounts.removedAt))).limit(1);
+    if (!a) throw new ServiceError('Account not found.');
+    if (notes === a.notes) return;
+    await tx.update(supplierAccounts).set({ notes, updatedAt: new Date() }).where(eq(supplierAccounts.id, id));
+    await recordEvent(tx, {
+      organisationId: ctx.org.id, actor: ctx.actor, eventType: 'account_notes_changed', entityType: 'supplier_account', entityId: id,
+      oldValue: { notes: a.notes }, newValue: { notes, brand: a.brand, ...(opts.restored ? { restored: true } : {}) },
+    });
+  });
+}
+
+/** Accounts whose notes were just deleted, with the text that can be put back. */
+export async function deletedAccountNotes(orgId: string): Promise<Map<string, string>> {
+  return withTenant(orgId, async (tx) => {
+    const rows = await tx
+      .select({ id: auditEvents.entityId, o: auditEvents.oldValueJson, n: auditEvents.newValueJson, at: auditEvents.createdAt })
+      .from(auditEvents)
+      .where(eq(auditEvents.eventType, 'account_notes_changed'))
+      .orderBy(desc(auditEvents.createdAt));
+    const out = new Map<string, string>();
+    const seen = new Set<string>();
+    for (const r of rows) {
+      if (!r.id || seen.has(r.id)) continue;
+      seen.add(r.id);
+      const was = (r.o as { notes?: string } | null)?.notes ?? '';
+      const now = (r.n as { notes?: string } | null)?.notes ?? '';
+      if (!now && was) out.set(r.id, was);
+    }
+    return out;
+  });
+}
+
+export async function restoreAccountNotes(ctx: Ctx, id: string) {
+  const previous = (await deletedAccountNotes(ctx.org.id)).get(id);
+  if (!previous) throw new ServiceError('There are no deleted notes to restore.');
+  await updateAccountNotes(ctx, id, previous, { restored: true });
 }
 
 /** One empty account card per catalogue brand that doesn't have one yet (a deleted card counts: it isn't re-added). */

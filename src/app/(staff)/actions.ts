@@ -36,7 +36,16 @@ import {
 import { runBackup } from '@/lib/services/backups';
 import { sendTestEmail } from '@/lib/services/test-email';
 import { addBrand, addComponent, addModel, createFittingQuote, setCatalogActive, setCatalogRemoved, updateComponentUpcharge, updateModelPrice } from '@/lib/services/fitting';
-import { addAccountsForCatalogueBrands, clearAccountLogo, saveAccount, setAccountActive, setAccountDeleted, setAccountLogo } from '@/lib/services/accounts';
+import {
+  addAccountsForCatalogueBrands,
+  clearAccountLogo,
+  restoreAccountNotes,
+  saveAccount,
+  setAccountActive,
+  setAccountDeleted,
+  setAccountLogo,
+  updateAccountNotes,
+} from '@/lib/services/accounts';
 import { sendReportNow, updatePerformanceReport } from '@/lib/services/performance-report';
 import { addWorkshopItem, checkInClubs, removeWorkshopItem, restoreJobNotes, restoreWorkshopItem, setJobDeleted, updateJobNotes, updateWorkshopProgress } from '@/lib/services/workshop';
 import {
@@ -785,6 +794,27 @@ export async function clearPrebookNotesAction(prebookId: string) {
 export async function restorePrebookNotesAction(prebookId: string) {
   return act('manager', async (ctx) => {
     await restorePrebookNotes(ctx, prebookId);
+    return 'Notes restored.';
+  });
+}
+
+export async function accountNotesAction(accountId: string, _: FormState, fd: FormData) {
+  return act('manager', async (ctx) => {
+    await updateAccountNotes(ctx, accountId, fd.get('notes'));
+    return 'Notes saved.';
+  }, fd);
+}
+
+export async function clearAccountNotesAction(accountId: string) {
+  return act('manager', async (ctx) => {
+    await updateAccountNotes(ctx, accountId, '');
+    return 'Notes deleted.';
+  });
+}
+
+export async function restoreAccountNotesAction(accountId: string) {
+  return act('manager', async (ctx) => {
+    await restoreAccountNotes(ctx, accountId);
     return 'Notes restored.';
   });
 }

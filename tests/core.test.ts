@@ -986,6 +986,18 @@ describe('supplier accounts and pre-books', () => {
     expect(await archived()).toBeNull();
   });
 
+  it('edits, deletes and restores account notes', async () => {
+    const acc = await import('@/lib/services/accounts');
+    await acc.saveAccount(admin, null, { brand: 'Cleveland', notes: 'Pre-book by 30 Nov' });
+    const c = (await acc.listAccounts(org.id)).find((x) => x.brand === 'Cleveland')!;
+    await expect(acc.updateAccountNotes(staff, c.id, '')).rejects.toThrow(/manager/);
+    await acc.updateAccountNotes(admin, c.id, '');
+    expect((await acc.deletedAccountNotes(org.id)).get(c.id)).toBe('Pre-book by 30 Nov');
+    await acc.restoreAccountNotes(admin, c.id);
+    expect((await acc.listAccounts(org.id)).find((x) => x.id === c.id)!.notes).toBe('Pre-book by 30 Nov');
+    expect((await acc.deletedAccountNotes(org.id)).has(c.id)).toBe(false);
+  });
+
   it('deletes an account card and restores it', async () => {
     const acc = await import('@/lib/services/accounts');
     await acc.saveAccount(admin, null, { brand: 'Wilson' });

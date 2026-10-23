@@ -5,8 +5,9 @@ import { AccountForm, AccountLogoForm } from '@/components/prebook-forms';
 import { PageHeader } from '@/components/views';
 import { hasRole, requireStaff } from '@/lib/auth';
 import { money, stamp } from '@/lib/format';
-import { accountLogoUrl, listAccounts, listDeletedAccounts, type AccountRow } from '@/lib/services/accounts';
-import { accountActiveAction, accountLogoAction, deleteAccountAction, catalogueAccountsAction, clearAccountLogoAction, saveAccountAction } from '../actions';
+import { accountLogoUrl, deletedAccountNotes, listAccounts, listDeletedAccounts, type AccountRow } from '@/lib/services/accounts';
+import { InternalNotesForm } from '@/components/workshop-forms';
+import { accountActiveAction, accountLogoAction, accountNotesAction, clearAccountNotesAction, restoreAccountNotesAction, deleteAccountAction, catalogueAccountsAction, clearAccountLogoAction, saveAccountAction } from '../actions';
 
 export const metadata: Metadata = { title: 'Accounts' };
 
@@ -28,7 +29,7 @@ function Contact({ label, value, href }: { label: string; value: string; href?: 
   );
 }
 
-function AccountCard({ a, manager }: { a: AccountRow; manager: boolean }) {
+function AccountCard({ a, manager, deletedNotes }: { a: AccountRow; manager: boolean; deletedNotes?: string }) {
   const logo = accountLogoUrl(a);
   const empty = !a.accountNumber && !a.repName && !a.repPhone && !a.repEmail && !a.headOfficePhone && !a.headOfficeEmail;
   return (
@@ -77,7 +78,27 @@ function AccountCard({ a, manager }: { a: AccountRow; manager: boolean }) {
           </section>
         ) : null}
       </div>
-      {a.notes ? <p className="acct-notes">{a.notes}</p> : null}
+      {a.notes || (deletedNotes && manager) ? (
+        <div className="acct-notes">
+          {a.notes ? <p style={{ margin: 0 }}>{a.notes}</p> : <p className="muted" style={{ margin: 0 }}>Notes deleted.</p>}
+          {manager ? (
+            <div className="note-tools">
+              {a.notes ? (
+                <>
+                  <InternalNotesForm action={accountNotesAction.bind(null, a.id)} notes={a.notes} placeholder="e.g. Pre-book deadline 30 Nov · carriage paid over £300" />
+                  <ActionButton action={clearAccountNotesAction.bind(null, a.id)} className="linkbtn danger" confirm={`Delete the notes on the ${a.brand} account? You can restore them straight after.`}>
+                    Delete
+                  </ActionButton>
+                </>
+              ) : (
+                <ActionButton action={restoreAccountNotesAction.bind(null, a.id)} className="linkbtn">
+                  Restore notes
+                </ActionButton>
+              )}
+            </div>
+          ) : null}
+        </div>
+      ) : null}
 
       {manager ? (
         <div className="acct-actions">
@@ -113,7 +134,11 @@ export default async function AccountsPage({ searchParams }: { searchParams: Pro
   const staff = await requireStaff();
   const manager = hasRole(staff, 'manager');
   const { hidden } = await searchParams;
-  const [accounts, deleted] = await Promise.all([listAccounts(staff.organisationId, { includeInactive: hidden === '1' }), listDeletedAccounts(staff.organisationId)]);
+  const [accounts, deleted, deletedNotes] = await Promise.all([
+    listAccounts(staff.organisationId, { includeInactive: hidden === '1' }),
+    listDeletedAccounts(staff.organisationId),
+    deletedAccountNotes(staff.organisationId),
+  ]);
   return (
     <>
       <PageHeader
@@ -138,7 +163,7 @@ export default async function AccountsPage({ searchParams }: { searchParams: Pro
       ) : null}
       <div className="acct-list">
         {accounts.map((a) => (
-          <AccountCard key={a.id} a={a} manager={manager} />
+          <AccountCard key={a.id} a={a} manager={manager} deletedNotes={a.notes ? undefined : deletedNotes.get(a.id)} />
         ))}
       </div>
       {manager ? (
