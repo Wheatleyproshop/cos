@@ -24,7 +24,7 @@ import { sendTestEmail } from '@/lib/services/test-email';
 import { addBrand, addComponent, addModel, createFittingQuote, setCatalogActive, setCatalogRemoved, updateComponentUpcharge, updateModelPrice } from '@/lib/services/fitting';
 import { addAccountsForCatalogueBrands, clearAccountLogo, saveAccount, setAccountActive, setAccountDeleted, setAccountLogo } from '@/lib/services/accounts';
 import { sendReportNow, updatePerformanceReport } from '@/lib/services/performance-report';
-import { addWorkshopItem, checkInClubs, removeWorkshopItem, setJobDeleted, updateWorkshopProgress } from '@/lib/services/workshop';
+import { addWorkshopItem, checkInClubs, removeWorkshopItem, restoreWorkshopItem, setJobDeleted, updateWorkshopProgress } from '@/lib/services/workshop';
 import { addLine, archivePrebook, createPrebook, receiveStock, removeLine, setPrebookDeleted, setPrebookStatus, updatePrebook } from '@/lib/services/prebooks';
 import { createCrestQuote, setCrestDesignLink, setCrestPositionRemoved, updateCrestPrices } from '@/lib/services/cresting';
 import { addBall, addStarterBalls, createBallPrintQuote, setBallActive, setBallDesignLink, setBallPhoto, setBallRemoved, updateBall, updateBallPrice, updateSetupFee } from '@/lib/services/ball-printing';
@@ -632,5 +632,12 @@ export async function deleteQuoteAction(quoteId: string, deleted: boolean) {
   return act('manager', async (ctx) => {
     await setQuoteDeleted(ctx, quoteId, deleted);
     return deleted ? 'Quote deleted.' : 'Quote restored.';
+  });
+}
+
+export async function restoreWorkshopItemAction(jobId: string, itemId: string) {
+  return act('staff', async (ctx) => {
+    await restoreWorkshopItem(ctx, jobId, itemId);
+    return 'Club restored.';
   });
 }

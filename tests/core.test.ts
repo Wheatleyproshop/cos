@@ -1006,6 +1006,26 @@ describe('workshop', () => {
     expect(n.items.find((i) => i.title === 'Workshop job ready')!.href).toMatch(/^\/workshop\/WS-/);
   });
 
+  it('deletes a club from a job (even once ready) and restores it', async () => {
+    const ws = await import('@/lib/services/workshop');
+    const job = await ws.checkInClubs(admin, {
+      customerName: 'Two Clubs', email: 'twoclubs@example.com', etaDate: '',
+      items: [{ club: 'Driver', work: 'Regrip', pricePence: '10' }, { club: 'Putter', work: 'Regrip', pricePence: '12' }],
+    });
+    await ws.updateWorkshopProgress(admin, job.id, { status: 'ready', etaDate: '' }, { notify: false });
+    let d = (await ws.getJob(org.id, job.reference))!;
+    const putter = d.items.find((i) => i.club === 'Putter')!;
+    await ws.removeWorkshopItem(admin, job.id, putter.id);
+    d = (await ws.getJob(org.id, job.reference))!;
+    expect(d.items.map((i) => i.club)).toEqual(['Driver']);
+    expect(d.deletedItems.map((i) => i.club)).toEqual(['Putter']);
+    await expect(ws.removeWorkshopItem(admin, job.id, d.items[0].id)).rejects.toThrow(/at least one club/);
+    await ws.restoreWorkshopItem(staff, job.id, putter.id);
+    d = (await ws.getJob(org.id, job.reference))!;
+    expect(d.items).toHaveLength(2);
+    expect(d.deletedItems).toHaveLength(0);
+  });
+
   it('deletes a job entered by mistake and restores it', async () => {
     const { checkInClubs, setJobDeleted, listJobs, listDeletedJobs, updateWorkshopProgress } = await import('@/lib/services/workshop');
     const job = await checkInClubs(admin, {

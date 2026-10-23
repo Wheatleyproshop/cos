@@ -25,6 +25,8 @@ import { atLeast, findOrCreateCustomer, requireRole, ServiceError, type Ctx } fr
 export { WORK_TYPES, WORKSHOP_STATUS_LABELS } from '../workshop-constants';
 
 const OPEN: WorkshopStatus[] = ['checked_in', 'in_progress', 'waiting_parts'];
+/** Clubs can still be corrected (deleted / restored) until the job is collected. */
+const EDITABLE: WorkshopStatus[] = [...OPEN, 'ready'];
 
 const isoDate = z
   .string()
@@ -244,15 +246,31 @@ export async function addWorkshopItem(ctx: Ctx, id: string, raw: unknown) {
 export async function removeWorkshopItem(ctx: Ctx, id: string, itemId: string) {
   await withTenant(ctx.org.id, async (tx) => {
     const { job } = await load(tx, ctx, id);
-    if (!OPEN.includes(job.status)) throw new ServiceError('Clubs can only be removed while the job is open.');
+    if (!EDITABLE.includes(job.status)) throw new ServiceError('Clubs can only be deleted until the job is collected.');
     const items = await liveItems(tx, id);
     const item = items.find((i) => i.id === itemId);
     if (!item) throw new ServiceError('Item not found.');
-    if (items.length === 1) throw new ServiceError('A job needs at least one club. Cancel the job instead.');
+    if (items.length === 1) throw new ServiceError('A job needs at least one club. Delete or cancel the whole job instead.');
     await tx.update(workshopItems).set({ removedAt: new Date() }).where(eq(workshopItems.id, itemId));
     await recordEvent(tx, {
       organisationId: ctx.org.id, actor: ctx.actor, eventType: 'workshop_item_removed', entityType: 'workshop_job', entityId: id,
       customerId: job.customerId, oldValue: { club: item.club, work: item.work },
+    });
+  });
+}
+
+/** Brings back a club deleted from a job (until the job is collected). */
+export async function restoreWorkshopItem(ctx: Ctx, id: string, itemId: string) {
+  await withTenant(ctx.org.id, async (tx) => {
+    const { job } = await load(tx, ctx, id);
+    if (!EDITABLE.includes(job.status)) throw new ServiceError('Clubs can only be restored until the job is collected.');
+    const [item] = await tx.select().from(workshopItems).where(and(eq(workshopItems.id, itemId), eq(workshopItems.jobId, id))).limit(1);
+    if (!item?.removedAt) return;
+    await tx.update(workshopItems).set({ removedAt: null }).where(eq(workshopItems.id, itemId));
+    await tx.update(workshopJobs).set({ updatedAt: new Date() }).where(eq(workshopJobs.id, id));
+    await recordEvent(tx, {
+      organisationId: ctx.org.id, actor: ctx.actor, eventType: 'workshop_item_restored', entityType: 'workshop_job', entityId: id,
+      customerId: job.customerId, newValue: { club: item.club, work: item.work },
     });
   });
 }
@@ -307,12 +325,13 @@ export async function getJob(orgId: string, reference: string) {
       .where(eq(workshopJobs.reference, reference))
       .limit(1);
     if (!row) return null;
-    const [items, events, emails] = await Promise.all([
+    const [items, deletedItems, events, emails] = await Promise.all([
       liveItems(tx, row.job.id),
+      tx.select().from(workshopItems).where(and(eq(workshopItems.jobId, row.job.id), isNotNull(workshopItems.removedAt))).orderBy(desc(workshopItems.removedAt)),
       tx.select().from(auditEvents).where(eq(auditEvents.entityId, row.job.id)).orderBy(desc(auditEvents.createdAt)),
       tx.select().from(messages).where(eq(messages.workshopJobId, row.job.id)).orderBy(desc(messages.createdAt)),
     ]);
-    return { ...row, items, events, emails };
+    return { ...row, items, deletedItems, events, emails };
   });
 }
 

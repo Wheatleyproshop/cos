@@ -75,6 +75,7 @@ export type EventType =
   | 'workshop_eta_changed'
   | 'workshop_item_added'
   | 'workshop_item_removed'
+  | 'workshop_item_restored'
   | 'workshop_job_deleted'
   | 'workshop_job_restored'
   | 'ball_design_submitted'
@@ -174,7 +175,9 @@ export function describeEvent(e: Pick<AuditEvent, 'eventType' | 'oldValueJson' |
     case 'workshop_job_restored':
       return 'Job restored';
     case 'workshop_item_removed':
-      return `Removed ${o.club}: ${o.work}`;
+      return `Deleted ${o.club}: ${o.work}`;
+    case 'workshop_item_restored':
+      return `Restored ${n.club}: ${n.work}`;
     case 'order_created':
       return m.fromQuote ? `Order created from accepted quote ${m.fromQuote}` : 'Order created';
     case 'status_changed':

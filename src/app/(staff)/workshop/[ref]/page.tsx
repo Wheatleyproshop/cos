@@ -8,10 +8,10 @@ import { PageHeader } from '@/components/views';
 import { AddWorkshopItemForm, WorkshopProgressForm } from '@/components/workshop-forms';
 import { describeEvent, templateName } from '@/lib/audit';
 import { hasRole, requireStaff } from '@/lib/auth';
-import { stamp, todayInTz } from '@/lib/format';
+import { money, stamp, todayInTz } from '@/lib/format';
 import { shortDate } from '@/lib/short-date';
 import { getJob, jobSpec, WORKSHOP_STATUS_LABELS } from '@/lib/services/workshop';
-import { addWorkshopItemAction, deleteJobAction, removeWorkshopItemAction, workshopProgressAction } from '../../actions';
+import { addWorkshopItemAction, deleteJobAction, removeWorkshopItemAction, restoreWorkshopItemAction, workshopProgressAction } from '../../actions';
 
 export async function generateMetadata({ params }: { params: Promise<{ ref: string }> }): Promise<Metadata> {
   return { title: decodeURIComponent((await params).ref) };
@@ -24,10 +24,12 @@ export default async function WorkshopJobPage({ params }: { params: Promise<{ re
   const manager = hasRole(staff, 'manager');
   const d = await getJob(staff.organisationId, decodeURIComponent((await params).ref));
   if (!d) notFound();
-  const { job: j, customer: c, items, events, emails, takenBy } = d;
+  const { job: j, customer: c, items, deletedItems, events, emails, takenBy } = d;
   const tz = staff.org.timezone;
   const deleted = Boolean(j.archivedAt);
   const open = !deleted && ['checked_in', 'in_progress', 'waiting_parts'].includes(j.status);
+  // Clubs can be corrected until the job is collected.
+  const editable = open || (!deleted && j.status === 'ready');
   const today = todayInTz(tz);
   const late = open && j.etaDate && j.etaDate < today;
   const spec = jobSpec(j, items);
@@ -96,11 +98,16 @@ export default async function WorkshopJobPage({ params }: { params: Promise<{ re
         <BuildTable
           build={spec.builds[0]}
           actions={
-            open && items.length > 1 ? (
+            editable && items.length > 1 ? (
               <span className="acct-buttons">
                 {items.map((i) => (
-                  <ActionButton key={i.id} action={removeWorkshopItemAction.bind(null, j.id, i.id)} className="btn small" confirm={`Remove ${i.club} (${i.work})?`}>
-                    Remove {i.club}
+                  <ActionButton
+                    key={i.id}
+                    action={removeWorkshopItemAction.bind(null, j.id, i.id)}
+                    className="btn small danger"
+                    confirm={`Delete ${i.club} (${i.work}) from this job? You can restore it from Deleted clubs.`}
+                  >
+                    Delete {i.club}
                   </ActionButton>
                 ))}
               </span>
@@ -111,6 +118,30 @@ export default async function WorkshopJobPage({ params }: { params: Promise<{ re
           <details className="section">
             <summary>Add a club</summary>
             <AddWorkshopItemForm action={addWorkshopItemAction.bind(null, j.id)} />
+          </details>
+        ) : null}
+        {deletedItems.length ? (
+          <details className="section">
+            <summary>Deleted clubs ({deletedItems.length})</summary>
+            <ul className="attention">
+              {deletedItems.map((i) => (
+                <li key={i.id}>
+                  <span>
+                    <b>
+                      {i.club}: {i.work}
+                    </b>
+                    <div className="muted">
+                      {[i.parts, i.quantity > 1 ? `× ${i.quantity}` : '', money(i.pricePence)].filter(Boolean).join(' · ')} · deleted {stamp(i.removedAt!, tz)}
+                    </div>
+                  </span>
+                  {editable ? (
+                    <ActionButton action={restoreWorkshopItemAction.bind(null, j.id, i.id)} className="btn small">
+                      Restore
+                    </ActionButton>
+                  ) : null}
+                </li>
+              ))}
+            </ul>
           </details>
         ) : null}
       </section>
