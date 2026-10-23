@@ -67,6 +67,7 @@ export type EventType =
   | 'prebook_status_changed'
   | 'prebook_line_added'
   | 'prebook_line_removed'
+  | 'prebook_line_restored'
   | 'prebook_received'
   | 'prebook_deleted'
   | 'prebook_restored'

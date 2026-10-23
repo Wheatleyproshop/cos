@@ -25,7 +25,7 @@ import { addBrand, addComponent, addModel, createFittingQuote, setCatalogActive,
 import { addAccountsForCatalogueBrands, clearAccountLogo, saveAccount, setAccountActive, setAccountDeleted, setAccountLogo } from '@/lib/services/accounts';
 import { sendReportNow, updatePerformanceReport } from '@/lib/services/performance-report';
 import { addWorkshopItem, checkInClubs, removeWorkshopItem, restoreWorkshopItem, setJobDeleted, updateWorkshopProgress } from '@/lib/services/workshop';
-import { addLine, archivePrebook, createPrebook, receiveStock, removeLine, setPrebookDeleted, setPrebookStatus, updatePrebook } from '@/lib/services/prebooks';
+import { addLine, archivePrebook, createPrebook, receiveStock, removeLine, restoreLine, setPrebookDeleted, setPrebookStatus, updatePrebook } from '@/lib/services/prebooks';
 import { createCrestQuote, setCrestDesignLink, setCrestPositionRemoved, updateCrestPrices } from '@/lib/services/cresting';
 import { addBall, addStarterBalls, createBallPrintQuote, setBallActive, setBallDesignLink, setBallPhoto, setBallRemoved, updateBall, updateBallPrice, updateSetupFee } from '@/lib/services/ball-printing';
 
@@ -639,5 +639,12 @@ export async function restoreWorkshopItemAction(jobId: string, itemId: string) {
   return act('staff', async (ctx) => {
     await restoreWorkshopItem(ctx, jobId, itemId);
     return 'Club restored.';
+  });
+}
+
+export async function restorePrebookLineAction(prebookId: string, lineId: string) {
+  return act('manager', async (ctx) => {
+    await restoreLine(ctx, prebookId, lineId);
+    return 'Line restored.';
   });
 }

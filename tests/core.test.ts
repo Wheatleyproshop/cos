@@ -900,6 +900,32 @@ describe('supplier accounts and pre-books', () => {
     expect((await acc.listAccounts(org.id)).some((x) => x.id === w.id)).toBe(true);
   });
 
+  it('deletes a pre-book line and restores it, but not once stock has arrived', async () => {
+    const { listAccounts } = await import('@/lib/services/accounts');
+    const p = await import('@/lib/services/prebooks');
+    const acct = (await listAccounts(org.id)).find((x) => x.brand === 'Titleist')!;
+    const pb = await p.createPrebook(admin, { supplierAccountId: acct.id, season: 'Lines' });
+    await p.addLine(admin, pb.id, { product: 'Pro V1', quantity: '12' });
+    await p.addLine(admin, pb.id, { product: 'AVX', quantity: '6' });
+    let d = (await p.getPrebook(org.id, pb.reference))!;
+    const avx = d.lines.find((l) => l.product === 'AVX')!;
+    await expect(p.removeLine(staff, pb.id, avx.id)).rejects.toThrow(/manager/);
+    await p.removeLine(admin, pb.id, avx.id);
+    d = (await p.getPrebook(org.id, pb.reference))!;
+    expect(d.lines.map((l) => l.product)).toEqual(['Pro V1']);
+    expect(d.deletedLines.map((l) => l.product)).toEqual(['AVX']);
+    await p.restoreLine(admin, pb.id, avx.id);
+    d = (await p.getPrebook(org.id, pb.reference))!;
+    expect(d.lines).toHaveLength(2);
+    // Once some has arrived, the line stays.
+    await p.setPrebookStatus(admin, pb.id, 'placed');
+    const proV1 = d.lines.find((l) => l.product === 'Pro V1')!;
+    await p.receiveStock(admin, pb.id, { [proV1.id]: 3 });
+    await expect(p.removeLine(admin, pb.id, proV1.id)).rejects.toThrow(/already arrived/);
+    // Tidy up: a deleted pre-book's arrivals don't count in Performance.
+    await p.setPrebookDeleted(admin, pb.id, true);
+  });
+
   it('deletes a pre-book entered by mistake and restores it', async () => {
     const { listAccounts } = await import('@/lib/services/accounts');
     const p = await import('@/lib/services/prebooks');

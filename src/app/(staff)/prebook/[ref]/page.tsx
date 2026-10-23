@@ -9,7 +9,8 @@ import { money, stamp } from '@/lib/format';
 import { accountLogoUrl, listAccounts } from '@/lib/services/accounts';
 import { getPrebook, PREBOOK_STATUS_LABELS } from '@/lib/services/prebooks';
 import {
-  addPrebookLineAction, archivePrebookAction, deletePrebookAction, prebookStatusAction, receivePrebookAction, removePrebookLineAction, updatePrebookAction,
+  addPrebookLineAction, archivePrebookAction, deletePrebookAction, prebookStatusAction, receivePrebookAction, removePrebookLineAction, restorePrebookLineAction,
+  updatePrebookAction,
 } from '../../actions';
 
 export async function generateMetadata({ params }: { params: Promise<{ ref: string }> }): Promise<Metadata> {
@@ -24,7 +25,7 @@ export default async function PrebookDetail({ params }: { params: Promise<{ ref:
   const manager = hasRole(staff, 'manager');
   const d = await getPrebook(staff.organisationId, decodeURIComponent((await params).ref));
   if (!d) notFound();
-  const { prebook: p, account: a, lines } = d;
+  const { prebook: p, account: a, lines, deletedLines } = d;
   const accounts = manager ? await listAccounts(staff.organisationId) : [];
   const deleted = Boolean(p.removedAt);
   const editable = !deleted && !['delivered', 'cancelled'].includes(p.status) && !p.archivedAt;
@@ -144,8 +145,13 @@ export default async function PrebookDetail({ params }: { params: Promise<{ ref:
                       .filter((l) => l.quantityReceived === 0)
                       .map((l) => [
                         l.id,
-                        <ActionButton key={l.id} action={removePrebookLineAction.bind(null, p.id, l.id)} className="btn small" confirm={`Remove ${l.product}?`}>
-                          Remove
+                        <ActionButton
+                          key={l.id}
+                          action={removePrebookLineAction.bind(null, p.id, l.id)}
+                          className="btn small danger"
+                          confirm={`Delete ${l.product}${l.variant ? ` (${l.variant})` : ''} from this pre-book? You can restore it from Deleted lines.`}
+                        >
+                          Delete
                         </ActionButton>,
                       ]),
                   )
@@ -159,6 +165,28 @@ export default async function PrebookDetail({ params }: { params: Promise<{ ref:
           <details className="section" open={!lines.length}>
             <summary>Add a line</summary>
             <PrebookLineForm action={addPrebookLineAction.bind(null, p.id)} />
+          </details>
+        ) : null}
+        {deletedLines.length ? (
+          <details className="section">
+            <summary>Deleted lines ({deletedLines.length})</summary>
+            <ul className="attention">
+              {deletedLines.map((l) => (
+                <li key={l.id}>
+                  <span>
+                    <b>{l.product}</b>
+                    <div className="muted">
+                      {[l.variant, `× ${l.quantity}`, money(l.unitCostPence * l.quantity)].filter(Boolean).join(' · ')} · deleted {stamp(l.removedAt!, staff.org.timezone)}
+                    </div>
+                  </span>
+                  {manager && editable ? (
+                    <ActionButton action={restorePrebookLineAction.bind(null, p.id, l.id)} className="btn small">
+                      Restore
+                    </ActionButton>
+                  ) : null}
+                </li>
+              ))}
+            </ul>
           </details>
         ) : null}
       </section>

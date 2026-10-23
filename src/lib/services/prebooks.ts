@@ -126,7 +126,12 @@ export async function getPrebook(orgId: string, reference: string) {
       .from(prebookLines)
       .where(and(eq(prebookLines.prebookId, row.p.id), isNull(prebookLines.removedAt)))
       .orderBy(asc(sql`coalesce(${prebookLines.expectedDate}, '9999-12-31')`), asc(prebookLines.createdAt));
-    return { prebook: row.p, account: row.account, lines };
+    const deletedLines = await tx
+      .select()
+      .from(prebookLines)
+      .where(and(eq(prebookLines.prebookId, row.p.id), isNotNull(prebookLines.removedAt)))
+      .orderBy(desc(prebookLines.removedAt));
+    return { prebook: row.p, account: row.account, lines, deletedLines };
   });
 }
 
@@ -208,11 +213,28 @@ export async function removeLine(ctx: Ctx, id: string, lineId: string) {
     await load(tx, ctx, id);
     const [line] = await tx.select().from(prebookLines).where(and(eq(prebookLines.id, lineId), eq(prebookLines.prebookId, id)));
     if (!line) throw new ServiceError('Line not found.');
-    if (line.quantityReceived > 0) throw new ServiceError('Part of this line has already arrived, so it can’t be removed.');
+    if (line.quantityReceived > 0) throw new ServiceError('Part of this line has already arrived, so it can’t be deleted.');
     await tx.update(prebookLines).set({ removedAt: new Date() }).where(eq(prebookLines.id, lineId));
     await recordEvent(tx, {
       organisationId: ctx.org.id, actor: ctx.actor, eventType: 'prebook_line_removed', entityType: 'prebook', entityId: id,
       oldValue: { product: line.product, variant: line.variant, quantity: line.quantity },
+    });
+  });
+}
+
+/** Brings back a line deleted from a pre-book (while the pre-book can still be edited). */
+export async function restoreLine(ctx: Ctx, id: string, lineId: string) {
+  requireRole(ctx, 'manager', 'edit pre-books');
+  await withTenant(ctx.org.id, async (tx) => {
+    const p = await load(tx, ctx, id);
+    if (['delivered', 'cancelled'].includes(p.status) || p.archivedAt) throw new ServiceError('This pre-book can no longer be changed.');
+    const [line] = await tx.select().from(prebookLines).where(and(eq(prebookLines.id, lineId), eq(prebookLines.prebookId, id)));
+    if (!line?.removedAt) return;
+    await tx.update(prebookLines).set({ removedAt: null }).where(eq(prebookLines.id, lineId));
+    await tx.update(prebooks).set({ updatedAt: new Date() }).where(eq(prebooks.id, id));
+    await recordEvent(tx, {
+      organisationId: ctx.org.id, actor: ctx.actor, eventType: 'prebook_line_restored', entityType: 'prebook', entityId: id,
+      newValue: { product: line.product, variant: line.variant, quantity: line.quantity },
     });
   });
 }
