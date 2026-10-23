@@ -71,6 +71,7 @@ export type EventType =
   | 'supplier_account_saved'
   | 'prebook_created'
   | 'prebook_updated'
+  | 'prebook_notes_changed'
   | 'prebook_status_changed'
   | 'prebook_line_added'
   | 'prebook_line_removed'
@@ -175,6 +176,8 @@ export function describeEvent(e: Pick<AuditEvent, 'eventType' | 'oldValueJson' |
       return 'Customer deleted';
     case 'customer_restored':
       return n.automatic ? 'Customer restored (new order or job with their details)' : 'Customer restored';
+    case 'prebook_notes_changed':
+      return n.restored ? 'Pre-book notes restored' : n.notes ? (o.notes ? 'Pre-book notes edited' : 'Pre-book notes added') : 'Pre-book notes deleted';
     case 'prebook_deleted':
       return 'Pre-book deleted';
     case 'prebook_restored':

@@ -473,7 +473,7 @@ export async function QuoteDetail({ staff, number, inModal }: { staff: Staff; nu
           {q.internalNotes ? <div style={{ whiteSpace: 'pre-line' }}>{q.internalNotes}</div> : <div className="muted">{quoteNotesCanRestore ? 'Notes deleted.' : 'None.'}</div>}
           {!q.archivedAt ? (
             <div className="note-tools">
-              <InternalNotesForm action={quoteNotesAction.bind(null, q.id)} notes={q.internalNotes} />
+              <InternalNotesForm action={quoteNotesAction.bind(null, q.id)} notes={q.internalNotes} placeholder="Staff only — e.g. trade price checked with rep" />
               {q.internalNotes ? (
                 <ActionButton action={clearQuoteNotesAction.bind(null, q.id)} className="linkbtn danger" confirm="Delete the internal notes on this quote? You can restore them straight after.">
                   Delete

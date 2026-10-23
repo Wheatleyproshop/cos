@@ -7,10 +7,11 @@ import { PageHeader } from '@/components/views';
 import { hasRole, requireStaff } from '@/lib/auth';
 import { money, stamp } from '@/lib/format';
 import { accountLogoUrl, listAccounts } from '@/lib/services/accounts';
-import { getPrebook, PREBOOK_STATUS_LABELS } from '@/lib/services/prebooks';
+import { deletedPrebookNotes, getPrebook, PREBOOK_STATUS_LABELS } from '@/lib/services/prebooks';
+import { InternalNotesForm } from '@/components/workshop-forms';
 import {
   addPrebookLineAction, archivePrebookAction, deletePrebookAction, prebookStatusAction, receivePrebookAction, removePrebookLineAction, restorePrebookLineAction,
-  updatePrebookAction,
+  updatePrebookAction, prebookNotesAction, clearPrebookNotesAction, restorePrebookNotesAction,
 } from '../../actions';
 
 export async function generateMetadata({ params }: { params: Promise<{ ref: string }> }): Promise<Metadata> {
@@ -26,7 +27,10 @@ export default async function PrebookDetail({ params }: { params: Promise<{ ref:
   const d = await getPrebook(staff.organisationId, decodeURIComponent((await params).ref));
   if (!d) notFound();
   const { prebook: p, account: a, lines, deletedLines } = d;
-  const accounts = manager ? await listAccounts(staff.organisationId) : [];
+  const [accounts, deletedNotes] = await Promise.all([
+    manager ? listAccounts(staff.organisationId) : Promise.resolve([]),
+    p.notes ? Promise.resolve(null) : deletedPrebookNotes(staff.organisationId, p.id),
+  ]);
   const deleted = Boolean(p.removedAt);
   const editable = !deleted && !['delivered', 'cancelled'].includes(p.status) && !p.archivedAt;
   const qty = lines.reduce((s, l) => s + l.quantity, 0);
@@ -126,7 +130,26 @@ export default async function PrebookDetail({ params }: { params: Promise<{ ref:
           )}
         </div>
       </div>
-      {p.notes ? <div className="notice" style={{ whiteSpace: 'pre-line' }}>{p.notes}</div> : null}
+      {p.notes || deletedNotes || (manager && !deleted) ? (
+        <div className="notice pb-notes">
+          <b>Notes</b>
+          {p.notes ? <div style={{ whiteSpace: 'pre-line' }}>{p.notes}</div> : <div className="muted">{deletedNotes ? 'Notes deleted.' : 'None.'}</div>}
+          {manager && !deleted ? (
+            <div className="note-tools">
+              <InternalNotesForm action={prebookNotesAction.bind(null, p.id)} notes={p.notes} placeholder="e.g. Deadline 30 Nov · carriage paid over £500" />
+              {p.notes ? (
+                <ActionButton action={clearPrebookNotesAction.bind(null, p.id)} className="linkbtn danger" confirm="Delete the notes on this pre-book? You can restore them straight after.">
+                  Delete
+                </ActionButton>
+              ) : deletedNotes ? (
+                <ActionButton action={restorePrebookNotesAction.bind(null, p.id)} className="linkbtn">
+                  Restore notes
+                </ActionButton>
+              ) : null}
+            </div>
+          ) : null}
+        </div>
+      ) : null}
 
       <section className="panel">
         <div className="panel-head">

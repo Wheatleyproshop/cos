@@ -39,7 +39,19 @@ import { addBrand, addComponent, addModel, createFittingQuote, setCatalogActive,
 import { addAccountsForCatalogueBrands, clearAccountLogo, saveAccount, setAccountActive, setAccountDeleted, setAccountLogo } from '@/lib/services/accounts';
 import { sendReportNow, updatePerformanceReport } from '@/lib/services/performance-report';
 import { addWorkshopItem, checkInClubs, removeWorkshopItem, restoreJobNotes, restoreWorkshopItem, setJobDeleted, updateJobNotes, updateWorkshopProgress } from '@/lib/services/workshop';
-import { addLine, archivePrebook, createPrebook, receiveStock, removeLine, restoreLine, setPrebookDeleted, setPrebookStatus, updatePrebook } from '@/lib/services/prebooks';
+import {
+  addLine,
+  archivePrebook,
+  createPrebook,
+  receiveStock,
+  removeLine,
+  restoreLine,
+  restorePrebookNotes,
+  setPrebookDeleted,
+  setPrebookStatus,
+  updatePrebook,
+  updatePrebookNotes,
+} from '@/lib/services/prebooks';
 import { TEMPLATE_KEYS } from '@/lib/email/templates';
 import { createCrestQuote, setCrestDesignLink, setCrestPositionRemoved, updateCrestPrices } from '@/lib/services/cresting';
 import { addBall, addStarterBalls, createBallPrintQuote, setBallActive, setBallDesignLink, setBallPhoto, setBallRemoved, updateBall, updateBallPrice, updateSetupFee } from '@/lib/services/ball-printing';
@@ -752,6 +764,27 @@ export async function clearQuoteNotesAction(quoteId: string) {
 export async function restoreQuoteNotesAction(quoteId: string) {
   return act('staff', async (ctx) => {
     await restoreQuoteNotes(ctx, quoteId);
+    return 'Notes restored.';
+  });
+}
+
+export async function prebookNotesAction(prebookId: string, _: FormState, fd: FormData) {
+  return act('manager', async (ctx) => {
+    await updatePrebookNotes(ctx, prebookId, fd.get('notes'));
+    return 'Notes saved.';
+  }, fd);
+}
+
+export async function clearPrebookNotesAction(prebookId: string) {
+  return act('manager', async (ctx) => {
+    await updatePrebookNotes(ctx, prebookId, '');
+    return 'Notes deleted.';
+  });
+}
+
+export async function restorePrebookNotesAction(prebookId: string) {
+  return act('manager', async (ctx) => {
+    await restorePrebookNotes(ctx, prebookId);
     return 'Notes restored.';
   });
 }

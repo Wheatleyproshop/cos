@@ -186,12 +186,12 @@ export function AddWorkshopItemForm({ action }: { action: BoundAction }) {
 }
 
 /** Edit internal notes in place (workshop jobs, quotes). */
-export function InternalNotesForm({ action, notes }: { action: BoundAction; notes: string }) {
+export function InternalNotesForm({ action, notes, placeholder }: { action: BoundAction; notes: string; placeholder?: string }) {
   const [open, setOpen] = useState(false);
   if (!open) {
     return (
       <button type="button" className="linkbtn" onClick={() => setOpen(true)}>
-        {notes ? 'Edit' : 'Add internal notes'}
+        {notes ? 'Edit' : 'Add notes'}
       </button>
     );
   }
@@ -202,7 +202,7 @@ export function InternalNotesForm({ action, notes }: { action: BoundAction; note
           <CloseWhenSaved state={s} close={() => setOpen(false)} />
           <label className="field">
             <span className="sr-only">Internal notes</span>
-            <textarea name="notes" defaultValue={notes} maxLength={2000} rows={3} placeholder="Not shown to the customer — e.g. bag tag no. 12" autoFocus />
+            <textarea name="notes" defaultValue={notes} maxLength={2000} rows={3} placeholder={placeholder ?? 'Not shown to the customer — e.g. bag tag no. 12'} autoFocus />
           </label>
           <FormMessage state={s} />
           <div className="actions" style={{ marginTop: 6 }}>

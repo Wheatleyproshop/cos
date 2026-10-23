@@ -633,3 +633,4 @@ details.section[open] { padding-bottom: 16px; }
 .linkbtn.danger { color: var(--err-ink); }
 .note-tools { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin-top: 6px; font-weight: 400; }
 .note-tools textarea { width: 100%; }
+.pb-notes > b { display: block; margin-bottom: 4px; }

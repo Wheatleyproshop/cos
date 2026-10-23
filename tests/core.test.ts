@@ -1025,6 +1025,20 @@ describe('supplier accounts and pre-books', () => {
     await p.setPrebookDeleted(admin, pb.id, true);
   });
 
+  it('edits, deletes and restores pre-book notes', async () => {
+    const { listAccounts } = await import('@/lib/services/accounts');
+    const p = await import('@/lib/services/prebooks');
+    const acct = (await listAccounts(org.id)).find((x) => x.brand === 'Titleist')!;
+    const pb = await p.createPrebook(admin, { supplierAccountId: acct.id, season: 'Notes', notes: 'Deadline 30 Nov' });
+    await expect(p.updatePrebookNotes(staff, pb.id, '')).rejects.toThrow(/manager/);
+    await p.updatePrebookNotes(admin, pb.id, '');
+    expect(await p.deletedPrebookNotes(org.id, pb.id)).toBe('Deadline 30 Nov');
+    await p.restorePrebookNotes(admin, pb.id);
+    expect((await p.getPrebook(org.id, pb.reference))!.prebook.notes).toBe('Deadline 30 Nov');
+    expect(await p.deletedPrebookNotes(org.id, pb.id)).toBeNull();
+    await p.setPrebookDeleted(admin, pb.id, true);
+  });
+
   it('deletes a pre-book entered by mistake and restores it', async () => {
     const { listAccounts } = await import('@/lib/services/accounts');
     const p = await import('@/lib/services/prebooks');

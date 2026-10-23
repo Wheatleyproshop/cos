@@ -1,7 +1,7 @@
 import { and, asc, desc, eq, isNotNull, isNull, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import { withTenant, type DB } from '@/db';
-import { organisations, prebookLines, prebooks, supplierAccounts, type Prebook, type PrebookLine, type PrebookStatus } from '@/db/schema';
+import { auditEvents, organisations, prebookLines, prebooks, supplierAccounts, type Prebook, type PrebookLine, type PrebookStatus } from '@/db/schema';
 import { recordEvent } from '../audit';
 import { parseMoneyToPence, todayInTz } from '../format';
 import { parse } from '../validation';
@@ -220,6 +220,42 @@ export async function removeLine(ctx: Ctx, id: string, lineId: string) {
       oldValue: { product: line.product, variant: line.variant, quantity: line.quantity },
     });
   });
+}
+
+/** Edit or delete (empty) a pre-book's notes. The previous text stays in the audit trail. */
+export async function updatePrebookNotes(ctx: Ctx, id: string, rawNotes: unknown, opts: { restored?: boolean } = {}) {
+  requireRole(ctx, 'manager', 'edit pre-books');
+  const notes = String(rawNotes ?? '').trim().slice(0, 4000);
+  await withTenant(ctx.org.id, async (tx) => {
+    const p = await load(tx, ctx, id);
+    if (notes === p.notes) return;
+    await tx.update(prebooks).set({ notes, updatedAt: new Date() }).where(eq(prebooks.id, id));
+    await recordEvent(tx, {
+      organisationId: ctx.org.id, actor: ctx.actor, eventType: 'prebook_notes_changed', entityType: 'prebook', entityId: id,
+      oldValue: { notes: p.notes }, newValue: { notes, ...(opts.restored ? { restored: true } : {}) },
+    });
+  });
+}
+
+/** The notes deleted by the latest change, if they can be put back. */
+export async function deletedPrebookNotes(orgId: string, id: string): Promise<string | null> {
+  return withTenant(orgId, async (tx) => {
+    const [last] = await tx
+      .select({ o: auditEvents.oldValueJson, n: auditEvents.newValueJson })
+      .from(auditEvents)
+      .where(and(eq(auditEvents.entityId, id), eq(auditEvents.eventType, 'prebook_notes_changed')))
+      .orderBy(desc(auditEvents.createdAt))
+      .limit(1);
+    const was = (last?.o as { notes?: string } | null)?.notes ?? '';
+    const now = (last?.n as { notes?: string } | null)?.notes ?? '';
+    return !now && was ? was : null;
+  });
+}
+
+export async function restorePrebookNotes(ctx: Ctx, id: string) {
+  const previous = await deletedPrebookNotes(ctx.org.id, id);
+  if (!previous) throw new ServiceError('There are no deleted notes to restore.');
+  await updatePrebookNotes(ctx, id, previous, { restored: true });
 }
 
 /** Brings back a line deleted from a pre-book (while the pre-book can still be edited). */
