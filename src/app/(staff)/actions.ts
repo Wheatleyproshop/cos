@@ -4,17 +4,7 @@ import { redirect, RedirectType } from 'next/navigation';
 import { act, type FormState } from '@/lib/action-utils';
 import { logout } from '@/lib/auth';
 import type { BackupProvider, EmailAutomationKey } from '@/db/schema';
-import {
-  addAttachment,
-  addNote,
-  archiveAttachment,
-  createOrder,
-  createTrackingLink,
-  editOrderDetails,
-  recordPayment,
-  setArchived,
-  updateOrderProgress,
-} from '@/lib/services/orders';
+import { addAttachment, addNote, archiveAttachment, createOrder, createTrackingLink, editOrderDetails, recordPayment, setArchived, setOrderDeleted, updateOrderProgress } from '@/lib/services/orders';
 import { acceptQuoteInStore, closeQuote, createApprovalLink, createQuote, editQuote, sendQuote } from '@/lib/services/quotes';
 import {
   changeOwnPassword,
@@ -118,6 +108,13 @@ export async function archiveAttachmentAction(attachmentId: string) {
 
 export async function trackingLinkAction(orderId: string): Promise<FormState> {
   return act('staff', async (ctx) => ({ url: await createTrackingLink(ctx, orderId) }));
+}
+
+export async function deleteOrderAction(orderId: string, deleted: boolean) {
+  return act('manager', async (ctx) => {
+    await setOrderDeleted(ctx, orderId, deleted);
+    return deleted ? 'Order deleted.' : 'Order restored.';
+  });
 }
 
 export async function archiveOrderAction(orderId: string, archived: boolean) {

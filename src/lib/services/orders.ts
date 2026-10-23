@@ -1,4 +1,4 @@
-import { and, eq, isNull } from 'drizzle-orm';
+import { and, desc, eq, isNotNull, isNull } from 'drizzle-orm';
 import { withTenant, type DB } from '@/db';
 import { attachments, customers, orders, payments, type Customer, type Order } from '@/db/schema';
 import { recordEvent } from '../audit';
@@ -6,6 +6,7 @@ import { dispatchMessages, enqueueEmail } from '../email/outbox';
 import type { EmailContext } from '../email/templates';
 import { ALLOWED_UPLOAD_TYPES, MAX_UPLOAD_BYTES, storage } from '../storage';
 import { fitSpec } from '../fit-spec';
+import { money } from '../format';
 import { composeSpec } from '../order-details';
 import { canTransition, journeyFor, statusLabel } from '../status';
 import { newToken } from '../tokens';
@@ -333,10 +334,53 @@ export async function addNote(ctx: Ctx, orderId: string, raw: unknown) {
   });
 }
 
+/**
+ * Deletes an order entered by mistake (or restores it). Nothing is erased: it's archived and also
+ * left out of the Archived list, the customer's history, Performance and exports. Orders with
+ * money recorded against them can't be deleted (archive them, or refund first).
+ */
+export async function setOrderDeleted(ctx: Ctx, orderId: string, deleted: boolean) {
+  requireRole(ctx, 'manager', deleted ? 'delete orders' : 'restore orders');
+  await withTenant(ctx.org.id, async (tx) => {
+    const { order } = await loadOrder(tx, ctx, orderId);
+    if (Boolean(order.removedAt) === deleted) return;
+    if (deleted) {
+      const paid = await paidPence(tx, orderId);
+      if (paid !== 0) {
+        throw new ServiceError(`This order has ${money(paid)} in payments recorded, so it can’t be deleted. Archive it instead, or record the refund first.`);
+      }
+    }
+    const now = new Date();
+    // Restoring returns it to how it was: archived only if it was archived before it was deleted.
+    const wasArchivedBefore = order.archivedAt && order.removedAt && order.archivedAt.getTime() !== order.removedAt.getTime();
+    await tx
+      .update(orders)
+      .set(deleted ? { removedAt: now, archivedAt: order.archivedAt ?? now, updatedAt: now } : { removedAt: null, archivedAt: wasArchivedBefore ? order.archivedAt : null, updatedAt: now })
+      .where(eq(orders.id, orderId));
+    await recordEvent(tx, {
+      organisationId: ctx.org.id, actor: ctx.actor, eventType: deleted ? 'order_deleted' : 'order_undeleted', entityType: 'order',
+      orderId, customerId: order.customerId, newValue: { orderNumber: order.orderNumber },
+    });
+  });
+}
+
+export async function listDeletedOrders(orgId: string) {
+  return withTenant(orgId, (tx) =>
+    tx
+      .select({ id: orders.id, orderNumber: orders.orderNumber, brand: orders.brand, product: orders.product, removedAt: orders.removedAt, customer: customers.name })
+      .from(orders)
+      .innerJoin(customers, eq(customers.id, orders.customerId))
+      .where(isNotNull(orders.removedAt))
+      .orderBy(desc(orders.removedAt))
+      .limit(50),
+  );
+}
+
 export async function setArchived(ctx: Ctx, orderId: string, archived: boolean) {
   requireRole(ctx, 'manager', archived ? 'archive orders' : 'restore orders');
   await withTenant(ctx.org.id, async (tx) => {
     const { order } = await loadOrder(tx, ctx, orderId);
+    if (order.removedAt) throw new ServiceError('This order was deleted. Restore it first.');
     if (Boolean(order.archivedAt) === archived) return;
     await tx.update(orders).set({ archivedAt: archived ? new Date() : null, updatedAt: new Date() }).where(eq(orders.id, orderId));
     await recordEvent(tx, {

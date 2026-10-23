@@ -261,6 +261,8 @@ export const orders = pgTable(
     collectedAt: timestamp('collected_at', { withTimezone: true }),
     lastReminderAt: timestamp('last_reminder_at', { withTimezone: true }),
     archivedAt: timestamp('archived_at', { withTimezone: true }),
+    /** Deleted (entered by mistake): also archived, and left out of history, reports and exports. Restorable. */
+    removedAt: timestamp('removed_at', { withTimezone: true }),
   },
   (t) => [
     uniqueIndex('orders_org_number_unique').on(t.organisationId, t.orderNumber),

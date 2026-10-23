@@ -27,6 +27,7 @@ export async function GET(req: Request) {
       .from(orders)
       .innerJoin(customers, eq(customers.id, orders.customerId))
       .innerJoin(users, eq(users.id, orders.takenByUserId))
+      .where(isNull(orders.removedAt))
       .orderBy(asc(orders.createdAt));
     const jobs = await tx
       .select({ j: workshopJobs, c: customers, takenBy: users.name })

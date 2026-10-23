@@ -30,6 +30,8 @@ export type EventType =
   | 'tracking_link_created'
   | 'order_archived'
   | 'order_restored'
+  | 'order_deleted'
+  | 'order_undeleted'
   | 'quote_created'
   | 'quote_updated'
   | 'quote_sent'
@@ -149,6 +151,10 @@ export function describeEvent(e: Pick<AuditEvent, 'eventType' | 'oldValueJson' |
       return `Ready date ${o.etaDate ? `changed from ${o.etaDate} ` : 'set '}to ${n.etaDate ?? 'none'}${n.reason ? ` — ${n.reason}` : ''}`;
     case 'workshop_item_added':
       return `Added ${n.club}: ${n.work}${n.parts ? ` (${n.parts})` : ''}`;
+    case 'order_deleted':
+      return 'Order deleted';
+    case 'order_undeleted':
+      return 'Deleted order restored';
     case 'customer_deleted':
       return 'Customer deleted';
     case 'customer_restored':

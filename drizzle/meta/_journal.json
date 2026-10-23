@@ -183,6 +183,13 @@
       "when": 1792747456591,
       "tag": "0025_account_removed",
       "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1792748006841,
+      "tag": "0026_order_removed",
+      "breakpoints": true
     }
   ]
 }

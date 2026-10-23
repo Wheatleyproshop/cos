@@ -6,6 +6,7 @@ import {
   approvalLinkAction,
   archiveAttachmentAction,
   archiveOrderAction,
+  deleteOrderAction,
   closeQuoteAction,
   createRequestAction,
   editOrderAction,
@@ -125,7 +126,7 @@ export async function OrderDetail({ staff, number, inModal }: { staff: Staff; nu
       </div>
       <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginBottom: 20, flexWrap: 'wrap' }}>
         <Badge status={o.status} text={statusLabel(o.status)} />
-        {o.archivedAt ? <span className="badge">Archived</span> : null}
+        {o.removedAt ? <span className="badge">Deleted</span> : o.archivedAt ? <span className="badge">Archived</span> : null}
         <span className="muted" style={{ marginTop: 0 }}>
           <Link href={`/customers/${c.id}`}>{c.name}</Link> · <a href={`mailto:${c.email}`}>{c.email}</a>
           {c.phone ? (
@@ -309,15 +310,37 @@ export async function OrderDetail({ staff, number, inModal }: { staff: Staff; nu
       <NoteForm action={addNoteAction.bind(null, o.id)} />
       <Timeline events={d.events} tz={tz} />
 
+      {o.removedAt ? (
+        <div className="notice warn">
+          <b>This order was deleted {stamp(o.removedAt, tz)}</b>
+          It’s left out of order lists, the customer’s history, Performance and exports.
+          {manager ? (
+            <div style={{ marginTop: 8 }}>
+              <ActionButton action={deleteOrderAction.bind(null, o.id, false)} className="btn small">
+                Restore order
+              </ActionButton>
+            </div>
+          ) : null}
+        </div>
+      ) : null}
       <div className="actions">
-        {manager ? (
-          <ActionButton
-            action={archiveOrderAction.bind(null, o.id, !o.archivedAt)}
-            className="btn danger"
-            confirm={o.archivedAt ? undefined : 'Archive this order? It will be hidden from lists but kept with its full history.'}
-          >
-            {o.archivedAt ? 'Restore order' : 'Archive order'}
-          </ActionButton>
+        {manager && !o.removedAt ? (
+          <>
+            <ActionButton
+              action={archiveOrderAction.bind(null, o.id, !o.archivedAt)}
+              className="btn"
+              confirm={o.archivedAt ? undefined : 'Archive this order? It will be hidden from lists but kept with its full history.'}
+            >
+              {o.archivedAt ? 'Restore order' : 'Archive order'}
+            </ActionButton>
+            <ActionButton
+              action={deleteOrderAction.bind(null, o.id, true)}
+              className="btn danger"
+              confirm={`Delete ${o.orderNumber}? Use this for orders entered by mistake: no email is sent, and it’s left out of the customer’s history, Performance and exports. You can restore it from Deleted orders on the All orders page.`}
+            >
+              Delete order
+            </ActionButton>
+          </>
         ) : null}
         <Link href={`/orders/new?customer=${c.id}&from=${o.orderNumber}`} className="btn">
           Reorder this build

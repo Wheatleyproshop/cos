@@ -324,7 +324,8 @@ export async function getPerformance(org: Organisation, period: PeriodKey | Repo
         createdAt: orders.createdAt, readyAt: orders.readyAt, specificationJson: orders.specificationJson,
         takenByUserId: orders.takenByUserId, customerId: orders.customerId,
       })
-      .from(orders);
+      .from(orders)
+      .where(isNull(orders.removedAt));
     const allQuotes = await tx.select({ status: quotes.status, createdAt: quotes.createdAt, sentAt: quotes.sentAt, acceptedAt: quotes.acceptedAt }).from(quotes);
     const staff = await tx.select({ id: users.id, name: users.name }).from(users);
     const statusEvents = allOrders.length

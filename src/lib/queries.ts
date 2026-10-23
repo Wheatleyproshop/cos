@@ -107,7 +107,7 @@ export async function listWork(
       .innerJoin(customers, eq(customers.id, orders.customerId))
       .where(
         and(
-          filter === 'archived' ? sql`${orders.archivedAt} is not null` : isNull(orders.archivedAt),
+          filter === 'archived' ? and(sql`${orders.archivedAt} is not null`, isNull(orders.removedAt)) : isNull(orders.archivedAt),
           opts.scope === 'overview' && filter === 'all'
             ? or(sql`${orders.status} <> 'collected'`, sql`${orders.collectedAt} > ${recent.toISOString()}`)
             : undefined,
@@ -363,7 +363,7 @@ export async function getCustomerDetail(org: Organisation, customerId: string) {
     const [customer] = await tx.select().from(customers).where(eq(customers.id, customerId)).limit(1);
     if (!customer) return null;
     const [orderRows, quoteRows, paidRows] = await Promise.all([
-      tx.select().from(orders).where(eq(orders.customerId, customerId)).orderBy(desc(orders.createdAt)),
+      tx.select().from(orders).where(and(eq(orders.customerId, customerId), isNull(orders.removedAt))).orderBy(desc(orders.createdAt)),
       tx.select().from(quotes).where(eq(quotes.customerId, customerId)).orderBy(desc(quotes.createdAt)),
       tx
         .select({
@@ -371,7 +371,7 @@ export async function getCustomerDetail(org: Organisation, customerId: string) {
         })
         .from(payments)
         .innerJoin(orders, eq(orders.id, payments.orderId))
-        .where(eq(orders.customerId, customerId)),
+        .where(and(eq(orders.customerId, customerId), isNull(orders.removedAt))),
     ]);
     const live = orderRows.filter((o) => !o.archivedAt);
     // Saved builds: distinct specifications this customer has ordered before.

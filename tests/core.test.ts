@@ -173,6 +173,23 @@ describe('order lifecycle', () => {
     expect(msgs.some((m) => m.status === 'sent')).toBe(true); // notify=false ignored for staff
   });
 
+  it('deletes an order entered by mistake (not one with money on it) and restores it', async () => {
+    const { setOrderDeleted, listDeletedOrders } = await import('@/lib/services/orders');
+    const paidOrder = await createOrder(staff, { customerName: 'Paid Pat', email: 'paidpat@example.com', brand: 'PING', product: 'Bag', totalGrossPence: '200', depositPence: '50' });
+    await expect(setOrderDeleted(admin, paidOrder.id, true)).rejects.toThrow(/payments recorded/);
+    const oops = await createOrder(staff, { customerName: 'Oops Olly', email: 'oops@example.com', brand: 'PING', product: 'Typo', totalGrossPence: '10' });
+    await expect(setOrderDeleted(staff, oops.id, true)).rejects.toThrow(/manager/);
+    await setOrderDeleted(admin, oops.id, true);
+    expect((await listDeletedOrders(org.id)).map((o) => o.id)).toContain(oops.id);
+    const [gone] = await withTenant(org.id, (tx) => tx.select().from(orders).where(eq(orders.id, oops.id)));
+    expect(gone.archivedAt).not.toBeNull();
+    await expect(updateOrderProgress(admin, oops.id, { status: 'ordered', etaDate: '2026-12-01', supplierReference: '' })).rejects.toThrow(/Restore/);
+    await setOrderDeleted(admin, oops.id, false);
+    const [back] = await withTenant(org.id, (tx) => tx.select().from(orders).where(eq(orders.id, oops.id)));
+    expect(back.archivedAt).toBeNull();
+    expect(back.removedAt).toBeNull();
+  });
+
   it('blocks invalid transitions', async () => {
     const [o] = await withTenant(org.id, (tx) => tx.select().from(orders).where(eq(orders.orderNumber, 'COS-1049')));
     await expect(updateOrderProgress(staff, o.id, { status: 'collected', etaDate: o.etaDate ?? '', supplierReference: '' })).rejects.toThrow(
