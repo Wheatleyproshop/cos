@@ -1,6 +1,6 @@
 import { and, desc, eq, isNotNull } from 'drizzle-orm';
 import { systemDb, withTenant, type DB } from '@/db';
-import { customers, organisations, orders, quotes, type Customer, type Organisation, type Quote } from '@/db/schema';
+import { auditEvents, customers, organisations, orders, quotes, type Customer, type Organisation, type Quote } from '@/db/schema';
 import { recordEvent, type Actor } from '../audit';
 import { dispatchMessages, enqueueEmail } from '../email/outbox';
 import { proofOf } from '../proofs';
@@ -9,9 +9,9 @@ import { todayInTz } from '../format';
 import { composeSpec } from '../order-details';
 import { inHouse, journeyFor } from '../status';
 import { appUrl, hashToken, newToken, signValue } from '../tokens';
-import { parse, quoteCreateSchema, quoteEditSchema } from '../validation';
+import { noteSchema, parse, quoteCreateSchema, quoteEditSchema } from '../validation';
 import { findOrCreateCustomer, issueTrackingLink, nextNumber, requireRole, ServiceError, type Ctx } from './common';
-import { orderEmailContext } from './orders';
+import { noteDeletedState, orderEmailContext } from './orders';
 
 async function loadQuote(tx: DB, orgId: string, quoteId: string) {
   const [row] = await tx
@@ -365,6 +365,71 @@ export async function listDeletedQuotes(orgId: string) {
       .orderBy(desc(quotes.archivedAt))
       .limit(50),
   );
+}
+
+/* ───────────────────────────── Notes ───────────────────────────── */
+
+/** Staff-only note on the quote's activity timeline. */
+export async function addQuoteNote(ctx: Ctx, quoteId: string, raw: unknown) {
+  const { note } = parse(noteSchema, raw);
+  await withTenant(ctx.org.id, async (tx) => {
+    const { quote, customer } = await loadQuote(tx, ctx.org.id, quoteId);
+    if (quote.archivedAt) throw new ServiceError('This quote was deleted. Restore it first.');
+    await recordEvent(tx, {
+      organisationId: ctx.org.id, actor: ctx.actor, eventType: 'note_added', entityType: 'quote', quoteId, customerId: customer.id, newValue: { note },
+    });
+  });
+}
+
+/** Deletes (or restores) a timeline note: it's hidden, never erased. The note's author or a manager. */
+export async function setQuoteNoteDeleted(ctx: Ctx, quoteId: string, noteEventId: string, deleted: boolean) {
+  await withTenant(ctx.org.id, async (tx) => {
+    const { customer } = await loadQuote(tx, ctx.org.id, quoteId);
+    const [note] = await tx
+      .select()
+      .from(auditEvents)
+      .where(and(eq(auditEvents.id, noteEventId), eq(auditEvents.quoteId, quoteId), eq(auditEvents.eventType, 'note_added')))
+      .limit(1);
+    if (!note) throw new ServiceError('Note not found.');
+    if (note.actorUserId !== ctx.userId) requireRole(ctx, 'manager', deleted ? "delete another staff member's note" : "restore another staff member's note");
+    if ((await noteDeletedState(tx, noteEventId)) === deleted) return;
+    await recordEvent(tx, {
+      organisationId: ctx.org.id, actor: ctx.actor, eventType: deleted ? 'note_deleted' : 'note_restored', entityType: 'quote',
+      quoteId, customerId: customer.id, metadata: { noteEventId },
+    });
+  });
+}
+
+/** Edit or delete (empty) the quote's internal notes. The previous text stays in the audit trail. */
+export async function updateQuoteNotes(ctx: Ctx, quoteId: string, rawNotes: unknown, opts: { restored?: boolean } = {}) {
+  const notes = String(rawNotes ?? '').trim().slice(0, 4000);
+  await withTenant(ctx.org.id, async (tx) => {
+    const { quote, customer } = await loadQuote(tx, ctx.org.id, quoteId);
+    if (quote.archivedAt) throw new ServiceError('This quote was deleted. Restore it first.');
+    if (notes === quote.internalNotes) return;
+    await tx.update(quotes).set({ internalNotes: notes, updatedAt: new Date() }).where(eq(quotes.id, quoteId));
+    await recordEvent(tx, {
+      organisationId: ctx.org.id, actor: ctx.actor, eventType: 'quote_notes_changed', entityType: 'quote', quoteId, customerId: customer.id,
+      oldValue: { notes: quote.internalNotes }, newValue: { notes, ...(opts.restored ? { restored: true } : {}) },
+    });
+  });
+}
+
+/** Puts back internal notes that were just deleted. */
+export async function restoreQuoteNotes(ctx: Ctx, quoteId: string) {
+  const previous = await withTenant(ctx.org.id, async (tx) => {
+    const [last] = await tx
+      .select({ o: auditEvents.oldValueJson, n: auditEvents.newValueJson })
+      .from(auditEvents)
+      .where(and(eq(auditEvents.quoteId, quoteId), eq(auditEvents.eventType, 'quote_notes_changed')))
+      .orderBy(desc(auditEvents.createdAt))
+      .limit(1);
+    const was = (last?.o as { notes?: string } | null)?.notes ?? '';
+    const now = (last?.n as { notes?: string } | null)?.notes ?? '';
+    return !now && was ? was : null;
+  });
+  if (!previous) throw new ServiceError('There are no deleted notes to restore.');
+  await updateQuoteNotes(ctx, quoteId, previous, { restored: true });
 }
 
 /* ───────────────────────── Public (tokenised) access ───────────────────────── */

@@ -294,6 +294,21 @@ describe('quotes', () => {
     await expect(setQuoteDeleted(admin, q.id, true)).rejects.toThrow(/now an order/);
   });
 
+  it('adds, deletes and restores quote notes and internal notes', async () => {
+    const qs = await import('@/lib/services/quotes');
+    const q = await createQuote(admin, { customerName: 'Note Quote', email: 'notequote@example.com', brand: 'PING', product: 'Bag', totalGrossPence: '10', validUntil: '', internalNotes: 'Trade price check' });
+    await qs.addQuoteNote(staff, q.id, { note: 'Customer prefers navy' });
+    const [note] = await withTenant(org.id, (tx) => tx.select().from(auditEvents).where(and(eq(auditEvents.quoteId, q.id), eq(auditEvents.eventType, 'note_added'))));
+    await qs.setQuoteNoteDeleted(staff, q.id, note.id, true); // author can delete their own
+    await expect(qs.setQuoteNoteDeleted(staff, q.id, note.id, true)).resolves.toBeUndefined(); // already deleted: no-op
+    await qs.setQuoteNoteDeleted(admin, q.id, note.id, false);
+    const notes = async () => (await withTenant(org.id, (tx) => tx.select().from(quotes).where(eq(quotes.id, q.id))))[0].internalNotes;
+    await qs.updateQuoteNotes(staff, q.id, '');
+    expect(await notes()).toBe('');
+    await qs.restoreQuoteNotes(staff, q.id);
+    expect(await notes()).toBe('Trade price check');
+  });
+
   it('creates and sends a quote with a fresh approval link', async () => {
     const q = await createQuote(
       admin,

@@ -5,7 +5,19 @@ import { act, type FormState } from '@/lib/action-utils';
 import { logout } from '@/lib/auth';
 import type { BackupProvider, EmailAutomationKey } from '@/db/schema';
 import { addAttachment, addNote, archiveAttachment, createOrder, createTrackingLink, editOrderDetails, recordPayment, restoreAttachment, setArchived, setNoteDeleted, setOrderDeleted, updateOrderProgress, voidPayment } from '@/lib/services/orders';
-import { acceptQuoteInStore, closeQuote, createApprovalLink, createQuote, editQuote, sendQuote, setQuoteDeleted } from '@/lib/services/quotes';
+import {
+  acceptQuoteInStore,
+  addQuoteNote,
+  closeQuote,
+  createApprovalLink,
+  createQuote,
+  editQuote,
+  restoreQuoteNotes,
+  sendQuote,
+  setQuoteDeleted,
+  setQuoteNoteDeleted,
+  updateQuoteNotes,
+} from '@/lib/services/quotes';
 import {
   changeOwnPassword,
   createUser,
@@ -705,6 +717,41 @@ export async function clearWorkshopNotesAction(jobId: string) {
 export async function restoreWorkshopNotesAction(jobId: string) {
   return act('staff', async (ctx) => {
     await restoreJobNotes(ctx, jobId);
+    return 'Notes restored.';
+  });
+}
+
+export async function addQuoteNoteAction(quoteId: string, _: FormState, fd: FormData) {
+  return act('staff', async (ctx) => {
+    await addQuoteNote(ctx, quoteId, obj(fd));
+    return 'Note added.';
+  }, fd);
+}
+
+export async function deleteQuoteNoteAction(quoteId: string, noteEventId: string, deleted: boolean) {
+  return act('staff', async (ctx) => {
+    await setQuoteNoteDeleted(ctx, quoteId, noteEventId, deleted);
+    return deleted ? 'Note deleted.' : 'Note restored.';
+  });
+}
+
+export async function quoteNotesAction(quoteId: string, _: FormState, fd: FormData) {
+  return act('staff', async (ctx) => {
+    await updateQuoteNotes(ctx, quoteId, fd.get('notes'));
+    return 'Notes saved.';
+  }, fd);
+}
+
+export async function clearQuoteNotesAction(quoteId: string) {
+  return act('staff', async (ctx) => {
+    await updateQuoteNotes(ctx, quoteId, '');
+    return 'Notes deleted.';
+  });
+}
+
+export async function restoreQuoteNotesAction(quoteId: string) {
+  return act('staff', async (ctx) => {
+    await restoreQuoteNotes(ctx, quoteId);
     return 'Notes restored.';
   });
 }

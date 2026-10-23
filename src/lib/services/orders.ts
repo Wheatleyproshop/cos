@@ -371,7 +371,7 @@ export async function setNoteDeleted(ctx: Ctx, orderId: string, noteEventId: str
 }
 
 /** Whether a note is currently deleted: the latest delete/restore entry for it wins. */
-async function noteDeletedState(tx: DB, noteEventId: string) {
+export async function noteDeletedState(tx: DB, noteEventId: string) {
   const [last] = await tx
     .select({ type: auditEvents.eventType })
     .from(auditEvents)

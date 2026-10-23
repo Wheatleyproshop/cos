@@ -11,6 +11,11 @@ import {
   deleteOrderAction,
   voidPaymentAction,
   deleteQuoteAction,
+  addQuoteNoteAction,
+  deleteQuoteNoteAction,
+  quoteNotesAction,
+  clearQuoteNotesAction,
+  restoreQuoteNotesAction,
   closeQuoteAction,
   createRequestAction,
   editOrderAction,
@@ -35,6 +40,7 @@ import { ActionButton, LinkGenerator } from './forms';
 import { AcceptInStoreForm, EditQuoteForm } from './misc-forms';
 import { AttachmentForm, CreateRequestForm, EditOrderForm, NoteForm, PaymentForm, ProgressForm, VoidPaymentForm, type RequestDefaults } from './order-forms';
 import { SpecView } from './spec-view';
+import { InternalNotesForm } from './workshop-forms';
 import { Badge, DetailBox, MessageBadge, Timeline } from './views';
 
 /** Ball Printing proof and the customer's original artwork, for staff. */
@@ -409,6 +415,9 @@ export async function QuoteDetail({ staff, number, inModal }: { staff: Staff; nu
   const { quote: q, customer: c } = d;
   const tz = staff.org.timezone;
   const open = ['draft', 'sent'].includes(q.status) && !q.archivedAt;
+  const lastNotes = d.events.find((e) => e.eventType === 'quote_notes_changed');
+  const quoteNotesCanRestore =
+    !q.internalNotes && Boolean((lastNotes?.oldValueJson as { notes?: string } | null)?.notes) && !(lastNotes?.newValueJson as { notes?: string } | null)?.notes;
   const onlineDesign = Boolean((asBallPrintSpec(q.specificationJson) ?? asCrestSpec(q.specificationJson))?.submittedOnline);
 
   return (
@@ -459,6 +468,24 @@ export async function QuoteDetail({ staff, number, inModal }: { staff: Staff; nu
           {onlineDesign ? `${c.name} (online)` : d.createdByName}
         </DetailBox>
         <DetailBox label="Sent to customer">{q.sentAt ? stamp(q.sentAt, tz) : 'Not sent yet'}</DetailBox>
+        <div className="detailbox">
+          <small>Internal notes (staff only)</small>
+          {q.internalNotes ? <div style={{ whiteSpace: 'pre-line' }}>{q.internalNotes}</div> : <div className="muted">{quoteNotesCanRestore ? 'Notes deleted.' : 'None.'}</div>}
+          {!q.archivedAt ? (
+            <div className="note-tools">
+              <InternalNotesForm action={quoteNotesAction.bind(null, q.id)} notes={q.internalNotes} />
+              {q.internalNotes ? (
+                <ActionButton action={clearQuoteNotesAction.bind(null, q.id)} className="linkbtn danger" confirm="Delete the internal notes on this quote? You can restore them straight after.">
+                  Delete
+                </ActionButton>
+              ) : quoteNotesCanRestore ? (
+                <ActionButton action={restoreQuoteNotesAction.bind(null, q.id)} className="linkbtn">
+                  Restore notes
+                </ActionButton>
+              ) : null}
+            </div>
+          ) : null}
+        </div>
       </div>
 
       {open ? (
@@ -510,7 +537,15 @@ export async function QuoteDetail({ staff, number, inModal }: { staff: Staff; nu
       ) : null}
 
       <h3>Activity timeline</h3>
-      <Timeline events={d.events} tz={tz} />
+      {!q.archivedAt ? <NoteForm action={addQuoteNoteAction.bind(null, q.id)} /> : null}
+      <Timeline
+        events={d.events}
+        tz={tz}
+        notes={{
+          canEdit: (n) => !q.archivedAt && (n.actorUserId === staff.id || hasRole(staff, 'manager')),
+          action: (id, del) => deleteQuoteNoteAction.bind(null, q.id, id, del),
+        }}
+      />
 
       {open ? (
         <div className="actions">

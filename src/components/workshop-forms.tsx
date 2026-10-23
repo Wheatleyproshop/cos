@@ -185,8 +185,8 @@ export function AddWorkshopItemForm({ action }: { action: BoundAction }) {
   );
 }
 
-/** Edit a job's internal notes in place. */
-export function WorkshopNotesForm({ action, notes }: { action: BoundAction; notes: string }) {
+/** Edit internal notes in place (workshop jobs, quotes). */
+export function InternalNotesForm({ action, notes }: { action: BoundAction; notes: string }) {
   const [open, setOpen] = useState(false);
   if (!open) {
     return (

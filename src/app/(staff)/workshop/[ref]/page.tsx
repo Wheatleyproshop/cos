@@ -5,7 +5,7 @@ import { ActionButton } from '@/components/forms';
 import { BuildTable } from '@/components/spec-view';
 import { MessageBadge } from '@/components/views';
 import { PageHeader } from '@/components/views';
-import { AddWorkshopItemForm, WorkshopNotesForm, WorkshopProgressForm } from '@/components/workshop-forms';
+import { AddWorkshopItemForm, InternalNotesForm, WorkshopProgressForm } from '@/components/workshop-forms';
 import { describeEvent, templateName } from '@/lib/audit';
 import { hasRole, requireStaff } from '@/lib/auth';
 import { money, stamp, todayInTz } from '@/lib/format';
@@ -98,7 +98,7 @@ export default async function WorkshopJobPage({ params }: { params: Promise<{ re
             {j.notes ? <div style={{ whiteSpace: 'pre-line' }}>{j.notes}</div> : <div className="muted">{notesCanRestore ? 'Notes deleted.' : 'None.'}</div>}
             {!deleted ? (
               <div className="note-tools">
-                {editable || j.notes ? <WorkshopNotesForm action={workshopNotesAction.bind(null, j.id)} notes={j.notes} /> : null}
+                {editable || j.notes ? <InternalNotesForm action={workshopNotesAction.bind(null, j.id)} notes={j.notes} /> : null}
                 {j.notes ? (
                   <ActionButton
                     action={clearWorkshopNotesAction.bind(null, j.id)}

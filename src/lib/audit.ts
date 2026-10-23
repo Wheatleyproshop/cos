@@ -38,6 +38,7 @@ export type EventType =
   | 'order_undeleted'
   | 'quote_created'
   | 'quote_updated'
+  | 'quote_notes_changed'
   | 'quote_sent'
   | 'quote_link_created'
   | 'quote_accepted'
@@ -234,6 +235,8 @@ export function describeEvent(e: Pick<AuditEvent, 'eventType' | 'oldValueJson' |
       return 'Order restored from archive';
     case 'quote_created':
       return 'Quote created';
+    case 'quote_notes_changed':
+      return n.restored ? 'Internal notes restored' : n.notes ? (o.notes ? 'Internal notes edited' : 'Internal notes added') : 'Internal notes deleted';
     case 'quote_updated':
       return `Quote updated: ${Object.keys(n).map(fieldLabel).join(', ')}`;
     case 'quote_sent':
