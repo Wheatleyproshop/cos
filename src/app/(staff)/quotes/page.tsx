@@ -3,10 +3,13 @@ import Link from 'next/link';
 import { Suspense } from 'react';
 import { RowLink, SearchBox } from '@/components/chrome';
 import { Badge, PageHeader } from '@/components/views';
-import { requireStaff } from '@/lib/auth';
+import { ActionButton } from '@/components/forms';
+import { hasRole, requireStaff } from '@/lib/auth';
 import { money, niceDate, stamp } from '@/lib/format';
 import { listQuotes } from '@/lib/queries';
+import { listDeletedQuotes } from '@/lib/services/quotes';
 import { QUOTE_STATUS_LABELS } from '@/lib/status';
+import { deleteQuoteAction } from '../actions';
 
 export const metadata: Metadata = { title: 'Quotes' };
 
@@ -14,7 +17,7 @@ export default async function QuotesPage({ searchParams }: { searchParams: Promi
   const staff = await requireStaff();
   const sp = await searchParams;
   const status = sp.status === 'closed' || sp.status === 'all' ? sp.status : 'open';
-  const rows = await listQuotes(staff.org, { q: sp.q, status });
+  const [rows, deleted] = await Promise.all([listQuotes(staff.org, { q: sp.q, status }), listDeletedQuotes(staff.organisationId)]);
   const tz = staff.org.timezone;
   return (
     <>
@@ -99,6 +102,32 @@ export default async function QuotesPage({ searchParams }: { searchParams: Promi
           </tbody>
         </table>
       </div>
+      {deleted.length ? (
+        <section className="panel" style={{ marginTop: 18 }}>
+          <details className="section">
+            <summary>Deleted quotes ({deleted.length})</summary>
+            <ul className="attention">
+              {deleted.map((d) => (
+                <li key={d.id}>
+                  <span>
+                    <Link href={`/quotes/${d.quoteNumber}`} className="rowtitle" scroll={false}>
+                      {d.quoteNumber} · {d.customer}
+                    </Link>
+                    <div className="muted">
+                      {d.brand} {d.product} · deleted {stamp(d.archivedAt!, tz)}
+                    </div>
+                  </span>
+                  {hasRole(staff, 'manager') ? (
+                    <ActionButton action={deleteQuoteAction.bind(null, d.id, false)} className="btn small">
+                      Restore
+                    </ActionButton>
+                  ) : null}
+                </li>
+              ))}
+            </ul>
+          </details>
+        </section>
+      ) : null}
     </>
   );
 }

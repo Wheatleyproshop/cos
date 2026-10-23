@@ -364,7 +364,7 @@ export async function getCustomerDetail(org: Organisation, customerId: string) {
     if (!customer) return null;
     const [orderRows, quoteRows, paidRows] = await Promise.all([
       tx.select().from(orders).where(and(eq(orders.customerId, customerId), isNull(orders.removedAt))).orderBy(desc(orders.createdAt)),
-      tx.select().from(quotes).where(eq(quotes.customerId, customerId)).orderBy(desc(quotes.createdAt)),
+      tx.select().from(quotes).where(and(eq(quotes.customerId, customerId), isNull(quotes.archivedAt))).orderBy(desc(quotes.createdAt)),
       tx
         .select({
           total: sql<number>`coalesce(sum(case when ${payments.kind} = 'refund' then -${payments.amountPence} else ${payments.amountPence} end),0)::int`,

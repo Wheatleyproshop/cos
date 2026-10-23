@@ -5,7 +5,7 @@ import { act, type FormState } from '@/lib/action-utils';
 import { logout } from '@/lib/auth';
 import type { BackupProvider, EmailAutomationKey } from '@/db/schema';
 import { addAttachment, addNote, archiveAttachment, createOrder, createTrackingLink, editOrderDetails, recordPayment, setArchived, setOrderDeleted, updateOrderProgress } from '@/lib/services/orders';
-import { acceptQuoteInStore, closeQuote, createApprovalLink, createQuote, editQuote, sendQuote } from '@/lib/services/quotes';
+import { acceptQuoteInStore, closeQuote, createApprovalLink, createQuote, editQuote, sendQuote, setQuoteDeleted } from '@/lib/services/quotes';
 import {
   changeOwnPassword,
   createUser,
@@ -625,5 +625,12 @@ export async function deleteCustomerAction(id: string, deleted: boolean) {
   return act('manager', async (ctx) => {
     await setCustomerDeleted(ctx, id, deleted);
     return deleted ? 'Customer deleted.' : 'Customer restored.';
+  });
+}
+
+export async function deleteQuoteAction(quoteId: string, deleted: boolean) {
+  return act('manager', async (ctx) => {
+    await setQuoteDeleted(ctx, quoteId, deleted);
+    return deleted ? 'Quote deleted.' : 'Quote restored.';
   });
 }

@@ -222,6 +222,24 @@ describe('quotes', () => {
     expect(sent).toHaveLength(0);
   });
 
+  it('deletes a quote entered by mistake (its link stops working) and restores it', async () => {
+    const { setQuoteDeleted, listDeletedQuotes, createApprovalLink } = await import('@/lib/services/quotes');
+    const q = await createQuote(admin, { customerName: 'Quote Oops', email: 'qoops@example.com', brand: 'PING', product: 'Wrong', totalGrossPence: '10', validUntil: '' });
+    const link = await createApprovalLink(admin, q.id);
+    const token = link.split('/q/')[1];
+    expect(await findQuoteByToken(token)).not.toBeNull();
+    await expect(setQuoteDeleted(staff, q.id, true)).rejects.toThrow(/manager/);
+    await setQuoteDeleted(admin, q.id, true);
+    expect(await findQuoteByToken(token)).toBeNull();
+    expect((await listDeletedQuotes(org.id)).map((x) => x.id)).toContain(q.id);
+    await setQuoteDeleted(admin, q.id, false);
+    expect((await listDeletedQuotes(org.id)).map((x) => x.id)).not.toContain(q.id);
+    // Accepted quotes are orders now.
+    const { acceptQuoteInStore } = await import('@/lib/services/quotes');
+    await acceptQuoteInStore(admin, q.id, 'Quote Oops');
+    await expect(setQuoteDeleted(admin, q.id, true)).rejects.toThrow(/now an order/);
+  });
+
   it('creates and sends a quote with a fresh approval link', async () => {
     const q = await createQuote(
       admin,

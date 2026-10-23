@@ -1,4 +1,4 @@
-import { and, eq } from 'drizzle-orm';
+import { and, desc, eq, isNotNull } from 'drizzle-orm';
 import { systemDb, withTenant, type DB } from '@/db';
 import { customers, organisations, orders, quotes, type Customer, type Organisation, type Quote } from '@/db/schema';
 import { recordEvent, type Actor } from '../audit';
@@ -10,7 +10,7 @@ import { composeSpec } from '../order-details';
 import { inHouse, journeyFor } from '../status';
 import { appUrl, hashToken, newToken, signValue } from '../tokens';
 import { parse, quoteCreateSchema, quoteEditSchema } from '../validation';
-import { findOrCreateCustomer, issueTrackingLink, nextNumber, ServiceError, type Ctx } from './common';
+import { findOrCreateCustomer, issueTrackingLink, nextNumber, requireRole, ServiceError, type Ctx } from './common';
 import { orderEmailContext } from './orders';
 
 async function loadQuote(tx: DB, orgId: string, quoteId: string) {
@@ -331,6 +331,42 @@ export async function acceptQuoteInStore(ctx: Ctx, quoteId: string, acceptedName
   return order;
 }
 
+/**
+ * Deletes a quote entered by mistake (or restores it). Nothing is erased: it's hidden from quote
+ * lists, the customer's page, the Overview and Performance, and its approval link stops working.
+ * Accepted quotes have become orders, so delete the order instead.
+ */
+export async function setQuoteDeleted(ctx: Ctx, quoteId: string, deleted: boolean) {
+  requireRole(ctx, 'manager', deleted ? 'delete quotes' : 'restore quotes');
+  await withTenant(ctx.org.id, async (tx) => {
+    const { quote, customer } = await loadQuote(tx, ctx.org.id, quoteId);
+    if (Boolean(quote.archivedAt) === deleted) return;
+    if (deleted && quote.status === 'accepted') {
+      throw new ServiceError('This quote was accepted and is now an order. Delete or archive the order instead.');
+    }
+    await tx
+      .update(quotes)
+      .set(deleted ? { archivedAt: new Date(), tokenHash: null, updatedAt: new Date() } : { archivedAt: null, updatedAt: new Date() })
+      .where(eq(quotes.id, quoteId));
+    await recordEvent(tx, {
+      organisationId: ctx.org.id, actor: ctx.actor, eventType: deleted ? 'quote_deleted' : 'quote_restored', entityType: 'quote',
+      quoteId, customerId: customer.id, newValue: { quoteNumber: quote.quoteNumber },
+    });
+  });
+}
+
+export async function listDeletedQuotes(orgId: string) {
+  return withTenant(orgId, (tx) =>
+    tx
+      .select({ id: quotes.id, quoteNumber: quotes.quoteNumber, brand: quotes.brand, product: quotes.product, archivedAt: quotes.archivedAt, customer: customers.name })
+      .from(quotes)
+      .innerJoin(customers, eq(customers.id, quotes.customerId))
+      .where(isNotNull(quotes.archivedAt))
+      .orderBy(desc(quotes.archivedAt))
+      .limit(50),
+  );
+}
+
 /* ───────────────────────── Public (tokenised) access ───────────────────────── */
 
 export type PublicQuote = { org: Organisation; quote: Quote; customer: Customer };
@@ -352,7 +388,7 @@ export async function findQuoteByToken(token: string): Promise<PublicQuote | nul
       .innerJoin(customers, eq(customers.id, quotes.customerId))
       .where(eq(quotes.id, hit.quoteId))
       .limit(1);
-    return row ? { org, ...row } : null;
+    return row && !row.quote.archivedAt ? { org, ...row } : null;
   });
 }
 

@@ -7,6 +7,7 @@ import {
   archiveAttachmentAction,
   archiveOrderAction,
   deleteOrderAction,
+  deleteQuoteAction,
   closeQuoteAction,
   createRequestAction,
   editOrderAction,
@@ -468,6 +469,29 @@ export async function QuoteDetail({ staff, number, inModal }: { staff: Staff; nu
           </ActionButton>
           <ActionButton action={closeQuoteAction.bind(null, q.id, 'cancelled')} className="btn danger" confirm="Cancel this quote? The approval link will stop working.">
             Cancel quote
+          </ActionButton>
+        </div>
+      ) : null}
+      {q.archivedAt ? (
+        <div className="notice warn">
+          <b>This quote was deleted {stamp(q.archivedAt, tz)}</b>
+          It’s hidden from quote lists, the customer’s page and Performance, and its approval link no longer works.
+          {hasRole(staff, 'manager') ? (
+            <div style={{ marginTop: 8 }}>
+              <ActionButton action={deleteQuoteAction.bind(null, q.id, false)} className="btn small">
+                Restore quote
+              </ActionButton>
+            </div>
+          ) : null}
+        </div>
+      ) : hasRole(staff, 'manager') && q.status !== 'accepted' ? (
+        <div className="actions">
+          <ActionButton
+            action={deleteQuoteAction.bind(null, q.id, true)}
+            className="btn danger"
+            confirm={`Delete ${q.quoteNumber}? Use this for quotes entered by mistake: no email is sent, the approval link stops working, and you can restore it from Deleted quotes on the Quotes page.`}
+          >
+            Delete quote
           </ActionButton>
         </div>
       ) : null}

@@ -40,6 +40,8 @@ export type EventType =
   | 'quote_converted'
   | 'quote_declined'
   | 'quote_cancelled'
+  | 'quote_deleted'
+  | 'quote_restored'
   | 'email_queued'
   | 'email_sent'
   | 'email_delivered'
@@ -151,6 +153,10 @@ export function describeEvent(e: Pick<AuditEvent, 'eventType' | 'oldValueJson' |
       return `Ready date ${o.etaDate ? `changed from ${o.etaDate} ` : 'set '}to ${n.etaDate ?? 'none'}${n.reason ? ` — ${n.reason}` : ''}`;
     case 'workshop_item_added':
       return `Added ${n.club}: ${n.work}${n.parts ? ` (${n.parts})` : ''}`;
+    case 'quote_deleted':
+      return 'Quote deleted';
+    case 'quote_restored':
+      return 'Deleted quote restored';
     case 'order_deleted':
       return 'Order deleted';
     case 'order_undeleted':
