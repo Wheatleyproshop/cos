@@ -5,6 +5,7 @@ import {
   addNoteAction,
   approvalLinkAction,
   archiveAttachmentAction,
+  restoreAttachmentAction,
   archiveOrderAction,
   deleteOrderAction,
   voidPaymentAction,
@@ -268,8 +269,12 @@ export async function OrderDetail({ staff, number, inModal }: { staff: Staff; nu
                   {stamp(a.createdAt, tz)}
                 </div>
               </div>
-              <ActionButton action={archiveAttachmentAction.bind(null, a.id)} className="btn small" confirm={`Archive ${a.filename}? It stays in the audit trail.`}>
-                Archive
+              <ActionButton
+                action={archiveAttachmentAction.bind(null, a.id)}
+                className="btn small danger"
+                confirm={`Delete ${a.filename}? The customer won’t see it any more. You can restore it from Deleted attachments.`}
+              >
+                Delete
               </ActionButton>
             </li>
           ))}
@@ -277,6 +282,28 @@ export async function OrderDetail({ staff, number, inModal }: { staff: Staff; nu
       ) : (
         <p className="muted">Attach supplier confirmations, fitting sheets, invoices, screenshots or product photos.</p>
       )}
+      {d.deletedAttachments.length ? (
+        <details className="section">
+          <summary>Deleted attachments ({d.deletedAttachments.length})</summary>
+          <ul className="attention">
+            {d.deletedAttachments.map(({ a, by }) => (
+              <li key={a.id}>
+                <div>
+                  <a href={`/api/attachments/${a.id}`} target="_blank" rel="noopener">
+                    {a.filename}
+                  </a>
+                  <div className="muted">
+                    {titleCase(a.category)} · uploaded by {by} · deleted {stamp(a.archivedAt!, tz)}
+                  </div>
+                </div>
+                <ActionButton action={restoreAttachmentAction.bind(null, a.id)} className="btn small">
+                  Restore
+                </ActionButton>
+              </li>
+            ))}
+          </ul>
+        </details>
+      ) : null}
       {!o.archivedAt ? <AttachmentForm action={uploadAttachmentAction.bind(null, o.id)} /> : null}
 
       <h3>Customer communication</h3>

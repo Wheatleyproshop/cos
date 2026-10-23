@@ -480,6 +480,21 @@ export async function addAttachment(ctx: Ctx, orderId: string, file: File, rawMe
   });
 }
 
+/** Brings back a deleted attachment (the uploader, or a manager). */
+export async function restoreAttachment(ctx: Ctx, attachmentId: string) {
+  await withTenant(ctx.org.id, async (tx) => {
+    const [a] = await tx.select().from(attachments).where(eq(attachments.id, attachmentId)).limit(1);
+    if (!a?.archivedAt) return;
+    if (a.uploadedByUserId !== ctx.userId) requireRole(ctx, 'manager', "restore another staff member's attachment");
+    await tx.update(attachments).set({ archivedAt: null }).where(eq(attachments.id, attachmentId));
+    await recordEvent(tx, {
+      organisationId: ctx.org.id, actor: ctx.actor, eventType: 'attachment_restored', entityType: 'order', orderId: a.orderId,
+      newValue: { attachmentId: a.id, filename: a.filename },
+    });
+  });
+}
+
+/** Deletes an attachment (kept in storage and restorable; customers can no longer see it). */
 export async function archiveAttachment(ctx: Ctx, attachmentId: string) {
   await withTenant(ctx.org.id, async (tx) => {
     const [a] = await tx
@@ -488,7 +503,7 @@ export async function archiveAttachment(ctx: Ctx, attachmentId: string) {
       .where(and(eq(attachments.id, attachmentId), isNull(attachments.archivedAt)))
       .limit(1);
     if (!a) throw new ServiceError('Attachment not found.');
-    if (a.uploadedByUserId !== ctx.userId) requireRole(ctx, 'manager', "archive another staff member's attachment");
+    if (a.uploadedByUserId !== ctx.userId) requireRole(ctx, 'manager', "delete another staff member's attachment");
     await tx.update(attachments).set({ archivedAt: new Date() }).where(eq(attachments.id, attachmentId));
     await recordEvent(tx, {
       organisationId: ctx.org.id,

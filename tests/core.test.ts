@@ -2,7 +2,7 @@ import { and, eq, sql } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { setDatabaseHandle, systemDb, withTenant } from '@/db';
 import { runMigrations } from '@/db/migrate';
-import { auditEvents, customers, messages, orders, organisations, payments, quotes, users, type Organisation } from '@/db/schema';
+import { attachments, auditEvents, customers, messages, orders, organisations, payments, quotes, users, type Organisation } from '@/db/schema';
 import { DEMO_QUOTE_TOKEN, seedDemo } from '@/db/seed';
 import { orderAttention } from '@/lib/attention';
 import { staffActor } from '@/lib/audit';
@@ -171,6 +171,22 @@ describe('order lifecycle', () => {
       tx.select().from(messages).where(and(eq(messages.orderId, o.id), eq(messages.templateType, 'eta_revised'))),
     );
     expect(msgs.some((m) => m.status === 'sent')).toBe(true); // notify=false ignored for staff
+  });
+
+  it('deletes an attachment (only the uploader or a manager) and restores it', async () => {
+    const { addAttachment, archiveAttachment, restoreAttachment } = await import('@/lib/services/orders');
+    const [o] = await withTenant(org.id, (tx) => tx.select().from(orders).where(eq(orders.orderNumber, 'COS-1048')));
+    const pdf = new File([new TextEncoder().encode('%PDF-1.4 test')], 'confirmation.pdf', { type: 'application/pdf' });
+    await addAttachment(admin, o.id, pdf, { category: 'other', visibility: 'internal' });
+    const [att] = await withTenant(org.id, (tx) =>
+      tx.select().from(attachments).where(and(eq(attachments.orderId, o.id), eq(attachments.filename, 'confirmation.pdf'))),
+    );
+    await expect(archiveAttachment(staff, att.id)).rejects.toThrow(/manager/);
+    await archiveAttachment(admin, att.id);
+    const deleted = async () => (await withTenant(org.id, (tx) => tx.select().from(attachments).where(eq(attachments.id, att.id))))[0].archivedAt;
+    expect(await deleted()).not.toBeNull();
+    await restoreAttachment(admin, att.id);
+    expect(await deleted()).toBeNull();
   });
 
   it('voids a payment recorded by mistake: it stays on record but no longer counts', async () => {

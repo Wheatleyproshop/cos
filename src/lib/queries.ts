@@ -233,7 +233,7 @@ export async function getOrderDetail(org: Organisation, orderNumber: string) {
         .select({ a: attachments, by: users.name })
         .from(attachments)
         .innerJoin(users, eq(users.id, attachments.uploadedByUserId))
-        .where(and(eq(attachments.orderId, id), isNull(attachments.archivedAt)))
+        .where(eq(attachments.orderId, id))
         .orderBy(desc(attachments.createdAt)),
       tx
         .select({
@@ -261,7 +261,8 @@ export async function getOrderDetail(org: Organisation, orderNumber: string) {
     return {
       ...row,
       payments: paymentRows,
-      attachments: attachmentRows,
+      attachments: attachmentRows.filter(({ a }) => !a.archivedAt),
+      deletedAttachments: attachmentRows.filter(({ a }) => a.archivedAt),
       messages: messageRows,
       events,
       paid,

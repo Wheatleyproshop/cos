@@ -28,6 +28,7 @@ export type EventType =
   | 'note_added'
   | 'attachment_added'
   | 'attachment_archived'
+  | 'attachment_restored'
   | 'tracking_link_created'
   | 'order_archived'
   | 'order_restored'
@@ -211,7 +212,9 @@ export function describeEvent(e: Pick<AuditEvent, 'eventType' | 'oldValueJson' |
     case 'attachment_added':
       return `Attached ${n.filename} (${titleCase(n.category)}, ${n.visibility})`;
     case 'attachment_archived':
-      return `Archived attachment ${o.filename}`;
+      return `Deleted attachment ${o.filename}`;
+    case 'attachment_restored':
+      return `Restored attachment ${n.filename}`;
     case 'tracking_link_created':
       return 'Customer tracking link generated';
     case 'order_archived':

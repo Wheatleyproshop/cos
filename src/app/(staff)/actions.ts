@@ -4,7 +4,7 @@ import { redirect, RedirectType } from 'next/navigation';
 import { act, type FormState } from '@/lib/action-utils';
 import { logout } from '@/lib/auth';
 import type { BackupProvider, EmailAutomationKey } from '@/db/schema';
-import { addAttachment, addNote, archiveAttachment, createOrder, createTrackingLink, editOrderDetails, recordPayment, setArchived, setOrderDeleted, updateOrderProgress, voidPayment } from '@/lib/services/orders';
+import { addAttachment, addNote, archiveAttachment, createOrder, createTrackingLink, editOrderDetails, recordPayment, restoreAttachment, setArchived, setOrderDeleted, updateOrderProgress, voidPayment } from '@/lib/services/orders';
 import { acceptQuoteInStore, closeQuote, createApprovalLink, createQuote, editQuote, sendQuote, setQuoteDeleted } from '@/lib/services/quotes';
 import {
   changeOwnPassword,
@@ -102,7 +102,7 @@ export async function uploadAttachmentAction(orderId: string, _: FormState, fd: 
 export async function archiveAttachmentAction(attachmentId: string) {
   return act('staff', async (ctx) => {
     await archiveAttachment(ctx, attachmentId);
-    return 'Attachment archived.';
+    return 'Attachment deleted.';
   });
 }
 
@@ -654,4 +654,11 @@ export async function voidPaymentAction(orderId: string, paymentId: string, _: F
     await voidPayment(ctx, orderId, paymentId, fd.get('reason'));
     return 'Payment voided.';
   }, fd);
+}
+
+export async function restoreAttachmentAction(attachmentId: string) {
+  return act('staff', async (ctx) => {
+    await restoreAttachment(ctx, attachmentId);
+    return 'Attachment restored.';
+  });
 }
