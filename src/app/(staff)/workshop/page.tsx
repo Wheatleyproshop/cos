@@ -8,8 +8,8 @@ import { addDays, money, stamp, todayInTz } from '@/lib/format';
 import { getCustomerDetail } from '@/lib/queries';
 import { shortDate } from '@/lib/short-date';
 import { listDeletedJobs, listJobs, WORKSHOP_STATUS_LABELS } from '@/lib/services/workshop';
-import { checkInAction, deleteJobAction, quickJobAction, quickJobPartsAction } from '../actions';
-import { PartsQuick, StepQuick } from '@/components/board-actions';
+import { checkInAction, deleteJobAction } from '../actions';
+import { JobNextStep } from '@/components/next-steps';
 
 export const metadata: Metadata = { title: 'Workshop' };
 
@@ -127,39 +127,7 @@ export default async function WorkshopPage({
                       </td>
                       <td className="num">{money(j.totalPence)}</td>
                       <td>
-                        <div className="ws-next">
-                          {j.status === 'checked_in' ? (
-                            <StepQuick action={quickJobAction.bind(null, j.id, 'in_progress')} primary>
-                              Start ▸
-                            </StepQuick>
-                          ) : null}
-                          {j.status === 'waiting_parts' ? (
-                            <StepQuick action={quickJobAction.bind(null, j.id, 'in_progress')} primary>
-                              Parts in ▸
-                            </StepQuick>
-                          ) : null}
-                          {OPEN.includes(j.status) ? (
-                            <StepQuick
-                              action={quickJobAction.bind(null, j.id, 'ready')}
-                              primary={j.status === 'in_progress'}
-                              confirm={`Mark ${j.reference} ready? ${j.customerName} is emailed to collect.`}
-                            >
-                              Ready ✓
-                            </StepQuick>
-                          ) : null}
-                          {j.status === 'in_progress' || j.status === 'checked_in' ? (
-                            <PartsQuick action={quickJobPartsAction.bind(null, j.id)} label={j.reference} />
-                          ) : null}
-                          {j.status === 'ready' ? (
-                            <StepQuick
-                              action={quickJobAction.bind(null, j.id, 'collected')}
-                              primary
-                              confirm={`Mark ${j.reference} collected?${j.totalPence ? ` Take ${money(j.totalPence)} at the till.` : ''}`}
-                            >
-                              Collected ✓
-                            </StepQuick>
-                          ) : null}
-                        </div>
+                        <JobNextStep j={j} customerName={j.customerName} />
                       </td>
                     </tr>
                   );

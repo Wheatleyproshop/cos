@@ -377,7 +377,7 @@ export async function getCustomerDetail(org: Organisation, customerId: string) {
   return withTenant(org.id, async (tx) => {
     const [customer] = await tx.select().from(customers).where(eq(customers.id, customerId)).limit(1);
     if (!customer) return null;
-    const [orderRows, quoteRows, paidRows] = await Promise.all([
+    const [orderRows, quoteRows, paidRows, perOrder] = await Promise.all([
       tx.select().from(orders).where(and(eq(orders.customerId, customerId), isNull(orders.removedAt))).orderBy(desc(orders.createdAt)),
       tx.select().from(quotes).where(and(eq(quotes.customerId, customerId), isNull(quotes.archivedAt))).orderBy(desc(quotes.createdAt)),
       tx
@@ -387,8 +387,20 @@ export async function getCustomerDetail(org: Organisation, customerId: string) {
         .from(payments)
         .innerJoin(orders, eq(orders.id, payments.orderId))
         .where(and(eq(orders.customerId, customerId), isNull(orders.removedAt), livePayment())),
+      tx
+        .select({
+          orderId: payments.orderId,
+          total: sql<number>`coalesce(sum(case when ${payments.kind} = 'refund' then -${payments.amountPence} else ${payments.amountPence} end),0)::int`,
+        })
+        .from(payments)
+        .innerJoin(orders, eq(orders.id, payments.orderId))
+        .where(and(eq(orders.customerId, customerId), livePayment()))
+        .groupBy(payments.orderId),
     ]);
     const live = orderRows.filter((o) => !o.archivedAt);
+    const paidBy = new Map(perOrder.map((r) => [r.orderId, Number(r.total)]));
+    /** What's still owed on each order. */
+    const balances = Object.fromEntries(orderRows.map((o) => [o.id, o.totalGrossPence - (paidBy.get(o.id) ?? 0)]));
     // Saved builds: distinct specifications this customer has ordered before.
     const seen = new Set<string>();
     const builds = live
@@ -406,6 +418,7 @@ export async function getCustomerDetail(org: Organisation, customerId: string) {
       quotes: quoteRows,
       lifetimePence: live.reduce((s, o) => s + o.totalGrossPence, 0),
       paidPence: Number(paidRows[0]?.total ?? 0),
+      balances,
       builds,
     };
   });

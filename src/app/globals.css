@@ -648,3 +648,6 @@ details.section[open] { padding-bottom: 16px; }
 .padnotice { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 16px; }
 .ws-next { display: flex; gap: 6px; flex-wrap: wrap; align-items: flex-start; min-width: 170px; }
 .ws-next .quickplace { min-width: 220px; }
+.cust-next { margin-top: 6px; display: flex; justify-content: flex-end; }
+.cust-next .ws-next { justify-content: flex-end; min-width: 0; }
+.cust-next .quickplace { text-align: left; min-width: 240px; }

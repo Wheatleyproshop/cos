@@ -11,11 +11,12 @@ import { money, niceDate, stamp, todayInTz } from '@/lib/format';
 import { getCustomerDetail } from '@/lib/queries';
 import { QUOTE_STATUS_LABELS, statusLabel } from '@/lib/status';
 import type { Order } from '@/db/schema';
+import { JobNextStep, OrderNextStep, QuoteNextStep } from '@/components/next-steps';
 import { deleteCustomerAction, updateCustomerAction } from '../../actions';
 
 export const metadata: Metadata = { title: 'Customer' };
 
-function OrderList({ orders, tz }: { orders: Order[]; tz: string }) {
+function OrderList({ orders, tz, owed }: { orders: Order[]; tz: string; owed?: (o: Order) => string | null }) {
   if (!orders.length) return <p className="muted">None.</p>;
   return (
     <ul className="attention">
@@ -32,6 +33,11 @@ function OrderList({ orders, tz }: { orders: Order[]; tz: string }) {
           <span style={{ textAlign: 'right' }}>
             <Badge status={o.status} text={o.archivedAt ? 'Archived' : statusLabel(o.status)} />
             <div className="muted">{money(o.totalGrossPence)}</div>
+            {owed && !o.archivedAt ? (
+              <div className="cust-next">
+                <OrderNextStep o={o} owed={owed(o)} />
+              </div>
+            ) : null}
           </span>
         </li>
       ))}
@@ -96,7 +102,11 @@ export default async function CustomerPage({ params }: { params: Promise<{ id: s
         <div>
           <section className="panel">
             <h2>Active orders</h2>
-            <OrderList orders={d.activeOrders} tz={tz} />
+            <OrderList
+              orders={d.activeOrders}
+              tz={tz}
+              owed={(o) => (staff.org.paymentTracking && (d.balances[o.id] ?? 0) > 0 ? money(d.balances[o.id]) : null)}
+            />
           </section>
           <section className="panel">
             <h2>Quotes</h2>
@@ -115,6 +125,9 @@ export default async function CustomerPage({ params }: { params: Promise<{ id: s
                     <span style={{ textAlign: 'right' }}>
                       <Badge status="quote" text={QUOTE_STATUS_LABELS[q.status]} />
                       <div className="muted">{money(q.totalGrossPence)}</div>
+                      <div className="cust-next">
+                        <QuoteNextStep q={q} customerName={c.name} email={c.email} />
+                      </div>
                     </span>
                   </li>
                 ))}
@@ -155,6 +168,9 @@ export default async function CustomerPage({ params }: { params: Promise<{ id: s
                       <span style={{ textAlign: 'right' }}>
                         <span className={`badge ws-${j.status}`}>{WORKSHOP_STATUS_LABELS[j.status]}</span>
                         <div className="muted">{money(j.totalPence)}</div>
+                        <div className="cust-next">
+                          <JobNextStep j={j} customerName={c.name} />
+                        </div>
                       </span>
                     </li>
                   );

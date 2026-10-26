@@ -1,7 +1,7 @@
 import Link from 'next/link';
-import { quickMoveAction, quickPlaceAction } from '@/app/(staff)/actions';
 import { money } from '@/lib/format';
-import { ArrivedQuick, CollectedQuick, PlaceQuick } from './board-actions';
+import type { OrderStatus } from '@/db/schema';
+import { OrderNextStep } from './next-steps';
 import type { WorkRow } from '@/lib/queries';
 import { shortDate } from '@/lib/short-date';
 
@@ -77,13 +77,7 @@ export function OrderBoard({ rows, today, paymentTracking }: { rows: WorkRow[]; 
                       </span>
                     </Link>
                     <div className="bc-actions">
-                      {c.key === 'place' ? (
-                        <PlaceQuick action={quickPlaceAction.bind(null, r.id)} defaultEta={r.date ?? ''} label={r.number} />
-                      ) : c.key === 'placed' ? (
-                        <ArrivedQuick action={quickMoveAction.bind(null, r.id, 'ready', false)} label={r.number} />
-                      ) : (
-                        <CollectedQuick action={quickMoveAction.bind(null, r.id, 'collected', Boolean(owed))} label={r.number} owed={owed} />
-                      )}
+                      <OrderNextStep o={{ id: r.id, orderNumber: r.number, status: r.status as OrderStatus, etaDate: r.date }} owed={owed} />
                     </div>
                   </li>
                 );
