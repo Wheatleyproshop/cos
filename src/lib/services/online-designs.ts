@@ -1,7 +1,7 @@
 import { and, asc, desc, eq, gt, inArray, isNull, sql } from 'drizzle-orm';
 import { Resend } from 'resend';
 import { withTenant } from '@/db';
-import { auditEvents, customers, quotes, users, type Organisation, type Quote } from '@/db/schema';
+import { auditEvents, customers, orders, quotes, users, type Organisation, type Quote } from '@/db/schema';
 import { recordEvent } from '../audit';
 import { dispatchMessages, enqueueEmail } from '../email/outbox';
 import { resendApiKey } from '../email/resend-key';
@@ -111,4 +111,37 @@ export async function listSubmittedDesigns(orgId: string, kind: DesignKind = 'ba
       .orderBy(desc(quotes.createdAt))
       .limit(20),
   );
+}
+
+/**
+ * Everything in progress for an in-house service (ball printing / cresting): open proofs (quotes,
+ * including designs sent in online) and approved jobs not yet collected, with what's still owed.
+ */
+export async function inHouseWork(orgId: string, kind: DesignKind) {
+  const specKind = kind === 'cresting' ? 'cos-cresting' : 'cos-ball-print';
+  return withTenant(orgId, async (tx) => {
+    const proofs = await tx
+      .select({ q: quotes, customer: customers.name, email: customers.email })
+      .from(quotes)
+      .innerJoin(customers, eq(customers.id, quotes.customerId))
+      .where(and(sql`${quotes.specificationJson}->>'kind' = ${specKind}`, inArray(quotes.status, ['draft', 'sent']), isNull(quotes.archivedAt)))
+      .orderBy(desc(quotes.createdAt))
+      .limit(50);
+    const jobs = await tx
+      .select({
+        o: orders,
+        customer: customers.name,
+        paid: sql<number>`(select coalesce(sum(case when p.kind = 'refund' then -p.amount_pence when p.kind = 'void' then 0 else p.amount_pence end), 0)::int
+          from payments p where p.order_id = ${orders.id} and not exists (select 1 from payments v where v.voids_payment_id = p.id))`,
+      })
+      .from(orders)
+      .innerJoin(customers, eq(customers.id, orders.customerId))
+      .where(and(sql`${orders.specificationJson}->>'kind' = ${specKind}`, sql`${orders.status} <> 'collected'`, isNull(orders.archivedAt)))
+      .orderBy(desc(orders.createdAt))
+      .limit(50);
+    return {
+      proofs: proofs.map((r) => ({ ...r, online: Boolean((r.q.specificationJson as { submittedOnline?: boolean } | null)?.submittedOnline) })),
+      jobs: jobs.map((r) => ({ ...r, balance: r.o.totalGrossPence - Number(r.paid ?? 0) })),
+    };
+  });
 }

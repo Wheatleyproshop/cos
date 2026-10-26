@@ -51,10 +51,10 @@ export function PlaceQuick({ action, defaultEta, label }: { action: FormAction; 
 }
 
 /** "Arrived" on a Placed card: ready to collect, customer emailed. */
-export function ArrivedQuick({ action, label }: { action: () => Promise<FormState>; label: string }) {
+export function ArrivedQuick({ action, label, text = 'Arrived ✓', verb = 'arrived' }: { action: () => Promise<FormState>; label: string; text?: string; verb?: string }) {
   return (
-    <ActionButton action={action} className="btn small primary" confirm={`Mark ${label} as arrived? The customer is emailed that it’s ready to collect.`}>
-      Arrived ✓
+    <ActionButton action={action} className="btn small primary" confirm={`Mark ${label} as ${verb}? The customer is emailed that it’s ready to collect.`}>
+      {text}
     </ActionButton>
   );
 }

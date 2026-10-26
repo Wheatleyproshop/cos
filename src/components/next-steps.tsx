@@ -13,14 +13,18 @@ import { ArrivedQuick, CollectedQuick, PartsQuick, PlaceQuick, StepQuick } from 
  */
 
 export function OrderNextStep({
-  o, owed,
+  o, owed, ready,
 }: {
   o: { id: string; orderNumber: string; status: OrderStatus; etaDate: string | null };
   /** Formatted amount still to pay, or null (or payment tracking off). */
   owed: string | null;
+  /** Wording for "it's ready" on in-house jobs, e.g. Printed ✓ instead of Arrived ✓. */
+  ready?: { text: string; verb: string };
 }) {
   if (o.status === 'place_order') return <PlaceQuick action={quickPlaceAction.bind(null, o.id)} defaultEta={o.etaDate ?? ''} label={o.orderNumber} />;
-  if (o.status === 'ordered' || o.status === 'delayed') return <ArrivedQuick action={quickMoveAction.bind(null, o.id, 'ready', false)} label={o.orderNumber} />;
+  if (o.status === 'ordered' || o.status === 'delayed') {
+    return <ArrivedQuick action={quickMoveAction.bind(null, o.id, 'ready', false)} label={o.orderNumber} text={ready?.text} verb={ready?.verb} />;
+  }
   if (o.status === 'ready') return <CollectedQuick action={quickMoveAction.bind(null, o.id, 'collected', Boolean(owed))} label={o.orderNumber} owed={owed} />;
   return null;
 }

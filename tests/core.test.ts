@@ -566,6 +566,13 @@ describe('golf ball printing', () => {
     expect(confirm.bodyHtml).not.toContain('manufacturer');
   });
 
+  it('lists open print proofs and print jobs for the Ball Printing page', async () => {
+    const { inHouseWork } = await import('@/lib/services/online-designs');
+    const w = await inHouseWork(org.id, 'ball');
+    expect(w.proofs.every(({ q }) => ['draft', 'sent'].includes(q.status))).toBe(true);
+    expect(w.jobs.every(({ o }) => o.status !== 'collected' && (o.specificationJson as { kind: string }).kind === 'cos-ball-print')).toBe(true);
+  });
+
   it('rejects a proof that is not really an image, and logo jobs without a logo', async () => {
     const { getBallRange, createBallPrintQuote } = await import('@/lib/services/ball-printing');
     const [ball] = await getBallRange(org.id);

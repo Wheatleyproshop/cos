@@ -1,11 +1,13 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { BallPrintBuilder } from '@/components/ball-print-builder';
-import { DesignLinkPanel, SubmittedDesigns } from '@/components/design-link-panel';
+import { DesignLinkPanel } from '@/components/design-link-panel';
+import { InHouseWork } from '@/components/in-house-work';
 import { PageHeader } from '@/components/views';
 import { hasRole, requireStaff } from '@/lib/auth';
 import { getCustomerDetail } from '@/lib/queries';
-import { designPathFor, getBallRange, listSubmittedDesigns } from '@/lib/services/ball-printing';
+import { designPathFor, getBallRange } from '@/lib/services/ball-printing';
+import { inHouseWork } from '@/lib/services/online-designs';
 import { appUrl } from '@/lib/tokens';
 import { ballPrintAction, designLinkAction } from '../actions';
 
@@ -14,10 +16,10 @@ export const metadata: Metadata = { title: 'Ball Printing' };
 export default async function BallPrintingPage({ searchParams }: { searchParams: Promise<{ customer?: string }> }) {
   const staff = await requireStaff();
   const { customer } = await searchParams;
-  const [balls, cust, submitted] = await Promise.all([
+  const [balls, cust, work] = await Promise.all([
     getBallRange(staff.organisationId),
     customer ? getCustomerDetail(staff.org, customer) : null,
-    listSubmittedDesigns(staff.organisationId),
+    inHouseWork(staff.organisationId, 'ball'),
   ]);
   const manager = hasRole(staff, 'manager');
   const linkOn = staff.org.ballDesignLink;
@@ -33,7 +35,12 @@ export default async function BallPrintingPage({ searchParams }: { searchParams:
           </Link>
         }
       />
-      <SubmittedDesigns rows={submitted} tz={staff.org.timezone} what="Designs" />
+      <InHouseWork
+        work={work}
+        paymentTracking={staff.org.paymentTracking}
+        ready={{ text: 'Printed ✓', verb: 'printed' }}
+        what={{ proofs: 'Proofs & online designs', jobs: 'Print jobs' }}
+      />
       {balls.length ? (
         <DesignLinkPanel url={appUrl(designPathFor(staff.org))} on={linkOn} manager={manager} toggle={designLinkAction.bind(null, !linkOn)} what="golf balls" />
       ) : null}
