@@ -1178,6 +1178,22 @@ describe('workshop', () => {
     expect(n.items.find((i) => i.title === 'Workshop job ready')!.href).toMatch(/^\/workshop\/WS-/);
   });
 
+  it('moves a job along in one click each: start, waiting for parts, parts in, ready, collected', async () => {
+    const ws = await import('@/lib/services/workshop');
+    const job = await ws.checkInClubs(staff, { customerName: 'Quick Jo', email: 'quickjo@example.com', etaDate: addDays(new Date().toISOString().slice(0, 10), 5), items: [{ club: 'Irons', work: 'Regrip', pricePence: '60' }] });
+    expect((await ws.quickMoveJob(staff, job.id, 'in_progress')).status).toBe('in_progress');
+    await expect(ws.quickMoveJob(staff, job.id, 'waiting_parts')).rejects.toThrow(/waiting for/);
+    const parts = await ws.quickMoveJob(staff, job.id, 'waiting_parts', { delayReason: 'Grips on order' });
+    expect(parts).toMatchObject({ status: 'waiting_parts', emailed: true });
+    await ws.quickMoveJob(staff, job.id, 'in_progress');
+    const ready = await ws.quickMoveJob(staff, job.id, 'ready');
+    expect(ready).toMatchObject({ reference: job.reference, status: 'ready', emailed: true });
+    expect((await ws.quickMoveJob(staff, job.id, 'collected')).status).toBe('collected');
+    const d = (await ws.getJob(org.id, job.reference))!;
+    expect(d.job.etaDate).toBe(job.etaDate); // ready date kept
+    expect(d.job.delayReason).toBe('');
+  });
+
   it('edits, deletes and restores a job’s internal notes', async () => {
     const ws = await import('@/lib/services/workshop');
     const job = await ws.checkInClubs(staff, { customerName: 'Notes Nell', email: 'notes@example.com', etaDate: '', notes: 'Bag tag 7', items: [{ club: 'Driver', work: 'Regrip', pricePence: '10' }] });

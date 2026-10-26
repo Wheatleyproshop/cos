@@ -167,7 +167,13 @@ export async function checkInClubs(ctx: Ctx, raw: unknown, opts: { notify?: bool
  * Moves a job along. Waiting for parts needs a reason the customer will see. The customer is
  * emailed when it's delayed or its ready date changes, and when it's ready to collect.
  */
-export async function updateWorkshopProgress(ctx: Ctx, id: string, raw: unknown, opts: { notify?: boolean } = {}) {
+export async function updateWorkshopProgress(
+  ctx: Ctx,
+  id: string,
+  raw: unknown,
+  opts: { notify?: boolean } = {},
+): Promise<{ reference: string; status: WorkshopStatus; emailed: boolean }> {
+  let reference = '';
   const input = parse(progressSchema, raw);
   const notify = opts.notify !== false || !atLeast(ctx, 'manager');
   if (input.status === 'cancelled') requireRole(ctx, 'manager', 'cancel workshop jobs');
@@ -176,6 +182,7 @@ export async function updateWorkshopProgress(ctx: Ctx, id: string, raw: unknown,
   }
   const messageId = await withTenant(ctx.org.id, async (tx) => {
     const { job, customer } = await load(tx, ctx, id);
+    reference = job.reference;
     if (job.status === 'cancelled' || (job.status === 'collected' && !atLeast(ctx, 'manager'))) {
       throw new ServiceError(`This job is ${WORKSHOP_STATUS_LABELS[job.status].toLowerCase()}.`);
     }
@@ -227,6 +234,16 @@ export async function updateWorkshopProgress(ctx: Ctx, id: string, raw: unknown,
     return null;
   });
   await dispatchMessages(ctx.org, [messageId]);
+  return { reference, status: input.status, emailed: notify && Boolean(messageId) };
+}
+
+/**
+ * One-click moves from the workshop list: start, waiting for parts (with the reason the customer
+ * sees), parts in, ready, collected. Same rules and emails as the job page; the ready date is kept.
+ */
+export async function quickMoveJob(ctx: Ctx, id: string, to: 'in_progress' | 'waiting_parts' | 'ready' | 'collected', opts: { delayReason?: string } = {}) {
+  const job = await withTenant(ctx.org.id, async (tx) => (await load(tx, ctx, id)).job);
+  return updateWorkshopProgress(ctx, id, { status: to, etaDate: job.etaDate ?? '', delayReason: to === 'waiting_parts' ? (opts.delayReason ?? '') : '' });
 }
 
 export async function addWorkshopItem(ctx: Ctx, id: string, raw: unknown) {

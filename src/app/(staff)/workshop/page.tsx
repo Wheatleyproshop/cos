@@ -8,7 +8,8 @@ import { addDays, money, stamp, todayInTz } from '@/lib/format';
 import { getCustomerDetail } from '@/lib/queries';
 import { shortDate } from '@/lib/short-date';
 import { listDeletedJobs, listJobs, WORKSHOP_STATUS_LABELS } from '@/lib/services/workshop';
-import { checkInAction, deleteJobAction } from '../actions';
+import { checkInAction, deleteJobAction, quickJobAction, quickJobPartsAction } from '../actions';
+import { PartsQuick, StepQuick } from '@/components/board-actions';
 
 export const metadata: Metadata = { title: 'Workshop' };
 
@@ -21,7 +22,11 @@ const FILTERS = [
 ] as const;
 const OPEN = ['checked_in', 'in_progress', 'waiting_parts'];
 
-export default async function WorkshopPage({ searchParams }: { searchParams: Promise<{ filter?: string; customer?: string; checkin?: string }> }) {
+export default async function WorkshopPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ filter?: string; customer?: string; checkin?: string; moved?: string; to?: string; emailed?: string }>;
+}) {
   const staff = await requireStaff();
   const sp = await searchParams;
   const filter = FILTERS.some((f) => f.key === sp.filter) ? sp.filter! : 'open';
@@ -57,6 +62,20 @@ export default async function WorkshopPage({ searchParams }: { searchParams: Pro
           </a>
         }
       />
+      {sp.moved ? (
+        <div className="notice padnotice" role="status">
+          <span>
+            <Link href={`/workshop/${sp.moved.replace(/[^\w-]/g, '')}`}>
+              <b>{sp.moved.replace(/[^\w-]/g, '')}</b>
+            </Link>{' '}
+            saved — {WORKSHOP_STATUS_LABELS[sp.to as keyof typeof WORKSHOP_STATUS_LABELS]?.toLowerCase() ?? 'updated'}
+            {sp.emailed === '1' ? ', and the customer has been emailed' : ''}.
+          </span>
+          <Link href="/workshop" className="muted" aria-label="Dismiss">
+            ✕
+          </Link>
+        </div>
+      ) : null}
       <div className="grid four">
         {cards.map((c) => (
           <Link key={c.label} href={`/workshop?filter=${c.key}`} className={`metric${c.alert ? ' alert' : ''}`} scroll={false}>
@@ -85,6 +104,7 @@ export default async function WorkshopPage({ searchParams }: { searchParams: Pro
                   <th>Status</th>
                   <th>Ready by</th>
                   <th className="num">Price</th>
+                  <th>Next step</th>
                 </tr>
               </thead>
               <tbody>
@@ -106,6 +126,41 @@ export default async function WorkshopPage({ searchParams }: { searchParams: Pro
                         {j.etaDate ? <span className={late ? 'flag' : ''}>{late ? `Overdue · ${shortDate(j.etaDate)}` : j.etaDate === today ? 'Today' : shortDate(j.etaDate)}</span> : '—'}
                       </td>
                       <td className="num">{money(j.totalPence)}</td>
+                      <td>
+                        <div className="ws-next">
+                          {j.status === 'checked_in' ? (
+                            <StepQuick action={quickJobAction.bind(null, j.id, 'in_progress')} primary>
+                              Start ▸
+                            </StepQuick>
+                          ) : null}
+                          {j.status === 'waiting_parts' ? (
+                            <StepQuick action={quickJobAction.bind(null, j.id, 'in_progress')} primary>
+                              Parts in ▸
+                            </StepQuick>
+                          ) : null}
+                          {OPEN.includes(j.status) ? (
+                            <StepQuick
+                              action={quickJobAction.bind(null, j.id, 'ready')}
+                              primary={j.status === 'in_progress'}
+                              confirm={`Mark ${j.reference} ready? ${j.customerName} is emailed to collect.`}
+                            >
+                              Ready ✓
+                            </StepQuick>
+                          ) : null}
+                          {j.status === 'in_progress' || j.status === 'checked_in' ? (
+                            <PartsQuick action={quickJobPartsAction.bind(null, j.id)} label={j.reference} />
+                          ) : null}
+                          {j.status === 'ready' ? (
+                            <StepQuick
+                              action={quickJobAction.bind(null, j.id, 'collected')}
+                              primary
+                              confirm={`Mark ${j.reference} collected?${j.totalPence ? ` Take ${money(j.totalPence)} at the till.` : ''}`}
+                            >
+                              Collected ✓
+                            </StepQuick>
+                          ) : null}
+                        </div>
+                      </td>
                     </tr>
                   );
                 })}

@@ -62,7 +62,17 @@ import {
   updateAccountNotes,
 } from '@/lib/services/accounts';
 import { sendReportNow, updatePerformanceReport } from '@/lib/services/performance-report';
-import { addWorkshopItem, checkInClubs, removeWorkshopItem, restoreJobNotes, restoreWorkshopItem, setJobDeleted, updateJobNotes, updateWorkshopProgress } from '@/lib/services/workshop';
+import {
+  addWorkshopItem,
+  checkInClubs,
+  quickMoveJob,
+  removeWorkshopItem,
+  restoreJobNotes,
+  restoreWorkshopItem,
+  setJobDeleted,
+  updateJobNotes,
+  updateWorkshopProgress,
+} from '@/lib/services/workshop';
 import {
   addLine,
   archivePrebook,
@@ -666,9 +676,30 @@ export async function checkInAction(_: FormState, fd: FormData): Promise<FormSta
 }
 
 export async function workshopProgressAction(id: string, _: FormState, fd: FormData) {
-  return act('staff', async (ctx) => {
-    await updateWorkshopProgress(ctx, id, obj(fd), { notify: !flag(fd, 'skipEmail') });
+  let target = '';
+  const res = await act('staff', async (ctx) => {
+    const r = await updateWorkshopProgress(ctx, id, obj(fd), { notify: !flag(fd, 'skipEmail') });
+    // Saving goes back to the workshop list, saying what happened.
+    target = `/workshop?moved=${r.reference}&to=${r.status}${r.emailed ? '&emailed=1' : ''}`;
     return 'Job updated.';
+  }, fd);
+  if (res?.ok && target) redirect(target);
+  return res;
+}
+
+/** Workshop list: one-click Start / Parts in / Ready / Collected. */
+export async function quickJobAction(id: string, to: 'in_progress' | 'ready' | 'collected') {
+  return act('staff', async (ctx) => {
+    const r = await quickMoveJob(ctx, id, to);
+    return `${r.reference} updated${r.emailed ? ' — customer emailed' : ''}.`;
+  });
+}
+
+/** Workshop list: waiting for parts, with the reason the customer sees. */
+export async function quickJobPartsAction(id: string, _: FormState, fd: FormData) {
+  return act('staff', async (ctx) => {
+    const r = await quickMoveJob(ctx, id, 'waiting_parts', { delayReason: String(fd.get('delayReason') ?? '') });
+    return `${r.reference} waiting for parts${r.emailed ? ' — customer emailed' : ''}.`;
   }, fd);
 }
 

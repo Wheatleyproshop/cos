@@ -646,3 +646,5 @@ details.section[open] { padding-bottom: 16px; }
 .quickplace .seg button { flex: 1; }
 .quickplace-actions { display: flex; gap: 6px; flex-wrap: wrap; }
 .padnotice { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 16px; }
+.ws-next { display: flex; gap: 6px; flex-wrap: wrap; align-items: flex-start; min-width: 170px; }
+.ws-next .quickplace { min-width: 220px; }

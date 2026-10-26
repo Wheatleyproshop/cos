@@ -71,3 +71,42 @@ export function CollectedQuick({ action, label, owed }: { action: () => Promise<
     </ActionButton>
   );
 }
+
+/** Workshop: "Waiting for parts" asks what for (the customer sees it in their email). */
+export function PartsQuick({ action, label }: { action: FormAction; label: string }) {
+  const [open, setOpen] = useState(false);
+  const [state, formAction, pending] = useActionState(action, null);
+  if (!open || state?.ok) {
+    return (
+      <button type="button" className="btn small" onClick={() => setOpen(true)} aria-label={`${label} is waiting for parts`}>
+        Waiting for parts
+      </button>
+    );
+  }
+  return (
+    <form action={formAction} className="quickplace">
+      <label>
+        <span>What are you waiting for? (the customer sees this)</span>
+        <input name="delayReason" required maxLength={300} placeholder="e.g. Golf Pride MCC midsize grips" autoFocus />
+      </label>
+      {state?.error ? <span className="error">{state.error}</span> : null}
+      <div className="quickplace-actions">
+        <button className="btn small primary" type="submit" disabled={pending}>
+          {pending ? 'Saving…' : 'Save & email customer'}
+        </button>
+        <button type="button" className="btn small" onClick={() => setOpen(false)}>
+          Cancel
+        </button>
+      </div>
+    </form>
+  );
+}
+
+/** A one-click step (Start, Parts in, Ready, Collected) with an optional confirmation. */
+export function StepQuick({ action, children, primary, confirm }: { action: () => Promise<FormState>; children: React.ReactNode; primary?: boolean; confirm?: string }) {
+  return (
+    <ActionButton action={action} className={`btn small${primary ? ' primary' : ''}`} confirm={confirm}>
+      {children}
+    </ActionButton>
+  );
+}
