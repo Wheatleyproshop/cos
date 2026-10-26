@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import type { FormState } from '@/lib/action-utils';
+import { money, parseMoneyToPence } from '@/lib/format';
 import { HANDS, ORDER_CATEGORIES } from '@/lib/order-details';
 import { CustomerPicker } from './customer-picker';
 import { ActionForm, Field, FormMessage, Submit, type BoundAction } from './forms';
@@ -89,11 +90,10 @@ export function CreateRequestForm({
             <Field state={s} name="colour" label="Colour" placeholder="e.g. Navy / White" />
             <Field state={s} name="size" label="Size" placeholder="e.g. L, UK 9, 34W 31L" />
             <Field state={s} name="hand" label="Hand" options={HAND_OPTIONS} />
-            <Field state={s} name="quantity" label="Quantity" type="number" min="1" defaultValue="1" />
             <Field state={s} name="sku" label="Product ID / SKU" defaultValue={defaults.sku} placeholder="Supplier product code" />
             <Field state={s} name="specificationText" label="Specification / other details" wide textarea defaultValue={defaults.specificationText} placeholder="Loft, shaft, flex, length, lie, grip, grip size, wraps… anything the supplier needs" />
             <div className="field wide formsection">Price &amp; payment</div>
-            <Field state={s} name="totalGrossPence" label="Total price (GBP, incl. VAT)" required inputMode="decimal" placeholder="0.00" />
+            <QtyPrice state={s} />
             {quote ? (
               <>
                 <Field state={s} name="depositRequiredPence" label="Deposit required to proceed (GBP)" inputMode="decimal" defaultValue="0.00" />
@@ -463,5 +463,35 @@ export function VoidPaymentForm({ action, label }: { action: BoundAction; label:
         </>
       )}
     </ActionForm>
+  );
+}
+
+/** Quantity × price each (incl. VAT), with the total shown live. The server recalculates it the same way. */
+function QtyPrice({ state }: { state: FormState }) {
+  const [qty, setQty] = useState(String(state?.values?.quantity ?? '1'));
+  const [each, setEach] = useState(String(state?.values?.unitPricePence ?? ''));
+  const n = Math.max(1, Math.floor(Number(qty) || 1));
+  const total = (parseMoneyToPence(each || '0') ?? 0) * n;
+  const err = state?.fieldErrors?.unitPricePence ?? state?.fieldErrors?.totalGrossPence;
+  return (
+    <>
+      <label className="field">
+        <span>Quantity</span>
+        <input name="quantity" type="number" min={1} max={999} value={qty} onChange={(e) => setQty(e.target.value)} />
+      </label>
+      <label className={`field${err ? ' invalid' : ''}`}>
+        <span>Price each (GBP, incl. VAT) *</span>
+        <input name="unitPricePence" inputMode="decimal" required placeholder="0.00" value={each} onChange={(e) => setEach(e.target.value)} />
+        {err ? <span className="err">{err}</span> : null}
+      </label>
+      <input type="hidden" name="totalGrossPence" value={(total / 100).toFixed(2)} />
+      <div className="field qtytotal" aria-live="polite">
+        <span>Total (incl. VAT)</span>
+        <b>
+          {money(total)}
+          {n > 1 && total ? <small> · {n} × {money(total / n)}</small> : null}
+        </b>
+      </div>
+    </>
   );
 }

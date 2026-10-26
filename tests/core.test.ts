@@ -136,6 +136,20 @@ describe('order lifecycle', () => {
     expect(all).toHaveLength(1);
   });
 
+  it('works the total out as quantity × price each', async () => {
+    const order = await createOrder(staff, {
+      customerName: 'Each Ellie', email: 'each@example.com', brand: 'FootJoy', category: 'Gloves', product: 'StaSof glove',
+      quantity: '3', unitPricePence: '24.99', totalGrossPence: '1.00', // the browser's figure is ignored
+    });
+    expect(order.totalGrossPence).toBe(7497);
+    expect(order.specificationText).toContain('Quantity: 3 × £24.99 each');
+    const q = await createQuote(staff, { customerName: 'Each Ellie', email: 'each@example.com', brand: 'FootJoy', product: 'Socks', quantity: '2', unitPricePence: '9.50', validUntil: '' });
+    expect(q.totalGrossPence).toBe(1900);
+    await expect(createOrder(staff, { customerName: 'X', email: 'x-each@example.com', brand: 'B', product: 'P', unitPricePence: 'abc' })).rejects.toMatchObject({
+      fieldErrors: expect.objectContaining({ totalGrossPence: expect.any(String) }),
+    });
+  });
+
   it('validates input with field errors', async () => {
     await expect(createOrder(staff, { customerName: '', email: 'nope' })).rejects.toMatchObject({
       fieldErrors: expect.objectContaining({ customerName: expect.any(String), email: expect.any(String) }),

@@ -659,3 +659,5 @@ details.section[open] { padding-bottom: 16px; }
 .inhouse li { gap: 10px; flex-wrap: wrap; }
 .inhouse .ws-next { justify-content: flex-end; }
 .ws-line b { display: block; padding: 9px 0; white-space: nowrap; }
+.qtytotal b { display: block; padding: 9px 0; font-size: 18px; }
+.qtytotal small { font-size: 13px; color: #6b7480; font-weight: 400; }

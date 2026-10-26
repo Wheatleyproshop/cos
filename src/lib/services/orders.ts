@@ -6,8 +6,8 @@ import { dispatchMessages, enqueueEmail } from '../email/outbox';
 import type { EmailContext } from '../email/templates';
 import { ALLOWED_UPLOAD_TYPES, MAX_UPLOAD_BYTES, storage } from '../storage';
 import { fitSpec } from '../fit-spec';
-import { money } from '../format';
-import { composeSpec } from '../order-details';
+import { money, parseMoneyToPence } from '../format';
+import { composeSpec, withUnitTotal } from '../order-details';
 import { canTransition, journeyFor, statusLabel } from '../status';
 import { newToken } from '../tokens';
 import {
@@ -59,7 +59,8 @@ export function orderEmailContext(o: Order, c: Customer, t: PaymentTotals, actio
  */
 export async function createOrder(ctx: Ctx, raw: unknown, opts: { notify?: boolean } = {}) {
   if (!ctx.userId) throw new ServiceError('Orders must be taken by a signed-in staff member.');
-  const input = parse(orderCreateSchema, raw);
+  const input = parse(orderCreateSchema, withUnitTotal(raw, parseMoneyToPence));
+  const unitPricePence = parseMoneyToPence(String((raw as { unitPricePence?: unknown } | null)?.unitPricePence ?? '')) || null;
   const notify = opts.notify !== false || !atLeast(ctx, 'manager');
 
   const { order, messageId } = await withTenant(ctx.org.id, async (tx) => {
@@ -77,7 +78,7 @@ export async function createOrder(ctx: Ctx, raw: unknown, opts: { notify?: boole
         product: input.product,
         sku: input.sku,
         supplier: input.brand,
-        specificationText: composeSpec({ ...input, notes: input.specificationText }),
+        specificationText: composeSpec({ ...input, unitPricePence, notes: input.specificationText }),
         totalGrossPence: input.totalGrossPence,
         etaDate: input.etaDate,
         supplierReference: input.supplierReference,

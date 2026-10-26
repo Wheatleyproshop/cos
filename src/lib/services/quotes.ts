@@ -5,8 +5,8 @@ import { recordEvent, type Actor } from '../audit';
 import { dispatchMessages, enqueueEmail } from '../email/outbox';
 import { proofOf } from '../proofs';
 import { fitSpec } from '../fit-spec';
-import { todayInTz } from '../format';
-import { composeSpec } from '../order-details';
+import { parseMoneyToPence, todayInTz } from '../format';
+import { composeSpec, withUnitTotal } from '../order-details';
 import { inHouse, journeyFor } from '../status';
 import { appUrl, hashToken, newToken, signValue } from '../tokens';
 import { noteSchema, parse, quoteCreateSchema, quoteEditSchema } from '../validation';
@@ -73,7 +73,8 @@ export type CreateQuoteOptions = {
 
 export async function createQuote(ctx: Ctx, raw: unknown, opts: CreateQuoteOptions = {}) {
   if (!ctx.userId) throw new ServiceError('Quotes must be created by a signed-in staff member.');
-  const input = parse(quoteCreateSchema, raw);
+  const input = parse(quoteCreateSchema, withUnitTotal(raw, parseMoneyToPence));
+  const unitPricePence = parseMoneyToPence(String((raw as { unitPricePence?: unknown } | null)?.unitPricePence ?? '')) || null;
   const { quote, messageId } = await withTenant(ctx.org.id, async (tx) => {
     const customer = await findOrCreateCustomer(tx, ctx, { name: input.customerName, email: input.email, phone: input.phone, customerId: input.customerId });
     const quoteNumber = await nextNumber(tx, ctx.org.id, 'quote');
@@ -87,7 +88,7 @@ export async function createQuote(ctx: Ctx, raw: unknown, opts: CreateQuoteOptio
         category: input.category,
         product: input.product,
         sku: input.sku,
-        specificationText: composeSpec({ ...input, notes: input.specificationText }),
+        specificationText: composeSpec({ ...input, unitPricePence, notes: input.specificationText }),
         totalGrossPence: input.totalGrossPence,
         depositRequiredPence: input.depositRequiredPence,
         estimatedLeadTime: input.estimatedLeadTime,
