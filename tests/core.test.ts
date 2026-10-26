@@ -1210,6 +1210,20 @@ describe('workshop', () => {
     expect(n.items.find((i) => i.title === 'Workshop job ready')!.href).toMatch(/^\/workshop\/WS-/);
   });
 
+  it('prices a line as price each × quantity', async () => {
+    const ws = await import('@/lib/services/workshop');
+    const job = await ws.checkInClubs(staff, {
+      customerName: 'Grip Gary', email: 'gripgary@example.com', etaDate: '',
+      items: [{ club: 'Irons 5-PW', work: 'Regrip', parts: 'Golf Pride MCC', quantity: '6', unitPricePence: '13.00' }],
+    });
+    await ws.addWorkshopItem(staff, job.id, { club: 'Wedges', work: 'Regrip', quantity: '2', unitPricePence: '12.50' });
+    const d = (await ws.getJob(org.id, job.reference))!;
+    expect(d.items.map((i) => i.pricePence)).toEqual([7800, 2500]);
+    const spec = ws.jobSpec(d.job, d.items);
+    expect(spec.totalPence).toBe(10300);
+    expect(spec.builds[0].lines[0].value).toContain('£13.00 each');
+  });
+
   it('does not email the customer when only the ready date changes', async () => {
     const ws = await import('@/lib/services/workshop');
     const today = new Date().toISOString().slice(0, 10);

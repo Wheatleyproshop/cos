@@ -8,8 +8,10 @@ import { CLUB_SUGGESTIONS, WORK_TYPES, WORKSHOP_STATUS_LABELS } from '@/lib/work
 import { CustomerPicker, type PickerDefaults } from './customer-picker';
 import { ActionForm, Field, FormMessage, Submit, type BoundAction } from './forms';
 
-type Row = { club: string; work: string; parts: string; quantity: string; pricePence: string };
-const blank = (): Row => ({ club: '', work: 'Regrip', parts: '', quantity: '1', pricePence: '' });
+type Row = { club: string; work: string; parts: string; quantity: string; unitPrice: string };
+const blank = (): Row => ({ club: '', work: 'Regrip', parts: '', quantity: '1', unitPrice: '' });
+/** Line total in pence: price each × qty. */
+const lineTotal = (r: Row) => (parseMoneyToPence(r.unitPrice || '0') ?? 0) * Math.max(1, Number(r.quantity) || 1);
 
 function ClubList() {
   return (
@@ -28,12 +30,16 @@ export function CheckInForm({
   const [state, formAction, pending] = useActionState(action, null as FormState);
   const [rows, setRows] = useState<Row[]>([blank()]);
   const set = (i: number, k: keyof Row, v: string) => setRows((r) => r.map((x, j) => (j === i ? { ...x, [k]: v } : x)));
-  const total = rows.reduce((s, r) => s + (parseMoneyToPence(r.pricePence || '0') ?? 0), 0);
+  const total = rows.reduce((s, r) => s + lineTotal(r), 0);
   const filled = rows.filter((r) => r.club.trim() && r.work.trim());
   return (
     <form action={formAction}>
       <ClubList />
-      <input type="hidden" name="items" value={JSON.stringify(filled.map((r) => ({ ...r, pricePence: r.pricePence || '0' })))} />
+      <input
+        type="hidden"
+        name="items"
+        value={JSON.stringify(filled.map(({ unitPrice, ...r }) => ({ ...r, unitPricePence: unitPrice || '0' })))}
+      />
       <FormMessage state={state} />
       <div className="fields">
         <CustomerPicker state={state} defaults={defaults} />
@@ -64,9 +70,13 @@ export function CheckInForm({
               <input type="number" min={1} max={30} value={r.quantity} onChange={(e) => set(i, 'quantity', e.target.value)} />
             </label>
             <label className="field ws-price">
-              <span>Price (£)</span>
-              <input inputMode="decimal" value={r.pricePence} onChange={(e) => set(i, 'pricePence', e.target.value)} placeholder="0.00" />
+              <span>Price each (£)</span>
+              <input inputMode="decimal" value={r.unitPrice} onChange={(e) => set(i, 'unitPrice', e.target.value)} placeholder="0.00" />
             </label>
+            <div className="field ws-line" aria-live="polite">
+              <span>Total</span>
+              <b>{money(lineTotal(r))}</b>
+            </div>
             {rows.length > 1 ? (
               <button type="button" className="btn small ws-remove" aria-label={`Remove row ${i + 1}`} onClick={() => setRows((x) => x.filter((_, j) => j !== i))}>
                 ✕
@@ -174,7 +184,7 @@ export function AddWorkshopItemForm({ action }: { action: BoundAction }) {
             </label>
             <Field state={s} name="parts" label="Parts / details" />
             <Field state={s} name="quantity" label="Qty" type="number" min="1" defaultValue="1" />
-            <Field state={s} name="pricePence" label="Price (£)" inputMode="decimal" placeholder="0.00" />
+            <Field state={s} name="unitPricePence" label="Price each (£)" inputMode="decimal" placeholder="0.00" hint="Multiplied by the quantity." />
           </div>
           <FormMessage state={s} />
           <div className="actions" style={{ marginTop: 10 }}>

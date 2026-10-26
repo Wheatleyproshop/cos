@@ -35,22 +35,34 @@ const isoDate = z
   .refine((v) => !v || /^\d{4}-\d{2}-\d{2}$/.test(v), 'Use a date')
   .transform((v) => v || null);
 
-const price = z.string().default('0').transform((v, c) => {
-  const p = parseMoneyToPence(v || '0');
-  if (p === null || p < 0) {
-    c.addIssue({ code: 'custom', message: 'Enter a price like 12.50' });
-    return z.NEVER;
-  }
-  return p;
-});
+const optionalPrice = z
+  .union([z.string(), z.number()])
+  .optional()
+  .transform((v, c) => {
+    if (v === undefined || v === '') return undefined;
+    const p = parseMoneyToPence(String(v));
+    if (p === null || p < 0) {
+      c.addIssue({ code: 'custom', message: 'Enter a price like 12.50' });
+      return z.NEVER;
+    }
+    return p;
+  });
 
-const itemSchema = z.object({
-  club: z.string().trim().min(1, 'Which club?').max(80),
-  work: z.string().trim().min(1, 'What work?').max(80),
-  parts: z.string().trim().max(160).default(''),
-  quantity: z.coerce.number().int().min(1).max(30).default(1),
-  pricePence: price,
-});
+/** A line on a job. Staff enter the price each; the line total (price each × qty) is what's stored. */
+const itemSchema = z
+  .object({
+    club: z.string().trim().min(1, 'Which club?').max(80),
+    work: z.string().trim().min(1, 'What work?').max(80),
+    parts: z.string().trim().max(160).default(''),
+    quantity: z.coerce.number().int().min(1).max(30).default(1),
+    unitPricePence: optionalPrice,
+    /** Line total, for callers that already know it. */
+    pricePence: optionalPrice,
+  })
+  .transform(({ unitPricePence, pricePence, ...v }) => ({
+    ...v,
+    pricePence: unitPricePence !== undefined ? unitPricePence * v.quantity : (pricePence ?? 0),
+  }));
 
 const createSchema = z.object({
   ...customerFields,
@@ -77,7 +89,7 @@ export function jobSpec(job: Pick<WorkshopJob, 'reference'>, items: Pick<Worksho
         title: `Workshop job ${job.reference}`,
         lines: items.map((i) => ({
           label: i.quantity > 1 ? `${i.club} ×${i.quantity}` : i.club,
-          value: [i.work, i.parts].filter(Boolean).join(' — '),
+          value: [i.work, i.parts, i.quantity > 1 && i.pricePence ? `${money(Math.round(i.pricePence / i.quantity))} each` : ''].filter(Boolean).join(' — '),
           pricePence: i.pricePence,
         })),
         totalPence: total,

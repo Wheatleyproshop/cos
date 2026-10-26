@@ -534,7 +534,7 @@ details.section[open] { padding-bottom: 16px; }
 
 /* ── Workshop ────────────────────────────────────────────────────────── */
 .ws-rows { display: grid; gap: 10px; }
-.ws-row { display: grid; grid-template-columns: 1.1fr 1fr 1.4fr 70px 100px auto; gap: 8px; align-items: end; padding: 10px; border: 1px solid var(--line); border-radius: 12px; background: #fafbfc; }
+.ws-row { display: grid; grid-template-columns: 1.1fr 1fr 1.4fr 70px 100px 80px auto; gap: 8px; align-items: end; padding: 10px; border: 1px solid var(--line); border-radius: 12px; background: #fafbfc; }
 .ws-row .field { margin: 0; min-width: 0; }
 .ws-row input, .ws-row select { width: 100%; }
 .ws-remove { align-self: end; height: 40px; }
@@ -658,3 +658,4 @@ details.section[open] { padding-bottom: 16px; }
 .inhouse { margin-bottom: 18px; }
 .inhouse li { gap: 10px; flex-wrap: wrap; }
 .inhouse .ws-next { justify-content: flex-end; }
+.ws-line b { display: block; padding: 9px 0; white-space: nowrap; }
