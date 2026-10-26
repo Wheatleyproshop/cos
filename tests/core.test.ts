@@ -6,7 +6,7 @@ import { attachments, auditEvents, customers, messages, orders, organisations, p
 import { DEMO_QUOTE_TOKEN, seedDemo } from '@/db/seed';
 import { orderAttention } from '@/lib/attention';
 import { staffActor } from '@/lib/audit';
-import { addDays, parseMoneyToPence } from '@/lib/format';
+import { addDays, longDate, parseMoneyToPence } from '@/lib/format';
 import type { Ctx } from '@/lib/services/common';
 import { createOrder, recordPayment, updateOrderProgress } from '@/lib/services/orders';
 import { acceptQuoteByToken, createQuote, findQuoteByToken } from '@/lib/services/quotes';
@@ -242,6 +242,23 @@ describe('order lifecycle', () => {
     const [back] = await withTenant(org.id, (tx) => tx.select().from(orders).where(eq(orders.id, oops.id)));
     expect(back.archivedAt).toBeNull();
     expect(back.removedAt).toBeNull();
+  });
+
+  it('moves an order across the order pad in one click each: place, arrived, collected', async () => {
+    const { quickMove } = await import('@/lib/services/orders');
+    const o = await createOrder(staff, { customerName: 'Quick Quinn', email: 'quick@example.com', brand: 'PING', product: 'Glove', totalGrossPence: '20', depositPence: '5' });
+    await expect(quickMove(staff, o.id, 'ordered')).rejects.toThrow(/estimated arrival/);
+    let r = await quickMove(staff, o.id, 'ordered', { etaDate: '2026-11-20', supplierReference: 'PING-1' });
+    expect(r).toMatchObject({ orderNumber: o.orderNumber, status: 'ordered', emailed: true });
+    r = await quickMove(staff, o.id, 'ready');
+    expect(r.status).toBe('ready');
+    await expect(quickMove(staff, o.id, 'collected')).rejects.toThrow(/balance outstanding/);
+    r = await quickMove(staff, o.id, 'collected', { collectWithBalance: true });
+    expect(r.status).toBe('collected');
+    const [after] = await withTenant(org.id, (tx) => tx.select().from(orders).where(eq(orders.id, o.id)));
+    expect(after.supplierReference).toBe('PING-1');
+    const sent = (await withTenant(org.id, (tx) => tx.select().from(messages).where(eq(messages.orderId, o.id)))).map((m) => m.templateType).sort();
+    expect(sent).toEqual(['order_confirmation', 'ready_for_collection']);
   });
 
   it('blocks invalid transitions', async () => {
@@ -1112,8 +1129,12 @@ describe('account logos', () => {
 describe('workshop', () => {
   it('checks clubs in, emails the customer, handles a parts delay, and emails when ready', async () => {
     const ws = await import('@/lib/services/workshop');
+    // Dates relative to today, so "finished before the promised date" holds whenever the suite runs.
+    const today = new Date().toISOString().slice(0, 10);
+    const promised = addDays(today, 7);
+    const revised = addDays(today, 11);
     const job = await ws.checkInClubs(staff, {
-      customerName: 'Rita Regrip', email: 'rita@example.com', phone: '07700 111999', etaDate: '2026-10-24', notes: 'Bag tag 12',
+      customerName: 'Rita Regrip', email: 'rita@example.com', phone: '07700 111999', etaDate: promised, notes: 'Bag tag 12',
       items: [
         { club: 'Irons 5-PW', work: 'Regrip', parts: 'Golf Pride MCC midsize', quantity: '6', pricePence: '78.00' },
         { club: 'Driver', work: 'Loft & lie adjustment', pricePence: '10' },
@@ -1128,16 +1149,16 @@ describe('workshop', () => {
     expect(checkIn.bodyHtml).toContain('£88.00');
 
     // Waiting for parts needs a reason the customer will see.
-    await expect(ws.updateWorkshopProgress(staff, job.id, { status: 'waiting_parts', etaDate: '2026-10-28' })).rejects.toThrow(/waiting for/);
-    await ws.updateWorkshopProgress(staff, job.id, { status: 'waiting_parts', etaDate: '2026-10-28', delayReason: 'Waiting for midsize grips to arrive' });
+    await expect(ws.updateWorkshopProgress(staff, job.id, { status: 'waiting_parts', etaDate: revised })).rejects.toThrow(/waiting for/);
+    await ws.updateWorkshopProgress(staff, job.id, { status: 'waiting_parts', etaDate: revised, delayReason: 'Waiting for midsize grips to arrive' });
     const [delay] = await sent('workshop_delayed');
     expect(delay.bodyHtml).toContain('Waiting for midsize grips to arrive');
-    expect(delay.bodyHtml).toContain('28 October 2026');
+    expect(delay.bodyHtml).toContain(longDate(revised));
 
     // Staff can't cancel; managers can.
     await expect(ws.updateWorkshopProgress(staff, job.id, { status: 'cancelled' })).rejects.toThrow(/manager/);
 
-    await ws.updateWorkshopProgress(staff, job.id, { status: 'ready', etaDate: '2026-10-28' });
+    await ws.updateWorkshopProgress(staff, job.id, { status: 'ready', etaDate: revised });
     const [ready] = await sent('workshop_ready');
     expect(ready.subject).toContain('ready to collect');
     const d = (await ws.getJob(org.id, job.reference))!;

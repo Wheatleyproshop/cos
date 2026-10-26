@@ -4,7 +4,22 @@ import { redirect, RedirectType } from 'next/navigation';
 import { act, type FormState } from '@/lib/action-utils';
 import { logout } from '@/lib/auth';
 import type { BackupProvider, EmailAutomationKey } from '@/db/schema';
-import { addAttachment, addNote, archiveAttachment, createOrder, createTrackingLink, editOrderDetails, recordPayment, restoreAttachment, setArchived, setNoteDeleted, setOrderDeleted, updateOrderProgress, voidPayment } from '@/lib/services/orders';
+import {
+  addAttachment,
+  addNote,
+  archiveAttachment,
+  createOrder,
+  createTrackingLink,
+  editOrderDetails,
+  quickMove,
+  recordPayment,
+  restoreAttachment,
+  setArchived,
+  setNoteDeleted,
+  setOrderDeleted,
+  updateOrderProgress,
+  voidPayment,
+} from '@/lib/services/orders';
 import {
   acceptQuoteInStore,
   addQuoteNote,
@@ -81,7 +96,8 @@ export async function createRequestAction(_: FormState, fd: FormData): Promise<F
         target = `/quotes/${q.quoteNumber}`;
       } else {
         const o = await createOrder(ctx, data);
-        target = `/orders/${o.orderNumber}`;
+        // Back to the order pad, where the new order waits under "To place".
+        target = `/?added=${o.orderNumber}`;
       }
     },
     fd,
@@ -93,18 +109,44 @@ export async function createRequestAction(_: FormState, fd: FormData): Promise<F
 /* ── Orders ──────────────────────────────────────────────────────────── */
 
 export async function updateProgressAction(orderId: string, _: FormState, fd: FormData) {
-  return act(
+  let target = '';
+  const res = await act(
     'staff',
     async (ctx) => {
-      await updateOrderProgress(ctx, orderId, {
+      const r = await updateOrderProgress(ctx, orderId, {
         ...obj(fd),
         notify: !flag(fd, 'skipEmail'),
         collectWithBalance: flag(fd, 'collectWithBalance'),
       });
+      // Saving closes the order and goes back to the order pad, saying what happened.
+      target = `/?moved=${r.orderNumber}&to=${r.status}${r.emailed ? '&emailed=1' : ''}`;
       return 'Changes saved.';
     },
     fd,
   );
+  if (res?.ok && target) redirect(target);
+  return res;
+}
+
+/** Order pad: place an order straight from its card (in stock with an ETA, or out of stock). */
+export async function quickPlaceAction(orderId: string, _: FormState, fd: FormData) {
+  return act(
+    'staff',
+    async (ctx) => {
+      const stock = fd.get('stock') === 'out' ? 'delayed' : 'ordered';
+      const r = await quickMove(ctx, orderId, stock, { etaDate: String(fd.get('etaDate') ?? ''), supplierReference: String(fd.get('supplierReference') ?? '') });
+      return `${r.orderNumber} placed${r.emailed ? ' — customer emailed' : ''}.`;
+    },
+    fd,
+  );
+}
+
+/** Order pad: one-click Arrived / Collected. */
+export async function quickMoveAction(orderId: string, to: 'ready' | 'collected', collectWithBalance = false) {
+  return act('staff', async (ctx) => {
+    const r = await quickMove(ctx, orderId, to, { collectWithBalance });
+    return to === 'ready' ? `${r.orderNumber} ready${r.emailed ? ' — customer emailed' : ''}.` : `${r.orderNumber} collected.`;
+  });
 }
 
 export async function editOrderAction(orderId: string, _: FormState, fd: FormData) {

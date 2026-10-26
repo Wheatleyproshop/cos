@@ -11,7 +11,7 @@ import { listWork, metrics } from '@/lib/queries';
 import { upcomingLines } from '@/lib/services/prebooks';
 import { listJobs, WORKSHOP_STATUS_LABELS } from '@/lib/services/workshop';
 
-type SP = Promise<{ q?: string; filter?: string; view?: string; period?: string }>;
+type SP = Promise<{ q?: string; filter?: string; view?: string; period?: string; added?: string; moved?: string; to?: string; emailed?: string }>;
 
 /** Pre-book lines still to arrive that are overdue or due within 30 days, overdue first. */
 function prebookArrivals(upcoming: Awaited<ReturnType<typeof upcomingLines>>, tz: string) {
@@ -28,6 +28,33 @@ function prebookArrivals(upcoming: Awaited<ReturnType<typeof upcomingLines>>, tz
     })
     .filter((a): a is typeof a & { when: string } => Boolean(a.when) && (a.overdue || a.when! <= in30))
     .sort((a, b) => Number(b.overdue) - Number(a.overdue) || a.when.localeCompare(b.when));
+}
+
+const MOVED: Record<string, string> = {
+  place_order: 'is on the order pad (To place)',
+  ordered: 'is placed',
+  delayed: 'is placed as out of stock',
+  ready: 'is ready for collection',
+  collected: 'is collected',
+};
+
+/** One line after saving an order, back on the order pad. */
+function PadNotice({ added, moved, to, emailed }: { added?: string; moved?: string; to?: string; emailed: boolean }) {
+  const ref = (added ?? moved ?? '').replace(/[^\w-]/g, '').slice(0, 20);
+  const text = added ? 'added to the order pad under To place.' : `saved — it ${MOVED[to ?? ''] ?? 'is updated'}${emailed ? ', and the customer has been emailed' : ''}.`;
+  return (
+    <div className="notice padnotice" role="status">
+      <span>
+        <Link href={`/orders/${ref}`} scroll={false}>
+          <b>{ref}</b>
+        </Link>{' '}
+        {text}
+      </span>
+      <Link href="/" className="muted" scroll={false} aria-label="Dismiss">
+        ✕
+      </Link>
+    </div>
+  );
 }
 
 function ViewTabs({ view }: { view: 'orders' | 'performance' }) {
@@ -86,7 +113,8 @@ export default async function Overview({ searchParams }: { searchParams: SP }) {
     <>
       <PageHeader staff={staff} title={greeting(staff.org.timezone)} sub="Your customer orders, beautifully organised." />
       <ViewTabs view="orders" />
-      {filter === 'all' && !q ? <OrderBoard rows={all} today={today} /> : null}
+      {sp.added || sp.moved ? <PadNotice added={sp.added} moved={sp.moved} to={sp.to} emailed={sp.emailed === '1'} /> : null}
+      {filter === 'all' && !q ? <OrderBoard rows={all} today={today} paymentTracking={staff.org.paymentTracking} /> : null}
       <div className="grid">
         {cards.map((c) => (
           <Link key={c.key} href={`/?filter=${c.key}`} className={`metric${c.alert ? ' alert' : ''}`} scroll={false}>

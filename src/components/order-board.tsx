@@ -1,5 +1,7 @@
 import Link from 'next/link';
+import { quickMoveAction, quickPlaceAction } from '@/app/(staff)/actions';
 import { money } from '@/lib/format';
+import { ArrivedQuick, CollectedQuick, PlaceQuick } from './board-actions';
 import type { WorkRow } from '@/lib/queries';
 import { shortDate } from '@/lib/short-date';
 
@@ -12,7 +14,7 @@ const ago = (d: Date, now: number) => {
 type Col = { key: string; title: string; hint: string; href: string; rows: WorkRow[]; empty: string };
 
 /** The order pad at a glance: what needs placing, what's on order, what's waiting to be collected. */
-export function OrderBoard({ rows, today }: { rows: WorkRow[]; today: string }) {
+export function OrderBoard({ rows, today, paymentTracking }: { rows: WorkRow[]; today: string; paymentTracking: boolean }) {
   const now = Date.now();
   const orders = rows.filter((r) => r.kind === 'order' && !r.archived);
   const cols: Col[] = [
@@ -46,6 +48,7 @@ export function OrderBoard({ rows, today }: { rows: WorkRow[]; today: string }) 
             <ul>
               {c.rows.slice(0, 8).map((r) => {
                 const late = r.status !== 'ready' && r.date && r.date < today;
+                const owed = paymentTracking && (r.balancePence ?? 0) > 0 ? money(r.balancePence!) : null;
                 return (
                   <li key={r.id}>
                     <Link href={`/orders/${r.number}`} scroll={false}>
@@ -70,9 +73,18 @@ export function OrderBoard({ rows, today }: { rows: WorkRow[]; today: string }) 
                             {r.flags.find((f) => f.code === 'uncollected')?.label ?? 'Waiting to collect'}
                           </span>
                         )}
-                        <span>{money(r.totalPence)}</span>
+                        <span>{owed && c.key === 'ready' ? `${owed} to pay` : money(r.totalPence)}</span>
                       </span>
                     </Link>
+                    <div className="bc-actions">
+                      {c.key === 'place' ? (
+                        <PlaceQuick action={quickPlaceAction.bind(null, r.id)} defaultEta={r.date ?? ''} label={r.number} />
+                      ) : c.key === 'placed' ? (
+                        <ArrivedQuick action={quickMoveAction.bind(null, r.id, 'ready', false)} label={r.number} />
+                      ) : (
+                        <CollectedQuick action={quickMoveAction.bind(null, r.id, 'collected', Boolean(owed))} label={r.number} owed={owed} />
+                      )}
+                    </div>
                   </li>
                 );
               })}

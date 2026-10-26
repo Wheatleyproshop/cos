@@ -147,12 +147,14 @@ async function insertPayment(
  * Status / ETA / supplier reference changes from the order panel.
  * Triggers the ETA-revised and ready-for-collection automations.
  */
-export async function updateOrderProgress(ctx: Ctx, orderId: string, raw: unknown) {
+export async function updateOrderProgress(ctx: Ctx, orderId: string, raw: unknown): Promise<{ orderNumber: string; status: Order['status']; emailed: boolean }> {
   const input = parse(orderUpdateSchema, raw);
   const notify = input.notify || !atLeast(ctx, 'manager');
+  let orderNumber = '';
 
   const messageIds = await withTenant(ctx.org.id, async (tx) => {
     const { order, customer } = await loadOrder(tx, ctx, orderId);
+    orderNumber = order.orderNumber;
     if (order.archivedAt) throw new ServiceError('Restore this order before changing it.');
     const ids: (string | null)[] = [];
     const patch: Partial<typeof orders.$inferInsert> = {};
@@ -266,6 +268,28 @@ export async function updateOrderProgress(ctx: Ctx, orderId: string, raw: unknow
   });
 
   await dispatchMessages(ctx.org, messageIds);
+  return { orderNumber, status: input.status, emailed: notify && messageIds.some(Boolean) };
+}
+
+/**
+ * One-click moves from the order pad: place (in stock with an ETA, or out of stock), arrived, collected.
+ * Uses the same rules and customer emails as the order page; keeps the supplier reference and notes as they are.
+ */
+export async function quickMove(
+  ctx: Ctx,
+  orderId: string,
+  to: 'ordered' | 'delayed' | 'ready' | 'collected',
+  opts: { etaDate?: string; supplierReference?: string; collectWithBalance?: boolean } = {},
+) {
+  const order = await withTenant(ctx.org.id, async (tx) => (await loadOrder(tx, ctx, orderId)).order);
+  return updateOrderProgress(ctx, orderId, {
+    status: to,
+    etaDate: opts.etaDate ?? order.etaDate ?? '',
+    etaReason: to === 'delayed' ? order.etaReason : '',
+    supplierReference: opts.supplierReference?.trim() || order.supplierReference,
+    notify: true,
+    collectWithBalance: Boolean(opts.collectWithBalance),
+  });
 }
 
 /** Product, specification, price and notes. Each change is diffed onto the ledger. */

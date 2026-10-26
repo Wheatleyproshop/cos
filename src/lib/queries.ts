@@ -37,6 +37,8 @@ export type WorkRow = {
   customerName: string;
   customerEmail: string;
   totalPence: number;
+  /** Orders only: what's still owed. */
+  balancePence?: number;
   date: string | null; // ETA for orders, valid-until for quotes
   status: OrderStatus | 'quote';
   statusText: string;
@@ -103,7 +105,13 @@ export async function listWork(
 
   return withTenant(org.id, async (tx) => {
     const orderRows = await tx
-      .select({ o: orders, c: customers })
+      .select({
+        o: orders,
+        c: customers,
+        // Money that counts towards the balance (voided payments and their voids excluded).
+        paid: sql<number>`(select coalesce(sum(case when p.kind = 'refund' then -p.amount_pence when p.kind = 'void' then 0 else p.amount_pence end), 0)::int
+          from payments p where p.order_id = ${orders.id} and not exists (select 1 from payments v where v.voids_payment_id = p.id))`,
+      })
       .from(orders)
       .innerJoin(customers, eq(customers.id, orders.customerId))
       .where(
@@ -130,7 +138,7 @@ export async function listWork(
             .limit(200);
 
     const all: WorkRow[] = [
-      ...orderRows.map(({ o, c }) => ({
+      ...orderRows.map(({ o, c, paid }) => ({
         kind: 'order' as const,
         id: o.id,
         number: o.orderNumber,
@@ -141,6 +149,7 @@ export async function listWork(
         customerName: c.name,
         customerEmail: c.email,
         totalPence: o.totalGrossPence,
+        balancePence: o.totalGrossPence - Number(paid ?? 0),
         date: o.etaDate,
         status: o.status,
         statusText: statusLabel(o.status),
