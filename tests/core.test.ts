@@ -1028,6 +1028,22 @@ describe('supplier accounts and pre-books', () => {
     expect((await acc.listAccounts(org.id)).some((x) => x.id === w.id)).toBe(true);
   });
 
+  it('books in everything outstanding in one click', async () => {
+    const { listAccounts } = await import('@/lib/services/accounts');
+    const p = await import('@/lib/services/prebooks');
+    const acct = (await listAccounts(org.id)).find((x) => x.brand === 'Titleist')!;
+    const pb = await p.createPrebook(admin, { supplierAccountId: acct.id, season: 'Quick' });
+    await p.addLine(admin, pb.id, { product: 'Pro V1', quantity: '12' });
+    await p.addLine(admin, pb.id, { product: 'AVX', quantity: '6' });
+    await expect(p.receiveAll(staff, pb.id)).rejects.toThrow(/Place the pre-book/);
+    await p.setPrebookStatus(admin, pb.id, 'placed');
+    const lines = (await p.getPrebook(org.id, pb.reference))!.lines;
+    await p.receiveStock(staff, pb.id, { [lines[0].id]: 4 }); // part delivery first
+    expect(await p.receiveAll(staff, pb.id)).toBe('delivered');
+    expect((await p.getPrebook(org.id, pb.reference))!.lines.every((l) => l.quantityReceived === l.quantity)).toBe(true);
+    await p.setPrebookDeleted(admin, pb.id, true); // keep Performance tests unaffected
+  });
+
   it('deletes a pre-book line and restores it, but not once stock has arrived', async () => {
     const { listAccounts } = await import('@/lib/services/accounts');
     const p = await import('@/lib/services/prebooks');

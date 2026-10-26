@@ -77,6 +77,7 @@ import {
   addLine,
   archivePrebook,
   createPrebook,
+  receiveAll,
   receiveStock,
   removeLine,
   restoreLine,
@@ -620,6 +621,14 @@ export async function prebookStatusAction(id: string, status: 'draft' | 'placed'
   return act('manager', async (ctx) => {
     await setPrebookStatus(ctx, id, status);
     return 'Pre-book updated.';
+  });
+}
+
+/** Pre-book list: book in everything outstanding in one click. */
+export async function receiveAllPrebookAction(id: string) {
+  return act('staff', async (ctx) => {
+    await receiveAll(ctx, id);
+    return 'All stock booked in.';
   });
 }
 

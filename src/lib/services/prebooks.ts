@@ -304,6 +304,15 @@ export async function setPrebookStatus(ctx: Ctx, id: string, status: 'draft' | '
  * Books in what has arrived (running totals per line). The pre-book becomes Part delivered or
  * Delivered automatically.
  */
+/** "All arrived": books in everything still outstanding on the pre-book in one go. */
+export async function receiveAll(ctx: Ctx, id: string) {
+  const lines = await withTenant(ctx.org.id, (tx) =>
+    tx.select().from(prebookLines).where(and(eq(prebookLines.prebookId, id), isNull(prebookLines.removedAt))),
+  );
+  if (!lines.length) throw new ServiceError('This pre-book has no lines to book in.');
+  return receiveStock(ctx, id, Object.fromEntries(lines.map((l) => [l.id, l.quantity])));
+}
+
 export async function receiveStock(ctx: Ctx, id: string, received: Record<string, number>) {
   return withTenant(ctx.org.id, async (tx) => {
     const p = await load(tx, ctx, id);

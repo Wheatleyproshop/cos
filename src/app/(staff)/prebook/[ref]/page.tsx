@@ -151,7 +151,7 @@ export default async function PrebookDetail({ params }: { params: Promise<{ ref:
         </div>
       ) : null}
 
-      <section className="panel">
+      <section className="panel" id="receive" style={{ scrollMarginTop: 20 }}>
         <div className="panel-head">
           <h2>Lines</h2>
           {['placed', 'confirmed', 'part_delivered'].includes(p.status) ? <span className="muted">Enter how many of each have arrived so far, then save.</span> : null}

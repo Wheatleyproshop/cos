@@ -7,7 +7,8 @@ import { hasRole, requireStaff } from '@/lib/auth';
 import { money, stamp, todayInTz } from '@/lib/format';
 import { listAccounts } from '@/lib/services/accounts';
 import { listDeletedPrebooks, listPrebooks, PREBOOK_STATUS_LABELS, upcomingLines } from '@/lib/services/prebooks';
-import { createPrebookAction, deletePrebookAction } from '../actions';
+import { createPrebookAction, deletePrebookAction, prebookStatusAction, receiveAllPrebookAction } from '../actions';
+import { StepQuick } from '@/components/board-actions';
 
 export const metadata: Metadata = { title: 'Pre-book' };
 
@@ -171,6 +172,7 @@ export default async function PrebookPage({ searchParams }: { searchParams: Prom
                   <th>Delivery</th>
                   <th className="num">Received</th>
                   <th className="num">Value (cost)</th>
+                  <th>Next step</th>
                 </tr>
               </thead>
               <tbody>
@@ -193,6 +195,38 @@ export default async function PrebookPage({ searchParams }: { searchParams: Prom
                       {p.received} / {p.quantity}
                     </td>
                     <td className="num">{money(p.valuePence)}</td>
+                    <td>
+                      <div className="ws-next">
+                        {manager && p.status === 'draft' ? (
+                          <StepQuick
+                            action={prebookStatusAction.bind(null, p.id, 'placed')}
+                            primary
+                            confirm={`Mark ${p.reference} (${p.brand}) as placed with the brand?`}
+                          >
+                            Placed ▸
+                          </StepQuick>
+                        ) : null}
+                        {manager && p.status === 'placed' ? (
+                          <StepQuick action={prebookStatusAction.bind(null, p.id, 'confirmed')} primary>
+                            Confirmed ✓
+                          </StepQuick>
+                        ) : null}
+                        {['placed', 'confirmed', 'part_delivered'].includes(p.status) && p.quantity > p.received ? (
+                          <>
+                            <StepQuick
+                              action={receiveAllPrebookAction.bind(null, p.id)}
+                              primary={p.status !== 'placed'}
+                              confirm={`Book in everything still due on ${p.reference}: ${p.quantity - p.received} item${p.quantity - p.received === 1 ? '' : 's'}?`}
+                            >
+                              All arrived ✓
+                            </StepQuick>
+                            <Link href={`/prebook/${p.reference}#receive`} className="btn small">
+                              Part delivery…
+                            </Link>
+                          </>
+                        ) : null}
+                      </div>
+                    </td>
                   </tr>
                 ))}
               </tbody>
