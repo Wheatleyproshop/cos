@@ -107,9 +107,9 @@ export async function createRequestAction(_: FormState, fd: FormData): Promise<F
         const q = await createQuote(ctx, data, { send: flag(fd, 'sendNow') });
         target = `/quotes/${q.quoteNumber}`;
       } else {
-        const o = await createOrder(ctx, data);
+        const o = await createOrder(ctx, data, { notify: !flag(fd, 'skipEmail') });
         // Back to the order pad, where the new order waits under "To place".
-        target = `/?added=${o.orderNumber}`;
+        target = `/?added=${o.orderNumber}${flag(fd, 'skipEmail') ? '' : '&emailed=1'}`;
       }
     },
     fd,
@@ -147,7 +147,7 @@ export async function quickPlaceAction(orderId: string, _: FormState, fd: FormDa
     async (ctx) => {
       const stock = fd.get('stock') === 'out' ? 'delayed' : 'ordered';
       const r = await quickMove(ctx, orderId, stock, { etaDate: String(fd.get('etaDate') ?? ''), supplierReference: String(fd.get('supplierReference') ?? '') });
-      return `${r.orderNumber} placed${r.emailed ? ' — customer emailed' : ''}.`;
+      return `${r.orderNumber} placed${r.emailed ? ' — customer sent an update' : ''}.`;
     },
     fd,
   );

@@ -22,9 +22,10 @@ export type WorkflowStep = {
 export const DEFAULT_WORKFLOW: WorkflowStep[] = [
   {
     key: 'place_order',
-    // On the order pad: taken from the customer, not yet placed with the supplier (no customer email yet).
+    // On the order pad: taken, not yet placed with the supplier. The customer is told it's placed when
+    // it's taken (and emailed), so placing it is internal.
     label: 'To place',
-    customerLabel: 'Order received',
+    customerLabel: 'Placed with manufacturer',
     tone: 'neutral',
     awaitingSupplier: true,
     terminal: false,
@@ -123,7 +124,7 @@ export const JOURNEY_WORDS: Record<
     delayed: 'Delayed at manufacturer',
     ready: 'Arrived in store',
     readyLong: 'Arrived in store — ready to collect',
-    created: (store) => `Order received by ${store}`,
+    created: (store) => `Order placed with ${store} and with the manufacturer`,
     etaLabel: 'Estimated arrival',
     doneValue: 'In store',
   },

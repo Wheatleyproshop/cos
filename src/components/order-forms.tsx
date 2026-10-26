@@ -58,6 +58,7 @@ export type RequestDefaults = Partial<Record<'customerId' | 'customerName' | 'em
 export function CreateRequestForm({
   action,
   staffName,
+  canSuppress,
   initialMode,
   defaults,
   cancel,
@@ -105,6 +106,13 @@ export function CreateRequestForm({
                 <Field state={s} name="depositMethod" label="Deposit paid by" options={METHODS} />
                 <Field
                   state={s}
+                  name="etaDate"
+                  label="Estimated arrival"
+                  type="date"
+                  hint="Optional: included in the customer’s confirmation email."
+                />
+                <Field
+                  state={s}
                   name="creditPence"
                   label="Account credit applied (GBP)"
                   inputMode="decimal"
@@ -137,17 +145,24 @@ export function CreateRequestForm({
                 <input type="checkbox" name="sendNow" defaultChecked /> Email the customer a secure approval link now
               </label>
             ) : (
-              <div className="field wide">
-                <p className="muted" style={{ margin: 0 }}>
-                  The order goes on the order pad as <b>To place</b>. The customer is emailed when you place it with the supplier, with the ETA or
-                  an out-of-stock update.
-                </p>
-              </div>
+              <>
+                <div className="field wide">
+                  <p className="muted" style={{ margin: 0 }}>
+                    The customer is emailed straight away that their order has been placed. It goes on the order pad as <b>To place</b> for you to
+                    order from the supplier.
+                  </p>
+                </div>
+                {canSuppress ? (
+                  <label className="check wide">
+                    <input type="checkbox" name="skipEmail" /> Don’t email the customer (manager option)
+                  </label>
+                ) : null}
+              </>
             )}
           </div>
           <div className="actions">
             {cancel}
-            <Submit pendingText="Creating…">{quote ? 'Create quote →' : 'Add to order pad →'}</Submit>
+            <Submit pendingText="Creating…">{quote ? 'Create quote →' : 'Add to order pad & email customer →'}</Submit>
           </div>
         </>
       )}
@@ -387,7 +402,6 @@ function PlaceOrderForm({ action, order, canSuppress }: { action: BoundAction; o
                   name="etaDate"
                   type="date"
                   label={stock === 'ordered' ? 'Estimated arrival' : 'Expected from the supplier (if known)'}
-                  required={stock === 'ordered'}
                   defaultValue={order.etaDate ?? ''}
                 />
                 <Field state={s} name="supplierReference" label="Supplier order reference" defaultValue={order.supplierReference} placeholder="e.g. PING-48192" />
@@ -411,14 +425,14 @@ function PlaceOrderForm({ action, order, canSuppress }: { action: BoundAction; o
           </div>
           <div className="notice">
             {stock === 'ordered'
-              ? 'The customer gets their order confirmation with this arrival date. After that, they only hear from us if it’s delayed, and when it arrives.'
+              ? 'No email: the customer was told their order was placed when you took it. Next they hear from us when it arrives (or if it’s delayed).'
               : stock === 'delayed'
-                ? 'The customer is told it’s placed but out of stock at the supplier. Update the date when the supplier confirms it.'
+                ? 'The customer gets a short update that it’s on back order with the supplier. Update the date when the supplier confirms it.'
                 : 'The customer is told it’s ready to collect.'}
           </div>
           <FormMessage state={s} />
           <div className="actions" style={{ marginTop: 10 }}>
-            <Submit>{stock === 'ready' ? 'Mark ready & email customer →' : 'Place order & email customer →'}</Submit>
+            <Submit>{stock === 'ready' ? 'Mark ready & email customer →' : stock === 'delayed' ? 'Mark out of stock & email update →' : 'Mark as placed →'}</Submit>
           </div>
         </>
       )}

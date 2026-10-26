@@ -53,14 +53,16 @@ export function orderEmailContext(o: Order, c: Customer, t: PaymentTotals, actio
 }
 
 /**
- * Creates the order (and customer if new) on the order pad as "To place", and records any deposit.
- * The customer isn't emailed yet: they hear from us when the order is placed with the supplier.
+ * Creates the order (and customer if new) on the order pad as "To place", records any deposit, and
+ * emails the customer their confirmation ("your order has been placed"). Placing it with the
+ * supplier afterwards is internal.
  */
-export async function createOrder(ctx: Ctx, raw: unknown) {
+export async function createOrder(ctx: Ctx, raw: unknown, opts: { notify?: boolean } = {}) {
   if (!ctx.userId) throw new ServiceError('Orders must be taken by a signed-in staff member.');
   const input = parse(orderCreateSchema, raw);
+  const notify = opts.notify !== false || !atLeast(ctx, 'manager');
 
-  const order = await withTenant(ctx.org.id, async (tx) => {
+  const { order, messageId } = await withTenant(ctx.org.id, async (tx) => {
     const customer = await findOrCreateCustomer(tx, ctx, { name: input.customerName, email: input.email, phone: input.phone, customerId: input.customerId });
     const orderNumber = await nextNumber(tx, ctx.org.id, 'order');
     const [order] = await tx
@@ -112,8 +114,20 @@ export async function createOrder(ctx: Ctx, raw: unknown) {
       await insertPayment(tx, ctx, order.id, { kind: 'deposit', amountPence: input.depositPence, method: input.depositMethod, reference: '' });
     }
 
-    return order;
+    const link = await issueTrackingLink(tx, ctx.org.id, order.id);
+    const messageId = await enqueueEmail(tx, {
+      org: ctx.org,
+      template: 'order_confirmation',
+      recipient: customer.email,
+      customerId: customer.id,
+      orderId: order.id,
+      context: orderEmailContext(order, customer, { paid: input.depositPence, credit: input.creditPence }, link),
+      actor: ctx.actor,
+      suppressedBy: notify ? null : actorName(ctx),
+    });
+    return { order, messageId };
   });
+  await dispatchMessages(ctx.org, [messageId]);
   return order;
 }
 
@@ -176,11 +190,6 @@ export async function updateOrderProgress(ctx: Ctx, orderId: string, raw: unknow
     const statusChanged = input.status !== order.status;
     // Placing = leaving the order pad: in stock (with an ETA) or out of stock at the supplier.
     const placing = statusChanged && order.status === 'place_order' && (input.status === 'ordered' || input.status === 'delayed');
-    if (placing && input.status === 'ordered' && !input.etaDate) {
-      throw new ServiceError('Add the estimated arrival date: the customer’s confirmation email tells them when to expect it.', {
-        etaDate: 'Required when placing the order',
-      });
-    }
     if (statusChanged) {
       if (!canTransition(order.status, input.status)) {
         throw new ServiceError(`An order cannot move from ${statusLabel(order.status)} to ${statusLabel(input.status)}.`, {
@@ -230,12 +239,13 @@ export async function updateOrderProgress(ctx: Ctx, orderId: string, raw: unknow
     patch.updatedAt = now;
     const [updated] = await tx.update(orders).set(patch).where(eq(orders.id, orderId)).returning();
 
-    // Customer notifications: placed (with ETA, or out of stock), then only delays/ETA changes and arrival.
-    // Nothing is sent while an order is still on the order pad: the customer hasn't been told anything yet.
+    // Customer notifications. The customer was told "placed" when the order was taken, so placing it
+    // with the supplier is internal (no email) unless it turns out to be out of stock. After that:
+    // delays / date changes, and "ready to collect" when it arrives.
     const willBeReady = statusChanged && input.status === 'ready';
     const becameDelayed = statusChanged && input.status === 'delayed';
-    const onPad = updated.status === 'place_order';
-    if (willBeReady || placing || ((etaChanged || becameDelayed) && !onPad && updated.status !== 'collected')) {
+    const placedInStock = placing && input.status === 'ordered';
+    if (willBeReady || (!placedInStock && (etaChanged || becameDelayed) && updated.status !== 'collected')) {
       const totals = await paymentTotals(tx, orderId);
       const link = await issueTrackingLink(tx, ctx.org.id, orderId);
       const ctxEmail = orderEmailContext(updated, customer, totals, link);
@@ -245,13 +255,6 @@ export async function updateOrderProgress(ctx: Ctx, orderId: string, raw: unknow
           await enqueueEmail(tx, {
             org: ctx.org, template: 'ready_for_collection', recipient: customer.email, customerId: customer.id,
             orderId, context: ctxEmail, actor: ctx.actor, suppressedBy,
-          }),
-        );
-      } else if (placing) {
-        ids.push(
-          await enqueueEmail(tx, {
-            org: ctx.org, template: 'order_confirmation', recipient: customer.email, customerId: customer.id, orderId,
-            context: { ...ctxEmail, outOfStock: input.status === 'delayed' }, actor: ctx.actor, suppressedBy,
           }),
         );
       } else {
@@ -272,7 +275,7 @@ export async function updateOrderProgress(ctx: Ctx, orderId: string, raw: unknow
 }
 
 /**
- * One-click moves from the order pad: place (in stock with an ETA, or out of stock), arrived, collected.
+ * One-click moves from the order pad: place (in stock, or out of stock), arrived, collected.
  * Uses the same rules and customer emails as the order page; keeps the supplier reference and notes as they are.
  */
 export async function quickMove(

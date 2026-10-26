@@ -305,8 +305,6 @@ async function acceptAndConvert(
   });
 
   const link = await issueTrackingLink(tx, ctx.org.id, order.id);
-  // Supplier orders: the customer hears from us once the order is actually placed (with its ETA).
-  if (!print) return { order, messageId: null, trackingUrl: link };
   const messageId = await enqueueEmail(tx, {
     org: ctx.org,
     template: 'order_confirmation',

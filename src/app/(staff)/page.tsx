@@ -44,7 +44,7 @@ function PadNotice({ added, moved, to, emailed }: { added?: string; moved?: stri
   const text = added
     ? to && to !== 'place_order'
       ? `added to the order pad — it ${MOVED[to] ?? 'is updated'}.`
-      : 'added to the order pad under To place.'
+      : `added to the order pad under To place${emailed ? ', and the customer has been emailed that it’s placed' : ''}.`
     : `saved — it ${MOVED[to ?? ''] ?? 'is updated'}${emailed ? ', and the customer has been emailed' : ''}.`;
   return (
     <div className="notice padnotice" role="status">

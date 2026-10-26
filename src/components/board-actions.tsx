@@ -30,8 +30,8 @@ export function PlaceQuick({ action, defaultEta, label }: { action: FormAction; 
       </div>
       <input type="hidden" name="stock" value={stock} />
       <label>
-        <span>{stock === 'in' ? 'Arriving' : 'Expected (if known)'}</span>
-        <input type="date" name="etaDate" defaultValue={defaultEta} required={stock === 'in'} />
+        <span>{stock === 'in' ? 'Arriving (optional)' : 'Expected (if known)'}</span>
+        <input type="date" name="etaDate" defaultValue={defaultEta} />
       </label>
       <label>
         <span>Supplier ref (optional)</span>
@@ -40,7 +40,7 @@ export function PlaceQuick({ action, defaultEta, label }: { action: FormAction; 
       {state?.error ? <span className="error">{state.error}</span> : null}
       <div className="quickplace-actions">
         <button className="btn small primary" type="submit" disabled={pending}>
-          {pending ? 'Placing…' : 'Place & email customer'}
+          {pending ? 'Saving…' : stock === 'in' ? 'Mark as placed' : 'Mark out of stock & email update'}
         </button>
         <button type="button" className="btn small" onClick={() => setOpen(false)}>
           Cancel
