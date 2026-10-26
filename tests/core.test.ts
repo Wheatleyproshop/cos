@@ -326,6 +326,15 @@ describe('quotes', () => {
     expect(await notes()).toBe('Trade price check');
   });
 
+  it('approves a quote in one click under the customer’s name', async () => {
+    const { acceptQuoteForCustomer } = await import('@/lib/services/quotes');
+    const q = await createQuote(staff, { customerName: 'Yes Yvonne', email: 'yes@example.com', brand: 'PING', product: 'Wedge', totalGrossPence: '150', validUntil: '' });
+    const order = await acceptQuoteForCustomer(staff, q.id);
+    expect(order.status).toBe('place_order');
+    const [after] = await withTenant(org.id, (tx) => tx.select().from(quotes).where(eq(quotes.id, q.id)));
+    expect(after).toMatchObject({ status: 'accepted', acceptedName: 'Yes Yvonne', convertedOrderId: order.id });
+  });
+
   it('creates and sends a quote with a fresh approval link', async () => {
     const q = await createQuote(
       admin,

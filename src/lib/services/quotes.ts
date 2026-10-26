@@ -432,6 +432,12 @@ export async function restoreQuoteNotes(ctx: Ctx, quoteId: string) {
   await updateQuoteNotes(ctx, quoteId, previous, { restored: true });
 }
 
+/** Quotes list "Approved ✓": the customer said yes in person or by phone, recorded under their name. */
+export async function acceptQuoteForCustomer(ctx: Ctx, quoteId: string) {
+  const name = await withTenant(ctx.org.id, async (tx) => (await loadQuote(tx, ctx.org.id, quoteId)).customer.name);
+  return acceptQuoteInStore(ctx, quoteId, name);
+}
+
 /* ───────────────────────── Public (tokenised) access ───────────────────────── */
 
 export type PublicQuote = { org: Organisation; quote: Quote; customer: Customer };

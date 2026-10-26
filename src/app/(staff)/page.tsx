@@ -41,7 +41,11 @@ const MOVED: Record<string, string> = {
 /** One line after saving an order, back on the order pad. */
 function PadNotice({ added, moved, to, emailed }: { added?: string; moved?: string; to?: string; emailed: boolean }) {
   const ref = (added ?? moved ?? '').replace(/[^\w-]/g, '').slice(0, 20);
-  const text = added ? 'added to the order pad under To place.' : `saved — it ${MOVED[to ?? ''] ?? 'is updated'}${emailed ? ', and the customer has been emailed' : ''}.`;
+  const text = added
+    ? to && to !== 'place_order'
+      ? `added to the order pad — it ${MOVED[to] ?? 'is updated'}.`
+      : 'added to the order pad under To place.'
+    : `saved — it ${MOVED[to ?? ''] ?? 'is updated'}${emailed ? ', and the customer has been emailed' : ''}.`;
   return (
     <div className="notice padnotice" role="status">
       <span>

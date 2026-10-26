@@ -21,6 +21,7 @@ import {
   voidPayment,
 } from '@/lib/services/orders';
 import {
+  acceptQuoteForCustomer,
   acceptQuoteInStore,
   addQuoteNote,
   closeQuote,
@@ -237,10 +238,19 @@ export async function acceptInStoreAction(quoteId: string, _: FormState, fd: For
   let target = '';
   const res = await act('staff', async (ctx) => {
     const order = await acceptQuoteInStore(ctx, quoteId, String(fd.get('acceptedName') ?? ''));
-    target = `/orders/${order.orderNumber}`;
+    // The new order lands on the order pad.
+    target = `/?added=${order.orderNumber}&to=${order.status}`;
   }, fd);
   if (res?.ok && target) redirect(target, RedirectType.replace);
   return res;
+}
+
+/** Quotes list: one-click approval for the customer (in person / by phone); the order goes on the pad. */
+export async function quickApproveAction(quoteId: string) {
+  return act('staff', async (ctx) => {
+    const order = await acceptQuoteForCustomer(ctx, quoteId);
+    return `Approved — ${order.orderNumber} is on the order pad.`;
+  });
 }
 
 export async function closeQuoteAction(quoteId: string, outcome: 'declined' | 'cancelled') {

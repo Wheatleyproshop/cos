@@ -9,7 +9,8 @@ import { money, niceDate, stamp } from '@/lib/format';
 import { listQuotes } from '@/lib/queries';
 import { listDeletedQuotes } from '@/lib/services/quotes';
 import { QUOTE_STATUS_LABELS } from '@/lib/status';
-import { deleteQuoteAction } from '../actions';
+import { closeQuoteAction, deleteQuoteAction, quickApproveAction, sendQuoteAction } from '../actions';
+import { StepQuick } from '@/components/board-actions';
 
 export const metadata: Metadata = { title: 'Quotes' };
 
@@ -56,6 +57,7 @@ export default async function QuotesPage({ searchParams }: { searchParams: Promi
               <th>Price</th>
               <th>Created</th>
               <th>Status</th>
+              <th>Next step</th>
             </tr>
           </thead>
           <tbody>
@@ -90,11 +92,36 @@ export default async function QuotesPage({ searchParams }: { searchParams: Promi
                   <td>
                     <Badge status="quote" text={QUOTE_STATUS_LABELS[qt.status]} />
                   </td>
+                  <td>
+                    {['draft', 'sent'].includes(qt.status) ? (
+                      <div className="ws-next">
+                        <StepQuick
+                          action={sendQuoteAction.bind(null, qt.id)}
+                          primary={qt.status === 'draft'}
+                          confirm={`${qt.status === 'draft' ? 'Email' : 'Re-send'} the approval link to ${c.email}?`}
+                        >
+                          {qt.status === 'draft' ? 'Send ▸' : 'Resend'}
+                        </StepQuick>
+                        <StepQuick
+                          action={quickApproveAction.bind(null, qt.id)}
+                          primary={qt.status === 'sent'}
+                          confirm={`Record that ${c.name} approved ${qt.quoteNumber} (${money(qt.totalGrossPence)})? It becomes an order on the order pad.`}
+                        >
+                          Approved ✓
+                        </StepQuick>
+                        <StepQuick action={closeQuoteAction.bind(null, qt.id, 'declined')} confirm={`Mark ${qt.quoteNumber} as declined by ${c.name}?`}>
+                          Declined
+                        </StepQuick>
+                      </div>
+                    ) : qt.status === 'accepted' && qt.convertedOrderId ? (
+                      <span className="muted">Now an order</span>
+                    ) : null}
+                  </td>
                 </RowLink>
               ))
             ) : (
               <tr>
-                <td colSpan={5} className="empty">
+                <td colSpan={6} className="empty">
                   No quotes here. <Link href="/orders/new?mode=quote">Create a quote</Link> and the customer can approve it online.
                 </td>
               </tr>
