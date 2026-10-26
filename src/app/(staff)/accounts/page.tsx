@@ -7,6 +7,8 @@ import { hasRole, requireStaff } from '@/lib/auth';
 import { money, stamp } from '@/lib/format';
 import { accountLogoUrl, deletedAccountNotes, listAccounts, listDeletedAccounts, type AccountRow } from '@/lib/services/accounts';
 import { InternalNotesForm } from '@/components/workshop-forms';
+import { PrebookNextStep } from '@/components/next-steps';
+import { listPrebooks, PREBOOK_STATUS_LABELS, type PrebookSummary } from '@/lib/services/prebooks';
 import { accountActiveAction, accountLogoAction, accountNotesAction, clearAccountNotesAction, restoreAccountNotesAction, deleteAccountAction, catalogueAccountsAction, clearAccountLogoAction, saveAccountAction } from '../actions';
 
 export const metadata: Metadata = { title: 'Accounts' };
@@ -29,7 +31,14 @@ function Contact({ label, value, href }: { label: string; value: string; href?: 
   );
 }
 
-function AccountCard({ a, manager, deletedNotes }: { a: AccountRow; manager: boolean; deletedNotes?: string }) {
+function AccountCard({
+  a, manager, deletedNotes, prebooks,
+}: {
+  a: AccountRow;
+  manager: boolean;
+  deletedNotes?: string;
+  prebooks: PrebookSummary[];
+}) {
   const logo = accountLogoUrl(a);
   const empty = !a.accountNumber && !a.repName && !a.repPhone && !a.repEmail && !a.headOfficePhone && !a.headOfficeEmail;
   return (
@@ -49,6 +58,28 @@ function AccountCard({ a, manager, deletedNotes }: { a: AccountRow; manager: boo
           <img src={logo} alt={`${a.brand} logo`} className="acct-logo" />
         ) : null}
       </header>
+
+      {prebooks.length ? (
+        <section className="acct-prebooks" aria-label={`Open ${a.brand} pre-books`}>
+          <h3>Open pre-books</h3>
+          <ul className="attention">
+            {prebooks.map((p) => (
+              <li key={p.id}>
+                <span>
+                  <Link href={`/prebook/${p.reference}`} className="rowtitle">
+                    {p.reference}
+                    {p.season ? ` · ${p.season}` : ''}
+                  </Link>
+                  <div className="muted">
+                    <span className={`badge pb-${p.status}`}>{PREBOOK_STATUS_LABELS[p.status]}</span> {p.received} / {p.quantity} in · {money(p.valuePence)}
+                  </div>
+                </span>
+                <PrebookNextStep p={p} manager={manager} />
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
 
       {empty ? <p className="muted">No details yet.{manager ? ' Use “Edit details” to add the rep, head office and account number.' : ''}</p> : null}
 
@@ -134,11 +165,13 @@ export default async function AccountsPage({ searchParams }: { searchParams: Pro
   const staff = await requireStaff();
   const manager = hasRole(staff, 'manager');
   const { hidden } = await searchParams;
-  const [accounts, deleted, deletedNotes] = await Promise.all([
+  const [accounts, deleted, deletedNotes, allPrebooks] = await Promise.all([
     listAccounts(staff.organisationId, { includeInactive: hidden === '1' }),
     listDeletedAccounts(staff.organisationId),
     deletedAccountNotes(staff.organisationId),
+    listPrebooks(staff.organisationId),
   ]);
+  const openPrebooks = allPrebooks.filter((p) => !['delivered', 'cancelled'].includes(p.status));
   return (
     <>
       <PageHeader
@@ -163,7 +196,13 @@ export default async function AccountsPage({ searchParams }: { searchParams: Pro
       ) : null}
       <div className="acct-list">
         {accounts.map((a) => (
-          <AccountCard key={a.id} a={a} manager={manager} deletedNotes={a.notes ? undefined : deletedNotes.get(a.id)} />
+          <AccountCard
+            key={a.id}
+            a={a}
+            manager={manager}
+            deletedNotes={a.notes ? undefined : deletedNotes.get(a.id)}
+            prebooks={openPrebooks.filter((p) => p.supplierAccountId === a.id || (!p.supplierAccountId && p.brand.toLowerCase() === a.brand.toLowerCase()))}
+          />
         ))}
       </div>
       {manager ? (

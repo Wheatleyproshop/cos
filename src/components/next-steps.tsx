@@ -1,5 +1,9 @@
-import { closeQuoteAction, quickApproveAction, quickJobAction, quickJobPartsAction, quickMoveAction, quickPlaceAction, sendQuoteAction } from '@/app/(staff)/actions';
-import type { OrderStatus, QuoteStatus, WorkshopStatus } from '@/db/schema';
+import Link from 'next/link';
+import {
+  closeQuoteAction, prebookStatusAction, quickApproveAction, quickJobAction, quickJobPartsAction, quickMoveAction, quickPlaceAction,
+  receiveAllPrebookAction, sendQuoteAction,
+} from '@/app/(staff)/actions';
+import type { OrderStatus, PrebookStatus, QuoteStatus, WorkshopStatus } from '@/db/schema';
 import { money } from '@/lib/format';
 import { ArrivedQuick, CollectedQuick, PartsQuick, PlaceQuick, StepQuick } from './board-actions';
 
@@ -82,6 +86,45 @@ export function JobNextStep({
         >
           Collected ✓
         </StepQuick>
+      ) : null}
+    </div>
+  );
+}
+
+export function PrebookNextStep({
+  p, manager,
+}: {
+  p: { id: string; reference: string; brand: string; status: PrebookStatus; quantity: number; received: number };
+  manager: boolean;
+}) {
+  const due = p.quantity - p.received;
+  const canReceive = ['placed', 'confirmed', 'part_delivered'].includes(p.status) && due > 0;
+  if (!(manager && ['draft', 'placed'].includes(p.status)) && !canReceive) return null;
+  return (
+    <div className="ws-next">
+      {manager && p.status === 'draft' ? (
+        <StepQuick action={prebookStatusAction.bind(null, p.id, 'placed')} primary confirm={`Mark ${p.reference} (${p.brand}) as placed with the brand?`}>
+          Placed ▸
+        </StepQuick>
+      ) : null}
+      {manager && p.status === 'placed' ? (
+        <StepQuick action={prebookStatusAction.bind(null, p.id, 'confirmed')} primary>
+          Confirmed ✓
+        </StepQuick>
+      ) : null}
+      {canReceive ? (
+        <>
+          <StepQuick
+            action={receiveAllPrebookAction.bind(null, p.id)}
+            primary={p.status !== 'placed'}
+            confirm={`Book in everything still due on ${p.reference}: ${due} item${due === 1 ? '' : 's'}?`}
+          >
+            All arrived ✓
+          </StepQuick>
+          <Link href={`/prebook/${p.reference}#receive`} className="btn small">
+            Part delivery…
+          </Link>
+        </>
       ) : null}
     </div>
   );
