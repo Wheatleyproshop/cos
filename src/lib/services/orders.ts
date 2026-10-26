@@ -188,8 +188,6 @@ export async function updateOrderProgress(ctx: Ctx, orderId: string, raw: unknow
 
     // Status
     const statusChanged = input.status !== order.status;
-    // Placing = leaving the order pad: in stock (with an ETA) or out of stock at the supplier.
-    const placing = statusChanged && order.status === 'place_order' && (input.status === 'ordered' || input.status === 'delayed');
     if (statusChanged) {
       if (!canTransition(order.status, input.status)) {
         throw new ServiceError(`An order cannot move from ${statusLabel(order.status)} to ${statusLabel(input.status)}.`, {
@@ -240,12 +238,11 @@ export async function updateOrderProgress(ctx: Ctx, orderId: string, raw: unknow
     const [updated] = await tx.update(orders).set(patch).where(eq(orders.id, orderId)).returning();
 
     // Customer notifications. The customer was told "placed" when the order was taken, so placing it
-    // with the supplier is internal (no email) unless it turns out to be out of stock. After that:
-    // delays / date changes, and "ready to collect" when it arrives.
+    // with the supplier is internal. After that they only hear from us if it's marked out of stock /
+    // delayed, and "ready to collect" when it arrives. Date changes alone update the tracking page only.
     const willBeReady = statusChanged && input.status === 'ready';
     const becameDelayed = statusChanged && input.status === 'delayed';
-    const placedInStock = placing && input.status === 'ordered';
-    if (willBeReady || (!placedInStock && (etaChanged || becameDelayed) && updated.status !== 'collected')) {
+    if (willBeReady || becameDelayed) {
       const totals = await paymentTotals(tx, orderId);
       const link = await issueTrackingLink(tx, ctx.org.id, orderId);
       const ctxEmail = orderEmailContext(updated, customer, totals, link);

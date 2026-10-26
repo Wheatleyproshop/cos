@@ -227,19 +227,24 @@ export function renderEmail(type: EmailAutomationKey, ctx: EmailContext): Render
       return { subject: proof ? `Please approve your ${crest ? 'cresting' : 'golf ball'} proof — ${s}` : `Your quote from ${s} — ${ctx.brand} ${ctx.product}`, ...r };
     }
     case 'eta_revised': {
+      // Sent when an order is marked out of stock / delayed (date changes alone aren't emailed).
       const rows: Block[] = [];
       if (ctx.previousEtaDate) rows.push({ label: 'Previous estimate', value: longDate(ctx.previousEtaDate) });
-      rows.push({ label: print ? 'New estimated ready date' : 'New estimated arrival', value: longDate(ctx.etaDate) });
-      const intro = [print ? `The date your ${crest ? 'clothing' : 'golf balls'} will be ready has changed. We will continue to keep you updated.` : 'The estimated arrival date for your order has changed. We will continue to keep you updated.'];
+      rows.push({ label: print ? 'Estimated ready date' : 'Now expected', value: longDate(ctx.etaDate) });
+      const intro = [
+        print
+          ? `There’s a short delay with your ${crest ? 'clothing' : 'golf balls'}. We will keep you updated and let you know as soon as ${crest ? 'it’s' : 'they’re'} ready.`
+          : `There’s a delay with your ${ctx.brand} order: it’s currently out of stock or held up at the manufacturer. We’ll let you know as soon as it arrives in store.`,
+      ];
       if (ctx.etaReason) intro.push(ctx.etaReason);
       const r = layout(ctx, {
-        preheader: `${print ? 'New estimated ready date' : 'New estimated arrival'}: ${longDate(ctx.etaDate)}.`,
+        preheader: print ? 'A short delay with your order.' : `Your ${ctx.brand} order is delayed at the manufacturer.`,
         heading: 'An update on your order',
         intro,
         rows,
         cta: ctx.actionUrl ? { label: 'Track your order', url: ctx.actionUrl } : undefined,
       });
-      return { subject: `Update on your order ${ctx.reference} — new estimated ${print ? 'ready date' : 'arrival'}`, ...r };
+      return { subject: print ? `A short delay with your order ${ctx.reference}` : `Your order ${ctx.reference} is delayed — ${ctx.brand} ${ctx.product}`, ...r };
     }
     case 'ball_design_received': {
       const r = layout(ctx, {

@@ -155,14 +155,18 @@ describe('order lifecycle', () => {
     await updateOrderProgress(staff, o.id, { status: 'collected', etaDate: addDays(o.etaDate!, 5), supplierReference: o.supplierReference, notify: true });
 
     const msgs = await withTenant(org.id, (tx) => tx.select().from(messages).where(eq(messages.orderId, o.id)));
-    expect(msgs.map((m) => m.templateType)).toEqual(expect.arrayContaining(['eta_revised', 'ready_for_collection']));
+    // A new date alone isn't emailed (it shows on the tracking page); arrival is.
+    expect(msgs.map((m) => m.templateType)).toContain('ready_for_collection');
+    expect(msgs.map((m) => m.templateType)).not.toContain('eta_revised');
     const types = (await withTenant(org.id, (tx) => tx.select().from(auditEvents).where(eq(auditEvents.orderId, o.id)))).map((e) => e.eventType);
     expect(types).toEqual(expect.arrayContaining(['eta_changed', 'order_ready', 'order_collected', 'payment_recorded']));
   });
 
   it('staff cannot record refunds or suppress customer emails', async () => {
-    const [o] = await withTenant(org.id, (tx) => tx.select().from(orders).where(eq(orders.orderNumber, 'COS-1046')));
+    const [o] = await withTenant(org.id, (tx) => tx.select().from(orders).where(eq(orders.orderNumber, 'COS-1050')));
+    expect(o.status).toBe('ordered');
     await expect(recordPayment(staff, o.id, { kind: 'refund', amountPence: '1', method: 'card' })).rejects.toThrow(/manager/);
+    // Marking it out of stock is the one update between placing and arrival.
     await updateOrderProgress(staff, o.id, { status: 'delayed', etaDate: addDays(o.etaDate!, 1), supplierReference: o.supplierReference, notify: false });
     const msgs = await withTenant(org.id, (tx) =>
       tx.select().from(messages).where(and(eq(messages.orderId, o.id), eq(messages.templateType, 'eta_revised'))),

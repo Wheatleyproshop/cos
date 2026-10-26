@@ -128,7 +128,7 @@ export async function recordEvent(db: DB, e: EventInput) {
 const TEMPLATE_NAMES: Record<string, string> = {
   order_confirmation: 'Order confirmation',
   quote_approval: 'Quote approval',
-  eta_revised: 'ETA update',
+  eta_revised: 'Delay update',
   ready_for_collection: 'Ready for collection',
   collection_reminder: 'Collection reminder',
   workshop_checked_in: 'Workshop check-in',

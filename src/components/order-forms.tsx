@@ -236,8 +236,8 @@ export function ProgressForm({
             ) : null}
           </div>
           <div className="notice">
-            Changing the ETA, or marking an order Out of stock / delayed, emails the customer an update. Moving to “Ready for collection” sends
-            the collection email. “Collected” closes the order.
+            Marking an order Out of stock / delayed emails the customer an update. Changing the ETA updates their tracking page without an
+            email. Moving to “Ready for collection” sends the collection email. “Collected” closes the order.
           </div>
           <FormMessage state={s} />
           <div className="actions" style={{ marginTop: 10 }}>

@@ -162,7 +162,7 @@ export function StoreForm({ action, values, disabled }: { action: BoundAction; v
 const AUTOMATIONS: { key: string; label: string; detail: string }[] = [
   { key: 'order_confirmation', label: 'Order confirmation', detail: 'When an order is created or a quote is accepted' },
   { key: 'quote_approval', label: 'Quote approval', detail: 'When staff send a quote for approval' },
-  { key: 'eta_revised', label: 'ETA changed / delayed', detail: 'When the estimated arrival changes or an order is delayed' },
+  { key: 'eta_revised', label: 'Out of stock / delayed', detail: 'When an order is marked out of stock or delayed (date changes alone aren’t emailed)' },
   { key: 'ready_for_collection', label: 'Ready for collection', detail: 'When an order is marked ready' },
   { key: 'collection_reminder', label: 'Collection reminder', detail: 'Daily check for orders ready but not collected' },
   { key: 'workshop_checked_in', label: 'Workshop: clubs checked in', detail: 'When clubs are checked in for repair or regripping' },
