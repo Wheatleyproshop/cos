@@ -135,7 +135,8 @@ export function WorkshopProgressForm({
             />
           </div>
           <p className="muted" style={{ marginTop: 6 }}>
-            The customer is emailed when it’s waiting for parts, when the ready date changes, and when it’s ready to collect.
+            The customer is emailed when it’s waiting for parts and when it’s ready to collect. Changing the ready date updates their tracking page
+            without an email.
           </p>
           {canSkipEmail ? (
             <label className="check">

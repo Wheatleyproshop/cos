@@ -165,7 +165,7 @@ export async function checkInClubs(ctx: Ctx, raw: unknown, opts: { notify?: bool
 
 /**
  * Moves a job along. Waiting for parts needs a reason the customer will see. The customer is
- * emailed when it's delayed or its ready date changes, and when it's ready to collect.
+ * emailed when it's waiting for parts, and when it's ready to collect (a new ready date alone isn't emailed).
  */
 export async function updateWorkshopProgress(
   ctx: Ctx,
@@ -223,7 +223,8 @@ export async function updateWorkshopProgress(
         context: emailContext(updated, customer, items, { link: await issueWorkshopLink(tx, ctx.org.id, id) }), actor: ctx.actor, suppressedBy,
       });
     }
-    const delayed = (statusChanged && input.status === 'waiting_parts') || (etaChanged && OPEN.includes(updated.status) && job.etaDate !== null);
+    // Like orders: waiting for parts is the one update before "ready"; a new date alone isn't emailed.
+    const delayed = statusChanged && input.status === 'waiting_parts';
     if (delayed) {
       return enqueueEmail(tx, {
         org: ctx.org, template: 'workshop_delayed', recipient: customer.email, customerId: customer.id, workshopJobId: id,

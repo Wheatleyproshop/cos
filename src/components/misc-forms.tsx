@@ -166,7 +166,7 @@ const AUTOMATIONS: { key: string; label: string; detail: string }[] = [
   { key: 'ready_for_collection', label: 'Ready for collection', detail: 'When an order is marked ready' },
   { key: 'collection_reminder', label: 'Collection reminder', detail: 'Daily check for orders ready but not collected' },
   { key: 'workshop_checked_in', label: 'Workshop: clubs checked in', detail: 'When clubs are checked in for repair or regripping' },
-  { key: 'workshop_delayed', label: 'Workshop: delay update', detail: 'When a workshop job is waiting for parts or its ready date changes' },
+  { key: 'workshop_delayed', label: 'Workshop: waiting for parts', detail: 'When a workshop job is waiting for parts (date changes alone aren’t emailed)' },
   { key: 'workshop_ready', label: 'Workshop: ready to collect', detail: 'When a workshop job is marked ready' },
   { key: 'workshop_reminder', label: 'Workshop: collection reminder', detail: 'Daily check for workshop jobs ready but not collected' },
   { key: 'ball_design_received', label: 'Online design received', detail: 'When a customer sends in their own golf ball or cresting design online' },

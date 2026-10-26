@@ -1210,6 +1210,16 @@ describe('workshop', () => {
     expect(n.items.find((i) => i.title === 'Workshop job ready')!.href).toMatch(/^\/workshop\/WS-/);
   });
 
+  it('does not email the customer when only the ready date changes', async () => {
+    const ws = await import('@/lib/services/workshop');
+    const today = new Date().toISOString().slice(0, 10);
+    const job = await ws.checkInClubs(staff, { customerName: 'Date Dan', email: 'datedan@example.com', etaDate: addDays(today, 3), items: [{ club: 'Putter', work: 'Regrip', pricePence: '15' }] });
+    const r = await ws.updateWorkshopProgress(staff, job.id, { status: 'in_progress', etaDate: addDays(today, 6) });
+    expect(r.emailed).toBe(false);
+    const sent = (await withTenant(org.id, (tx) => tx.select().from(messages).where(eq(messages.workshopJobId, job.id)))).map((m) => m.templateType);
+    expect(sent).toEqual(['workshop_checked_in']);
+  });
+
   it('moves a job along in one click each: start, waiting for parts, parts in, ready, collected', async () => {
     const ws = await import('@/lib/services/workshop');
     const job = await ws.checkInClubs(staff, { customerName: 'Quick Jo', email: 'quickjo@example.com', etaDate: addDays(new Date().toISOString().slice(0, 10), 5), items: [{ club: 'Irons', work: 'Regrip', pricePence: '60' }] });
