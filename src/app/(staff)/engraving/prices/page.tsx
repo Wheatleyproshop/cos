@@ -17,7 +17,7 @@ export default async function MatPricesPage() {
       <PageHeader
         staff={staff}
         title="Engraving prices."
-        sub="The mat, plus a price per engraving position (each mat), plus an optional setup fee per job."
+        sub="Short and long pile mats, a price per engraving position (each mat), and an optional setup fee per job."
         actions={
           <Link href="/engraving" className="btn">
             ← Mat Engraving
@@ -29,10 +29,12 @@ export default async function MatPricesPage() {
           <MatPricesForm action={matPricesAction} prices={prices} />
         ) : (
           <ul className="attention">
-            <li>
-              <span>{prices.matName}</span>
-              <span className="muted">{money(prices.matPricePence)} each</span>
-            </li>
+            {prices.mats.map((m) => (
+              <li key={m.key}>
+                <span>{m.name}</span>
+                <span className="muted">{money(m.pricePence)} each</span>
+              </li>
+            ))}
             {MAT_POSITIONS.map((p) => (
               <li key={p.key}>
                 <span>{p.label} engraving</span>
@@ -42,7 +44,7 @@ export default async function MatPricesPage() {
           </ul>
         )}
         <p className="muted" style={{ marginTop: 14 }}>
-          Staff can change the mat price and setup fee on each job (for example £0 if the customer brings their own mat).
+          Staff can change the mat price and setup fee on each job. “Customer’s own mat” is engraving only.
         </p>
       </section>
     </>

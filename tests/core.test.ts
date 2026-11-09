@@ -762,14 +762,14 @@ describe('mat engraving', () => {
 
   it('prices mat + engraving per position, emails the proof and sends it for engraving when approved', async () => {
     const { createMatQuote, updateMatPrices } = await import('@/lib/services/mat-engraving');
-    await expect(updateMatPrices(staff, { matName: 'X', matPricePence: '1', lip: '1', underside: '1', setupFeePence: '0' })).rejects.toThrow(/manager/);
-    await updateMatPrices(admin, { matName: 'Spurk Fairway Mat', matPricePence: '89.99', lip: '12', underside: '8', setupFeePence: '0' });
+    await expect(updateMatPrices(staff, { short: '1', long: '1', lip: '1', underside: '1', setupFeePence: '0' })).rejects.toThrow(/manager/);
+    await updateMatPrices(admin, { short: '89.99', long: '109.99', lip: '12', underside: '8', setupFeePence: '0' });
     const [fresh] = await systemDb().select().from(organisations).where(eq(organisations.id, org.id));
     const ctx = { ...admin, org: fresh };
     const q = await createMatQuote(
       ctx,
       {
-        customerName: 'Mat Mike', email: 'matmike@example.com', phone: '', matName: 'Spurk Fairway Mat', matPricePence: '89.99', quantity: '2', setupFeePence: '0',
+        customerName: 'Mat Mike', email: 'matmike@example.com', phone: '', mat: 'short', matPricePence: '89.99', quantity: '2', setupFeePence: '0',
         engravings: JSON.stringify([
           { position: 'lip', scale: 0.8, artwork: { type: 'text', lines: ['MIKE JONES', ''], font: 'bold' } },
           { position: 'underside', scale: 0.6, artwork: { type: 'logo', logo: 0 } },
@@ -779,6 +779,7 @@ describe('mat engraving', () => {
       { send: true },
     );
     expect(q.totalGrossPence).toBe(2 * (8999 + 1200 + 800));
+    expect(q.specificationText).toContain('Mat: Spurk Fairway Mat — Short Pile × 2');
     expect(q.specificationText).toContain('Front lip: laser engraved — “MIKE JONES”');
     expect(q.specificationText).toContain('Underside: laser engraved — logo (club.jpg)');
     const [msg] = await withTenant(org.id, (tx) => tx.select().from(messages).where(eq(messages.quoteId, q.id)));
@@ -794,13 +795,37 @@ describe('mat engraving', () => {
 
   it('needs something to engrave, once per place', async () => {
     const { createMatQuote } = await import('@/lib/services/mat-engraving');
-    const base = { customerName: 'X', email: 'x-mat@example.com', matName: 'Mat', matPricePence: '0', quantity: '1', setupFeePence: '0' };
+    const base = { customerName: 'X', email: 'x-mat@example.com', mat: 'own', matPricePence: '0', quantity: '1', setupFeePence: '0' };
     await expect(createMatQuote(admin, { ...base, engravings: '[]' }, { logos: [], proof: jpeg() }, { send: false })).rejects.toThrow(/highlighted|engrave/);
     const lipTwice = JSON.stringify([
       { position: 'lip', artwork: { type: 'text', lines: ['A'] } },
       { position: 'lip', artwork: { type: 'text', lines: ['B'] } },
     ]);
     await expect(createMatQuote(admin, { ...base, engravings: lipTwice }, { logos: [], proof: jpeg() }, { send: false })).rejects.toThrow(/once/);
+  });
+
+  it('lets a customer send in their own mat design: long pile at the shop’s prices, review by the shop', async () => {
+    const { submitMatDesign, findMatShop, setMatDesignLink } = await import('@/lib/services/mat-engraving');
+    const design = {
+      customerName: 'Online Owen', email: 'owen@example.com', mat: 'long', quantity: '1',
+      // Prices sent by a customer are ignored.
+      matPricePence: '0.01', setupFeePence: '0',
+      engravings: JSON.stringify([{ position: 'lip', scale: 0.8, artwork: { type: 'text', lines: ['OWEN'], font: 'modern' } }]),
+    };
+    const q = await submitMatDesign('desirable-golf', design, { logos: [], proof: jpeg() }, { ip: '198.51.100.21' });
+    const [fresh] = await systemDb().select().from(organisations).where(eq(organisations.id, org.id));
+    const { matPrices } = await import('@/lib/mat-engraving');
+    const p = matPrices(fresh.matEngraving);
+    expect(q.status).toBe('draft');
+    expect(q.totalGrossPence).toBe(p.mats.find((m) => m.key === 'long')!.pricePence + p.positions.lip + p.setupFeePence);
+    expect(q.specificationText).toContain('Long Pile');
+    const { listNotifications } = await import('@/lib/services/notifications');
+    expect((await listNotifications(org.id, admin.userId!)).items[0].title).toBe('New mat engraving design to review');
+
+    await setMatDesignLink(admin, false);
+    expect(await findMatShop('desirable-golf')).toBeNull();
+    await expect(submitMatDesign('desirable-golf', design, { logos: [], proof: jpeg() }, { ip: '198.51.100.22' })).rejects.toThrow(/isn’t available/);
+    await setMatDesignLink(admin, true);
   });
 });
 

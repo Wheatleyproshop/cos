@@ -96,6 +96,8 @@ export const organisations = pgTable('organisations', {
   matEngraving: jsonb('mat_engraving').$type<Partial<MatPrices>>().notNull().default({}),
   /** Public "design your own clothing" page at /design/<slug>/clothing. */
   crestDesignLink: boolean('crest_design_link').notNull().default(true),
+  /** Public "design your own engraved mat" page at /design/<slug>/mat. */
+  matDesignLink: boolean('mat_design_link').notNull().default(true),
   readyUncollectedDays: integer('ready_uncollected_days').notNull().default(7),
   quoteFollowupDays: integer('quote_followup_days').notNull().default(5),
   missingSupplierRefDays: integer('missing_supplier_ref_days').notNull().default(2),

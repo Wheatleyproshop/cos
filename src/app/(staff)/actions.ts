@@ -89,7 +89,7 @@ import {
   updatePrebookNotes,
 } from '@/lib/services/prebooks';
 import { TEMPLATE_KEYS } from '@/lib/email/templates';
-import { createMatQuote, updateMatPrices } from '@/lib/services/mat-engraving';
+import { createMatQuote, setMatDesignLink, updateMatPrices } from '@/lib/services/mat-engraving';
 import { createCrestQuote, setCrestDesignLink, setCrestPositionRemoved, updateCrestPrices } from '@/lib/services/cresting';
 import { addBall, addStarterBalls, createBallPrintQuote, setBallActive, setBallDesignLink, setBallPhoto, setBallRemoved, updateBall, updateBallPrice, updateSetupFee } from '@/lib/services/ball-printing';
 
@@ -458,6 +458,13 @@ export async function matPricesAction(_: FormState, fd: FormData) {
     await updateMatPrices(ctx, obj(fd));
     return 'Engraving prices saved.';
   }, fd);
+}
+
+export async function matDesignLinkAction(enabled: boolean) {
+  return act('manager', async (ctx) => {
+    await setMatDesignLink(ctx, enabled);
+    return enabled ? 'Design link switched on.' : 'Design link switched off.';
+  });
 }
 
 /* ── Clothing cresting ──────────────────────────────────────────────── */

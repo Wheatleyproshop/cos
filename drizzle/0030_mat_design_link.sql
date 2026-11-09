@@ -1,0 +1,1 @@
+ALTER TABLE "organisations" ADD COLUMN "mat_design_link" boolean DEFAULT true NOT NULL;

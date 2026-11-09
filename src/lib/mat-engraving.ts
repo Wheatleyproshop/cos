@@ -13,20 +13,28 @@ export const MAT_POSITIONS: { key: MatPositionKey; label: string; hint: string }
 
 export const matPositionOf = (key: string) => MAT_POSITIONS.find((p) => p.key === key);
 
-/** Mat price (each), engraving price per position (each), and a one-off setup fee per job. */
-export type MatPrices = { matName: string; matPricePence: number; positions: Record<MatPositionKey, number>; setupFeePence: number };
+export type MatPile = 'short' | 'long';
+export type MatOption = { key: MatPile; name: string; pricePence: number };
+
+/** Mats you sell (each with its price), engraving price per position (each), and a one-off setup fee per job. */
+export type MatPrices = { mats: MatOption[]; positions: Record<MatPositionKey, number>; setupFeePence: number };
 
 export const DEFAULT_MAT_PRICES: MatPrices = {
-  matName: 'Spurk Fairway Mat',
-  matPricePence: 0,
+  mats: [
+    { key: 'short', name: 'Spurk Fairway Mat — Short Pile', pricePence: 0 },
+    { key: 'long', name: 'Spurk Fairway Mat — Long Pile', pricePence: 0 },
+  ],
   positions: { lip: 1000, underside: 800 },
   setupFeePence: 0,
 };
 
+/** "Engraving only": the customer brings their own mat. */
+export const OWN_MAT = 'own';
+
 export function matPrices(saved: Partial<MatPrices> | null | undefined): MatPrices {
+  const mats = DEFAULT_MAT_PRICES.mats.map((d) => ({ ...d, ...(saved?.mats?.find((m) => m.key === d.key) ?? {}) }));
   return {
-    matName: saved?.matName || DEFAULT_MAT_PRICES.matName,
-    matPricePence: saved?.matPricePence ?? DEFAULT_MAT_PRICES.matPricePence,
+    mats,
     positions: { ...DEFAULT_MAT_PRICES.positions, ...(saved?.positions ?? {}) },
     setupFeePence: saved?.setupFeePence ?? DEFAULT_MAT_PRICES.setupFeePence,
   };
@@ -42,7 +50,7 @@ export type MatEngraving = { position: MatPositionKey; artwork: MatArtwork; scal
 export type MatSpec = {
   kind: 'cos-mat-engraving';
   version: 1;
-  mat: { name: string; pricePence: number };
+  mat: { name: string; pricePence: number; pile: MatPile | null };
   quantity: number;
   engravings: MatEngraving[];
   setupFeePence: number;

@@ -4,7 +4,7 @@
  * light, frosted mark, so text and logos are drawn as a single engraved tone.
  */
 import { PRINT_FONTS, type PrintFontKey } from '@/lib/ball-print';
-import type { MatPositionKey } from '@/lib/mat-engraving';
+import type { MatPile, MatPositionKey } from '@/lib/mat-engraving';
 
 export type MatDrawArt =
   | { type: 'text'; lines: string[]; font: PrintFontKey }
@@ -98,24 +98,26 @@ function engravingCanvas(art: MatDrawArt, maxW: number, maxH: number): HTMLCanva
   return c;
 }
 
-function drawTurf(g: CanvasRenderingContext2D, x: number, y: number, w: number, h: number) {
+function drawTurf(g: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, pile: MatPile) {
+  const long = pile === 'long';
   const grad = g.createLinearGradient(x, y, x + w, y + h);
   grad.addColorStop(0, '#3f9a33');
   grad.addColorStop(1, '#2a7a24');
   g.fillStyle = grad;
   g.fillRect(x, y, w, h);
   const rand = rng(42);
-  const blades = Math.round((w * h) / 9);
+  // Long pile: longer, thicker, denser fibres.
+  const blades = Math.round((w * h) / (long ? 6 : 9));
   const greens = ['#5fbf45', '#2f8a2a', '#76cf52', '#22691d', '#4aa83a', '#9be06b'];
   g.lineCap = 'round';
   for (let i = 0; i < blades; i++) {
     const bx = x + rand() * w;
     const by = y + rand() * h;
-    const len = 1.5 + rand() * 3.5;
+    const len = long ? 3.5 + rand() * 6 : 1.5 + rand() * 3.5;
     const a = rand() * Math.PI * 2;
     g.strokeStyle = greens[Math.floor(rand() * greens.length)];
     g.globalAlpha = 0.55 + rand() * 0.45;
-    g.lineWidth = 0.8 + rand() * 0.9;
+    g.lineWidth = long ? 1 + rand() * 1.1 : 0.8 + rand() * 0.9;
     g.beginPath();
     g.moveTo(bx, by);
     g.lineTo(bx + Math.cos(a) * len, by + Math.sin(a) * len);
@@ -132,7 +134,7 @@ function engravingArea(view: MatView, size: number) {
     : { x: x + w * 0.1, y: y + h * 0.3, w: w * 0.8, h: h * 0.4 };
 }
 
-export function drawMat(g: CanvasRenderingContext2D, size: number, view: MatView, engravings: MatDrawEngraving[], opts: { guide?: boolean; label?: string } = {}) {
+export function drawMat(g: CanvasRenderingContext2D, size: number, view: MatView, engravings: MatDrawEngraving[], opts: { guide?: boolean; label?: string; pile?: MatPile } = {}) {
   const { w, h, x, y, lipH, r } = geometry(size);
   g.clearRect(0, 0, size, size);
   const bg = g.createRadialGradient(size / 2, size * 0.35, size * 0.1, size / 2, size / 2, size * 0.75);
@@ -156,7 +158,7 @@ export function drawMat(g: CanvasRenderingContext2D, size: number, view: MatView
     g.save();
     roundRect(g, x + size * 0.006, y + size * 0.006, w - size * 0.012, h - lipH - size * 0.006, r * 0.7);
     g.clip();
-    drawTurf(g, x, y, w, h - lipH);
+    drawTurf(g, x, y, w, h - lipH, opts.pile ?? 'short');
     g.restore();
     // Lip: a faint highlight where the plate catches the light.
     const lip = g.createLinearGradient(0, y + h - lipH, 0, y + h);
@@ -210,7 +212,7 @@ export function drawMat(g: CanvasRenderingContext2D, size: number, view: MatView
 }
 
 /** The proof: the top (and the underside if it's engraved) side by side, as a JPEG. */
-export async function renderMatProof(engravings: MatDrawEngraving[]): Promise<File> {
+export async function renderMatProof(engravings: MatDrawEngraving[], pile: MatPile = 'short'): Promise<File> {
   const size = 900;
   const views: MatView[] = engravings.some((e) => e.position === 'underside' && e.art) ? ['top', 'underside'] : ['top'];
   const c = document.createElement('canvas');
@@ -222,7 +224,7 @@ export async function renderMatProof(engravings: MatDrawEngraving[]): Promise<Fi
   views.forEach((v, i) => {
     const p = document.createElement('canvas');
     p.width = p.height = size;
-    drawMat(p.getContext('2d')!, size, v, engravings, { label: views.length > 1 ? (v === 'top' ? 'Top' : 'Underside') : undefined });
+    drawMat(p.getContext('2d')!, size, v, engravings, { pile, label: views.length > 1 ? (v === 'top' ? 'Top' : 'Underside') : undefined });
     g.drawImage(p, i * (size + 20), 0);
   });
   const blob = await new Promise<Blob | null>((res) => c.toBlob(res, 'image/jpeg', 0.88));

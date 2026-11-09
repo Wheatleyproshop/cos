@@ -90,7 +90,8 @@ export type EventType =
   | 'workshop_notes_changed'
   | 'workshop_job_restored'
   | 'ball_design_submitted'
-  | 'crest_design_submitted';
+  | 'crest_design_submitted'
+  | 'mat_design_submitted';
 
 export type EventInput = {
   organisationId: string;
@@ -157,6 +158,8 @@ export function describeEvent(e: Pick<AuditEvent, 'eventType' | 'oldValueJson' |
       return 'Ball design submitted online by the customer';
     case 'crest_design_submitted':
       return 'Cresting design submitted online by the customer';
+    case 'mat_design_submitted':
+      return 'Mat engraving design submitted online by the customer';
     case 'workshop_job_created':
       return `Clubs checked in${Array.isArray(n.items) ? `: ${(n.items as string[]).join(', ')}` : ''}`;
     case 'workshop_status_changed':

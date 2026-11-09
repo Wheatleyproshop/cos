@@ -12,15 +12,16 @@ import { ServiceError, type Ctx } from './common';
 import { proofPathFor } from './quotes';
 
 /**
- * Shared plumbing for the public "design your own" pages (golf balls, clothing cresting):
+ * Shared plumbing for the public "design your own" pages (golf balls, clothing cresting, mat engraving):
  * abuse limits, who the draft quote belongs to, and what happens once a design is in.
  */
 
-export type DesignKind = 'ball' | 'cresting';
-const EVENT = { ball: 'ball_design_submitted', cresting: 'crest_design_submitted' } as const;
+export type DesignKind = 'ball' | 'cresting' | 'engraving';
+const EVENT = { ball: 'ball_design_submitted', cresting: 'crest_design_submitted', engraving: 'mat_design_submitted' } as const;
 const WORDS = {
   ball: { thing: 'personalised golf balls', short: 'golf ball', next: 'put it into print' },
   cresting: { thing: 'crested clothing', short: 'cresting', next: 'put it into production' },
+  engraving: { thing: 'an engraved fairway mat', short: 'mat engraving', next: 'send it for engraving' },
 };
 
 /** Across both design pages: per person per hour, per shop per day. */
@@ -67,7 +68,7 @@ export async function designSubmitted(kind: DesignKind, ctx: Ctx, quote: Quote, 
       context: {
         customerName: customer.name, reference: quote.quoteNumber, brand: quote.brand, product: quote.product,
         specification: quote.specificationText, totalPence: quote.totalGrossPence, previewImageUrl: appUrl(proofPathFor(quote.id)),
-        journey: kind === 'cresting' ? 'cresting' : 'print',
+        journey: kind === 'ball' ? 'print' : kind,
       },
     });
   });
@@ -117,7 +118,7 @@ export async function listSubmittedDesigns(orgId: string, kind: DesignKind = 'ba
  * Everything in progress for an in-house service (ball printing / cresting): open proofs (quotes,
  * including designs sent in online) and approved jobs not yet collected, with what's still owed.
  */
-export async function inHouseWork(orgId: string, kind: DesignKind | 'engraving') {
+export async function inHouseWork(orgId: string, kind: DesignKind) {
   const specKind = kind === 'cresting' ? 'cos-cresting' : kind === 'engraving' ? 'cos-mat-engraving' : 'cos-ball-print';
   return withTenant(orgId, async (tx) => {
     const proofs = await tx

@@ -10,8 +10,9 @@ export function MatPricesForm({ action, prices }: { action: BoundAction; prices:
       {(s) => (
         <>
           <div className="fields">
-            <Field state={s} name="matName" label="Mat" required defaultValue={prices.matName} />
-            <Field state={s} name="matPricePence" label="Mat price each (£)" inputMode="decimal" defaultValue={penceToInput(prices.matPricePence)} hint="Leave at 0.00 to enter it on each job." />
+            {prices.mats.map((m) => (
+              <Field key={m.key} state={s} name={m.key} label={`${m.name} (£ each)`} inputMode="decimal" defaultValue={penceToInput(m.pricePence)} />
+            ))}
             <Field state={s} name="lip" label="Front lip engraving, each (£)" inputMode="decimal" defaultValue={penceToInput(prices.positions.lip)} />
             <Field state={s} name="underside" label="Underside engraving, each (£)" inputMode="decimal" defaultValue={penceToInput(prices.positions.underside)} />
             <Field state={s} name="setupFeePence" label="Setup fee per job (£)" inputMode="decimal" defaultValue={penceToInput(prices.setupFeePence)} />

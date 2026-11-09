@@ -211,6 +211,13 @@
       "when": 1794225462745,
       "tag": "0029_mat_engraving",
       "breakpoints": true
+    },
+    {
+      "idx": 30,
+      "version": "7",
+      "when": 1794225900101,
+      "tag": "0030_mat_design_link",
+      "breakpoints": true
     }
   ]
 }

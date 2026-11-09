@@ -4,27 +4,27 @@ import { startTransition, useActionState, useEffect, useMemo, useRef, useState, 
 import type { FormState } from '@/lib/action-utils';
 import { LOGO_TYPES, MAX_LOGO_BYTES, PRINT_FONTS, type PrintFontKey } from '@/lib/ball-print';
 import { money, parseMoneyToPence, penceToInput } from '@/lib/format';
-import { MAT_POSITIONS, type MatPositionKey, type MatPrices } from '@/lib/mat-engraving';
+import { MAT_POSITIONS, OWN_MAT, type MatPile, type MatPositionKey, type MatPrices } from '@/lib/mat-engraving';
 import { CustomerPicker, type PickerDefaults } from './customer-picker';
 import { Field, FormMessage } from './forms';
 import { drawMat, renderMatProof, type MatDrawEngraving, type MatView } from './mat-render';
 
-const STEPS = ['Engraving', 'Quantity & send'];
+const STEPS = ['Mat & engraving', 'Quantity & send'];
 const MAX_LOGOS = 2;
 
 type Logo = { file: File; image: HTMLImageElement };
 type Place = { on: boolean; kind: 'text' | 'logo'; lines: string[]; font: PrintFontKey; logo: number; scale: number };
 const blank = (on: boolean): Place => ({ on, kind: 'text', lines: ['', ''], font: 'modern', logo: 0, scale: 0.8 });
 
-function Stage({ view, engravings }: { view: MatView; engravings: MatDrawEngraving[] }) {
+function Stage({ view, engravings, pile }: { view: MatView; engravings: MatDrawEngraving[]; pile: MatPile }) {
   const ref = useRef<HTMLCanvasElement>(null);
   useEffect(() => {
     const c = ref.current;
     if (!c) return;
     const px = Math.round((c.clientWidth || 560) * Math.min(window.devicePixelRatio || 1, 2));
     if (c.width !== px) c.width = c.height = px;
-    drawMat(c.getContext('2d')!, px, view, engravings, { guide: true });
-  }, [view, engravings]);
+    drawMat(c.getContext('2d')!, px, view, engravings, { guide: true, pile });
+  }, [view, engravings, pile]);
   return (
     <div className="cr-stage">
       <canvas ref={ref} role="img" aria-label={`${view === 'top' ? 'Top' : 'Underside'} of the mat with the engraving`} style={{ cursor: 'default' }} />
@@ -32,21 +32,31 @@ function Stage({ view, engravings }: { view: MatView; engravings: MatDrawEngravi
   );
 }
 
+type MatChoice = MatPile | typeof OWN_MAT;
+
 export function MatEngravingBuilder({
-  prices, action, defaults,
+  prices, action, defaults, variant = 'staff',
 }: {
   prices: MatPrices;
   action: (prev: FormState, fd: FormData) => Promise<FormState>;
   defaults: PickerDefaults;
+  variant?: 'staff' | 'public';
 }) {
+  const isPublic = variant === 'public';
   const [state, formAction, pending] = useActionState(action, null);
   const [step, setStep] = useState(0);
   const [view, setView] = useState<MatView>('top');
   const [places, setPlaces] = useState<Record<MatPositionKey, Place>>({ lip: blank(true), underside: blank(false) });
   const [logos, setLogos] = useState<Logo[]>([]);
   const [logoError, setLogoError] = useState('');
-  const [matName, setMatName] = useState(prices.matName);
-  const [matPrice, setMatPrice] = useState(penceToInput(prices.matPricePence));
+  const [mat, setMat] = useState<MatChoice>('short');
+  const option = prices.mats.find((m) => m.key === mat);
+  const matName = option?.name ?? 'Customer’s own mat';
+  const [matPrice, setMatPrice] = useState(penceToInput(prices.mats[0]?.pricePence ?? 0));
+  const chooseMat = (m: MatChoice) => {
+    setMat(m);
+    setMatPrice(penceToInput(prices.mats.find((o) => o.key === m)?.pricePence ?? 0));
+  };
   const [qty, setQty] = useState('1');
   const [setup, setSetup] = useState(penceToInput(prices.setupFeePence));
   const [busy, setBusy] = useState(false);
@@ -68,8 +78,9 @@ export function MatEngravingBuilder({
   const hasArt = active.length > 0 && active.every((p) => (places[p.key].kind === 'logo' ? Boolean(logos[places[p.key].logo]) : places[p.key].lines.some((l) => l.trim())));
   const n = Math.max(1, Math.floor(Number(qty) || 1));
   const engravingEach = active.reduce((t, p) => t + prices.positions[p.key], 0);
-  const matPence = parseMoneyToPence(matPrice || '0') ?? 0;
-  const setupPence = parseMoneyToPence(setup || '0') ?? 0;
+  // Customers always see the shop's prices; staff can adjust them on the job.
+  const matPence = isPublic ? (option?.pricePence ?? 0) : mat === OWN_MAT ? 0 : (parseMoneyToPence(matPrice || '0') ?? 0);
+  const setupPence = isPublic ? prices.setupFeePence : (parseMoneyToPence(setup || '0') ?? 0);
   const total = n * (matPence + engravingEach) + setupPence;
 
   const addLogo = (file: File | undefined, forKey?: MatPositionKey) => {
@@ -94,9 +105,10 @@ export function MatEngravingBuilder({
     const submitter = (e.nativeEvent as SubmitEvent).submitter as HTMLButtonElement | null;
     const fd = new FormData(e.currentTarget);
     fd.set('intent', submitter?.value ?? 'save');
+    fd.set('mat', mat);
     setBusy(true);
     try {
-      fd.set('proof', await renderMatProof(draws));
+      fd.set('proof', await renderMatProof(draws, mat === 'long' ? 'long' : 'short'));
     } finally {
       setBusy(false);
     }
@@ -133,7 +145,7 @@ export function MatEngravingBuilder({
           <span className="muted">Laser engraved on an xTool F2</span>
         </div>
         <div className="bp-canvas">
-          <Stage view={view} engravings={draws} />
+          <Stage view={view} engravings={draws} pile={mat === 'long' ? 'long' : 'short'} />
         </div>
         <div className="bp-caption">
           <b>{matName}</b>
@@ -155,7 +167,19 @@ export function MatEngravingBuilder({
 
         {step === 0 ? (
           <div>
-            <h2>What to engrave, and where</h2>
+            <h2>The mat</h2>
+            <div className="seg wide" role="radiogroup" aria-label="Mat" style={{ marginTop: 8 }}>
+              {prices.mats.map((m) => (
+                <button key={m.key} type="button" role="radio" aria-checked={mat === m.key} className={mat === m.key ? 'on' : ''} onClick={() => chooseMat(m.key)}>
+                  {m.key === 'short' ? 'Short pile' : 'Long pile'}
+                  {m.pricePence ? ` · ${money(m.pricePence)}` : ''}
+                </button>
+              ))}
+              <button type="button" role="radio" aria-checked={mat === OWN_MAT} className={mat === OWN_MAT ? 'on' : ''} onClick={() => chooseMat(OWN_MAT)}>
+                {isPublic ? 'I have my own mat' : 'Customer’s own mat'}
+              </button>
+            </div>
+            <h2 style={{ marginTop: 18 }}>What to engrave, and where</h2>
             <p className="muted">A name, initials or a logo, on the front lip (seen from the top) and/or underneath.</p>
             <div className="cr-logos">
               {logos.map((l, i) => (
@@ -247,20 +271,60 @@ export function MatEngravingBuilder({
               })}
             </div>
           </div>
+        ) : isPublic && state?.ok ? (
+          <div className="bp-thanks" role="status">
+            <span className="bp-thanks-tick" aria-hidden="true">✓</span>
+            <h2>Design sent</h2>
+            <p>{state.message}</p>
+          </div>
+        ) : isPublic ? (
+          <form onSubmit={submit}>
+            <h2>Quantity &amp; your details</h2>
+            <p className="muted">How many mats, and how we can reach you. We’ll check the design and confirm the price before anything is engraved.</p>
+            <FormMessage state={state} />
+            <div className="fields" style={{ marginTop: 12 }}>
+              <label className="field">
+                <span>Quantity</span>
+                <input name="quantity" type="number" min={1} max={200} value={qty} onChange={(e) => setQty(e.target.value)} />
+              </label>
+              <Field state={state} name="customerName" label="Your name" required autoComplete="name" />
+              <Field state={state} name="email" label="Email" type="email" required autoComplete="email" />
+              <Field state={state} name="phone" label="Mobile" type="tel" autoComplete="tel" />
+              <Field state={state} name="notes" label="Anything we should know?" wide textarea placeholder="e.g. A Christmas present, needed by 20 December." />
+            </div>
+            <label className="bp-hp" aria-hidden="true">
+              Website <input name="website" tabIndex={-1} autoComplete="off" />
+            </label>
+            <div className="bp-total">
+              <div>
+                <span>
+                  {n} mat{n === 1 ? '' : 's'} × {money(matPence + engravingEach)}
+                  {mat === OWN_MAT ? ' (engraving only)' : matPence ? ` (mat ${money(matPence)} + engraving ${money(engravingEach)})` : ' (engraving: we’ll confirm the mat price)'}
+                </span>
+                {setupPence ? <span>Setup {money(setupPence)}</span> : null}
+              </div>
+              <b>{money(total)}</b>
+            </div>
+            <div className="actions">
+              <button className="btn primary" type="submit" disabled={working || !hasArt}>
+                {working ? 'Sending…' : 'Send my design for approval →'}
+              </button>
+            </div>
+          </form>
         ) : (
           <form onSubmit={submit}>
             <h2>Quantity &amp; send</h2>
             <p className="muted">How many mats, the customer, then save or email the proof for approval.</p>
             <FormMessage state={state} />
             <div className="fields" style={{ marginTop: 12 }}>
-              <label className="field">
-                <span>Mat</span>
-                <input name="matName" value={matName} onChange={(e) => setMatName(e.target.value)} maxLength={80} />
-              </label>
-              <label className="field">
-                <span>Mat price each (GBP)</span>
-                <input name="matPricePence" inputMode="decimal" value={matPrice} onChange={(e) => setMatPrice(e.target.value)} placeholder="0.00 if they bring their own" />
-              </label>
+              {mat === OWN_MAT ? (
+                <input type="hidden" name="matPricePence" value="0" />
+              ) : (
+                <label className="field">
+                  <span>Mat price each (GBP)</span>
+                  <input name="matPricePence" inputMode="decimal" value={matPrice} onChange={(e) => setMatPrice(e.target.value)} />
+                </label>
+              )}
               <label className="field">
                 <span>Quantity</span>
                 <input name="quantity" type="number" min={1} max={200} value={qty} onChange={(e) => setQty(e.target.value)} />
@@ -294,7 +358,7 @@ export function MatEngravingBuilder({
           </form>
         )}
 
-        {step < STEPS.length - 1 ? (
+        {step < STEPS.length - 1 && !(isPublic && state?.ok) ? (
           <div className="actions">
             <button type="button" className="btn primary" disabled={!hasArt} onClick={() => setStep(step + 1)}>
               Next: {STEPS[step + 1]} →
