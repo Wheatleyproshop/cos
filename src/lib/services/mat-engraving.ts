@@ -5,7 +5,7 @@ import { organisations, type Organisation } from '@/db/schema';
 import { recordEvent } from '../audit';
 import { LOGO_TYPES, MAX_LOGO_BYTES, MAX_PROOF_BYTES, PRINT_FONTS, type PrintFontKey } from '../ball-print';
 import { money, parseMoneyToPence } from '../format';
-import { MAT_POSITIONS, matPositionOf, matPrices, OWN_MAT, type MatEngraving, type MatPositionKey, type MatSpec } from '../mat-engraving';
+import { hasTransparency, MAT_LOGO_HELP, MAT_LOGO_TYPES, MAT_POSITIONS, matPositionOf, matPrices, OWN_MAT, type MatEngraving, type MatPositionKey, type MatSpec } from '../mat-engraving';
 import { storage } from '../storage';
 import { newToken } from '../tokens';
 import { customerFields, parse } from '../validation';
@@ -132,6 +132,7 @@ export async function createMatQuote(
   for (const i of new Set(input.engravings.flatMap((e) => (e.artwork.type === 'logo' ? [e.artwork.logo] : [])))) {
     const img = await readImage(files.logos[i] ?? null, 'logo', MAX_LOGO_BYTES);
     if (!img) throw new ServiceError('Upload the logo to engrave.', { logo: 'Required' });
+    if (!MAT_LOGO_TYPES.includes(img.mime) || !hasTransparency(img.buf, img.mime)) throw new ServiceError(`Logo ${i + 1} needs a transparent background. ${MAT_LOGO_HELP}`, { logo: 'Transparent PNG needed' });
     const filename = (files.logos[i]!.name || `logo-${i + 1}`).replace(/[^\w.\- ()]/g, '_').slice(0, 120);
     logos.set(i, { ...(await put(`logo-${i + 1}`, img)), filename });
   }

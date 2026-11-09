@@ -759,6 +759,13 @@ describe('clothing cresting', () => {
 
 describe('mat engraving', () => {
   const jpeg = (name = 'img.jpg') => new File([new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 0, 16, 74, 70, 73, 70, 0, 1])], name, { type: 'image/jpeg' });
+  // Just the PNG header: colour type 6 has an alpha channel (transparent), 2 is solid RGB.
+  const png = (name: string, colourType: number) =>
+    new File(
+      [new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 13, 0x49, 0x48, 0x44, 0x52, 0, 0, 0, 1, 0, 0, 0, 1, 8, colourType, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0x49, 0x44, 0x41, 0x54])],
+      name,
+      { type: 'image/png' },
+    );
 
   it('prices mat + engraving per position, emails the proof and sends it for engraving when approved', async () => {
     const { createMatQuote, updateMatPrices } = await import('@/lib/services/mat-engraving');
@@ -775,13 +782,13 @@ describe('mat engraving', () => {
           { position: 'underside', scale: 0.6, artwork: { type: 'logo', logo: 0 } },
         ]),
       },
-      { logos: [jpeg('club.jpg'), null], proof: jpeg('proof.jpg') },
+      { logos: [png('club.png', 6), null], proof: jpeg('proof.jpg') },
       { send: true },
     );
     expect(q.totalGrossPence).toBe(2 * (8999 + 1200 + 800));
     expect(q.specificationText).toContain('Mat: Spurk Fairway Mat — Short Pile × 2');
     expect(q.specificationText).toContain('Front lip: laser engraved — “MIKE JONES”');
-    expect(q.specificationText).toContain('Underside: laser engraved — logo (club.jpg)');
+    expect(q.specificationText).toContain('Underside: laser engraved — logo (club.png)');
     const [msg] = await withTenant(org.id, (tx) => tx.select().from(messages).where(eq(messages.quoteId, q.id)));
     expect(msg.subject).toContain('mat engraving proof');
 
@@ -802,6 +809,16 @@ describe('mat engraving', () => {
       { position: 'lip', artwork: { type: 'text', lines: ['B'] } },
     ]);
     await expect(createMatQuote(admin, { ...base, engravings: lipTwice }, { logos: [], proof: jpeg() }, { send: false })).rejects.toThrow(/once/);
+  });
+
+  it('only engraves logos with a transparent background', async () => {
+    const { createMatQuote } = await import('@/lib/services/mat-engraving');
+    const base = { customerName: 'X', email: 'x-mat@example.com', mat: 'own', matPricePence: '0', quantity: '1', setupFeePence: '0' };
+    const withLogo = { ...base, engravings: JSON.stringify([{ position: 'underside', artwork: { type: 'logo', logo: 0 } }]) };
+    await expect(createMatQuote(admin, withLogo, { logos: [jpeg('logo.jpg')], proof: jpeg() }, { send: false })).rejects.toThrow(/transparent background/);
+    await expect(createMatQuote(admin, withLogo, { logos: [png('solid.png', 2)], proof: jpeg() }, { send: false })).rejects.toThrow(/transparent background/);
+    const q = await createMatQuote(admin, withLogo, { logos: [png('clear.png', 6)], proof: jpeg() }, { send: false });
+    expect(q.specificationText).toContain('logo (clear.png)');
   });
 
   it('lets a customer send in their own mat design: long pile at the shop’s prices, review by the shop', async () => {

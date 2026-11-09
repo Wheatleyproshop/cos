@@ -2,9 +2,9 @@
 
 import { startTransition, useActionState, useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import type { FormState } from '@/lib/action-utils';
-import { LOGO_TYPES, MAX_LOGO_BYTES, PRINT_FONTS, type PrintFontKey } from '@/lib/ball-print';
+import { MAX_LOGO_BYTES, PRINT_FONTS, type PrintFontKey } from '@/lib/ball-print';
 import { money, parseMoneyToPence, penceToInput } from '@/lib/format';
-import { MAT_POSITIONS, OWN_MAT, type MatPile, type MatPositionKey, type MatPrices } from '@/lib/mat-engraving';
+import { MAT_LOGO_HELP, MAT_LOGO_TYPES, MAT_POSITIONS, OWN_MAT, type MatPile, type MatPositionKey, type MatPrices } from '@/lib/mat-engraving';
 import { CustomerPicker, type PickerDefaults } from './customer-picker';
 import { Field, FormMessage } from './forms';
 import { drawMat, renderMatProof, type MatDrawEngraving, type MatView } from './mat-render';
@@ -86,12 +86,22 @@ export function MatEngravingBuilder({
   const addLogo = (file: File | undefined, forKey?: MatPositionKey) => {
     setLogoError('');
     if (!file) return;
-    if (!LOGO_TYPES[file.type]) return setLogoError('Please use a PNG, JPG or WebP logo. A black-on-white or transparent PNG engraves best.');
+    if (!MAT_LOGO_TYPES.includes(file.type)) return setLogoError(`That file can’t be used. ${MAT_LOGO_HELP}`);
     if (file.size > MAX_LOGO_BYTES) return setLogoError('That logo is over 3 MB. Please use a smaller version.');
     if (logos.length >= MAX_LOGOS) return setLogoError(`Up to ${MAX_LOGOS} logos per job.`);
     const index = logos.length;
     const img = new Image();
     img.onload = () => {
+      // The laser engraves the logo's shape, so the background must be see-through.
+      const c = document.createElement('canvas');
+      c.width = Math.min(img.naturalWidth, 400);
+      c.height = Math.max(1, Math.round((img.naturalHeight * c.width) / Math.max(1, img.naturalWidth)));
+      const g = c.getContext('2d')!;
+      g.drawImage(img, 0, 0, c.width, c.height);
+      const px = g.getImageData(0, 0, c.width, c.height).data;
+      let clear = 0;
+      for (let i = 3; i < px.length; i += 4) if (px[i] < 128) clear++;
+      if (clear < px.length / 4 / 50) return setLogoError(`That logo has a solid background. ${MAT_LOGO_HELP}`);
       setLogos((l) => [...l, { file, image: img }]);
       if (forKey) update(forKey, { kind: 'logo', logo: index });
     };
@@ -192,10 +202,11 @@ export function MatEngravingBuilder({
               {logos.length < MAX_LOGOS ? (
                 <label className="btn small">
                   ＋ Upload a logo
-                  <input type="file" accept="image/png,image/jpeg,image/webp" hidden onChange={(e) => addLogo(e.target.files?.[0])} />
+                  <input type="file" accept="image/png,image/webp" hidden onChange={(e) => addLogo(e.target.files?.[0])} />
                 </label>
               ) : null}
             </div>
+            <p className="muted" style={{ fontSize: 12.5, marginTop: 6 }}>Logos: {MAT_LOGO_HELP}</p>
             {logoError ? <p className="error" role="alert">{logoError}</p> : null}
             <div className="cr-list">
               {MAT_POSITIONS.map((p) => {
@@ -257,7 +268,7 @@ export function MatEngravingBuilder({
                         ) : (
                           <label className="btn small">
                             ＋ Upload the logo
-                            <input type="file" accept="image/png,image/jpeg,image/webp" hidden onChange={(e) => addLogo(e.target.files?.[0], p.key)} />
+                            <input type="file" accept="image/png,image/webp" hidden onChange={(e) => addLogo(e.target.files?.[0], p.key)} />
                           </label>
                         )}
                         <label className="bp-size">

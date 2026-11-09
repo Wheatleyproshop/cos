@@ -11,6 +11,38 @@ export const MAT_POSITIONS: { key: MatPositionKey; label: string; hint: string }
   { key: 'underside', label: 'Underside', hint: 'On the base, under the mat' },
 ];
 
+/** The laser engraves the logo's shape, so logos need a transparent background. */
+export const MAT_LOGO_TYPES = ['image/png', 'image/webp'];
+export const MAT_LOGO_HELP = 'Please use a PNG (or WebP) with a transparent background — the laser engraves the shape of the logo, so a white or coloured background would be engraved as a solid block.';
+
+/** Whether a PNG/WebP file can be see-through (has an alpha channel or a transparent colour). */
+export function hasTransparency(buf: Uint8Array, mime: string): boolean {
+  const ascii = (o: number, n: number) => String.fromCharCode(...buf.subarray(o, o + n));
+  if (mime === 'image/png') {
+    if (buf.length < 33 || ascii(12, 4) !== 'IHDR') return false;
+    const colourType = buf[25];
+    if (colourType === 4 || colourType === 6) return true;
+    // Palette/greyscale/RGB with a transparent colour: a tRNS chunk before the image data.
+    let o = 8;
+    while (o + 8 <= buf.length) {
+      const len = ((buf[o] << 24) | (buf[o + 1] << 16) | (buf[o + 2] << 8) | buf[o + 3]) >>> 0;
+      const type = ascii(o + 4, 4);
+      if (type === 'tRNS') return true;
+      if (type === 'IDAT' || type === 'IEND') return false;
+      o += 12 + len;
+    }
+    return false;
+  }
+  if (mime === 'image/webp') {
+    if (buf.length < 21 || ascii(0, 4) !== 'RIFF' || ascii(8, 4) !== 'WEBP') return false;
+    const chunk = ascii(12, 4);
+    if (chunk === 'VP8L') return true; // lossless WebP: alpha is common; the browser check catches solid ones
+    if (chunk === 'VP8X') return (buf[20] & 0x10) !== 0;
+    return false;
+  }
+  return false;
+}
+
 export const matPositionOf = (key: string) => MAT_POSITIONS.find((p) => p.key === key);
 
 export type MatPile = 'short' | 'long';
