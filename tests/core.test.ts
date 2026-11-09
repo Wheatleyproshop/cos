@@ -812,6 +812,20 @@ describe('mat engraving', () => {
     await expect(createMatQuote(admin, { ...base, engravings: lipTwice }, { logos: [], proof: jpeg() }, { send: false })).rejects.toThrow(/once/);
   });
 
+  it('keeps a carry case photo for the deal, through price changes, until removed', async () => {
+    const { setMatCasePhoto, getMatCasePhoto, matCasePhotoPath, updateMatPrices } = await import('@/lib/services/mat-engraving');
+    const fresh = async () => (await systemDb().select().from(organisations).where(eq(organisations.id, org.id)))[0];
+    await expect(setMatCasePhoto(staff, jpeg())).rejects.toThrow(/manager/);
+    await setMatCasePhoto(admin, jpeg('case.jpg'));
+    expect(matCasePhotoPath(await fresh())).toMatch(/^\/api\/public\/mat-case\/desirable-golf\?v=/);
+    expect((await getMatCasePhoto('desirable-golf'))?.mime).toBe('image/jpeg');
+    await updateMatPrices({ ...admin, org: await fresh() }, { short: '27.50', long: '30.00', caseDealPence: '35.00', lip: '10', underside: '8', setupFeePence: '0' });
+    expect((await getMatCasePhoto('desirable-golf'))?.mime).toBe('image/jpeg');
+    await setMatCasePhoto({ ...admin, org: await fresh() }, null, true);
+    expect(await getMatCasePhoto('desirable-golf')).toBeNull();
+    expect(matCasePhotoPath(await fresh())).toBeNull();
+  });
+
   it('only engraves logos with a transparent background', async () => {
     const { createMatQuote } = await import('@/lib/services/mat-engraving');
     const base = { customerName: 'X', email: 'x-mat@example.com', mat: 'own', matPricePence: '0', quantity: '1', setupFeePence: '0' };

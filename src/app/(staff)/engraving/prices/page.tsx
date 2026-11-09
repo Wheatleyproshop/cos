@@ -1,17 +1,21 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
+import { BallPhotoForm } from '@/components/ball-range-forms';
+import { ActionButton } from '@/components/forms';
 import { MatPricesForm } from '@/components/mat-prices-form';
 import { PageHeader } from '@/components/views';
 import { hasRole, requireStaff } from '@/lib/auth';
 import { money } from '@/lib/format';
 import { MAT_POSITIONS, matPrices } from '@/lib/mat-engraving';
-import { matPricesAction } from '../../actions';
+import { matCasePhotoPath } from '@/lib/services/mat-engraving';
+import { matCasePhotoAction, matCasePhotoRemoveAction, matPricesAction } from '../../actions';
 
 export const metadata: Metadata = { title: 'Engraving prices' };
 
 export default async function MatPricesPage() {
   const staff = await requireStaff();
   const prices = matPrices(staff.org.matEngraving);
+  const casePhoto = matCasePhotoPath(staff.org);
   return (
     <>
       <PageHeader
@@ -52,6 +56,25 @@ export default async function MatPricesPage() {
         <p className="muted" style={{ marginTop: 14 }}>
           Engraving is included in the mat prices, on the lip, underneath or both. The per-position prices are only for engraving a customer’s own mat. Staff can change the price and setup fee on each job.
         </p>
+      </section>
+      <section className="panel">
+        <h2>Carry case photo</h2>
+        <p className="muted">Shown next to the carry case deal in the builder and on your customer design page. Use your own photo.</p>
+        {hasRole(staff, 'manager') ? (
+          <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', marginTop: 10 }}>
+            <BallPhotoForm action={matCasePhotoAction} photoUrl={casePhoto} label="the carry case" />
+            {casePhoto ? (
+              <ActionButton action={matCasePhotoRemoveAction} className="btn small" confirm="Remove the carry case photo?">
+                Remove photo
+              </ActionButton>
+            ) : null}
+          </div>
+        ) : casePhoto ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={casePhoto} alt="Carry case" width={120} style={{ borderRadius: 10, marginTop: 10 }} />
+        ) : (
+          <p className="muted">No photo yet.</p>
+        )}
       </section>
     </>
   );

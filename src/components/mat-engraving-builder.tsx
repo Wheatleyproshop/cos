@@ -35,9 +35,10 @@ function Stage({ view, engravings, pile }: { view: MatView; engravings: MatDrawE
 type MatChoice = MatPile | typeof OWN_MAT;
 
 export function MatEngravingBuilder({
-  prices, action, defaults, variant = 'staff',
+  prices, action, defaults, variant = 'staff', casePhotoUrl = null,
 }: {
   prices: MatPrices;
+  casePhotoUrl?: string | null;
   action: (prev: FormState, fd: FormData) => Promise<FormState>;
   defaults: PickerDefaults;
   variant?: 'staff' | 'public';
@@ -199,10 +200,16 @@ export function MatEngravingBuilder({
               </button>
             </div>
             {prices.caseDealPence && mat !== OWN_MAT ? (
-              <label className="check" style={{ marginTop: 10 }}>
+              <label className={`mat-deal${withCase ? ' on' : ''}`}>
                 <input type="checkbox" checked={withCase} onChange={(e) => chooseCase(e.target.checked)} />
+                {casePhotoUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={casePhotoUrl} alt="The carry case" width={72} height={72} />
+                ) : null}
                 <span>
-                  <b>Carry case deal</b> — mat, carry case and engraving for {money(prices.caseDealPence)}
+                  <b>Carry case deal</b>
+                  <br />
+                  Mat, carry case and engraving for {money(prices.caseDealPence)}
                 </span>
               </label>
             ) : null}

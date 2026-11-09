@@ -7,7 +7,7 @@ import { PageHeader } from '@/components/views';
 import { hasRole, requireStaff } from '@/lib/auth';
 import { matPrices } from '@/lib/mat-engraving';
 import { getCustomerDetail } from '@/lib/queries';
-import { matDesignPathFor } from '@/lib/services/mat-engraving';
+import { matCasePhotoPath, matDesignPathFor } from '@/lib/services/mat-engraving';
 import { inHouseWork } from '@/lib/services/online-designs';
 import { appUrl } from '@/lib/tokens';
 import { matDesignLinkAction, matEngravingAction } from '../actions';
@@ -44,7 +44,7 @@ export default async function MatEngravingPage({ searchParams }: { searchParams:
         toggle={matDesignLinkAction.bind(null, !linkOn)}
         what="engraved fairway mats"
       />
-      <MatEngravingBuilder
+      <MatEngravingBuilder casePhotoUrl={matCasePhotoPath(staff.org)}
         prices={matPrices(staff.org.matEngraving)}
         action={matEngravingAction}
         defaults={cust ? { customerId: cust.customer.id, customerName: cust.customer.name, email: cust.customer.email, phone: cust.customer.phone } : {}}

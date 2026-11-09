@@ -2,7 +2,7 @@ import type { Metadata } from 'next';
 import { MatEngravingBuilder } from '@/components/mat-engraving-builder';
 import { InvalidLink, PublicShell } from '@/components/public-shell';
 import { matPrices } from '@/lib/mat-engraving';
-import { findMatShop } from '@/lib/services/mat-engraving';
+import { findMatShop, matCasePhotoPath } from '@/lib/services/mat-engraving';
 import { submitMatDesignAction } from './actions';
 
 // Absolute title: customer pages never mention COS.
@@ -22,7 +22,7 @@ export default async function MatDesignPage({ params }: { params: Promise<{ slug
           us and we’ll check the design and confirm the price before anything is engraved.
         </p>
       </div>
-      <MatEngravingBuilder variant="public" prices={matPrices(org.matEngraving)} action={submitMatDesignAction.bind(null, org.slug)} defaults={{}} />
+      <MatEngravingBuilder casePhotoUrl={matCasePhotoPath(org)} variant="public" prices={matPrices(org.matEngraving)} action={submitMatDesignAction.bind(null, org.slug)} defaults={{}} />
     </PublicShell>
   );
 }

@@ -43,6 +43,7 @@ export async function updateMatPrices(ctx: Ctx, raw: Record<string, unknown>) {
     raw,
   );
   const next = {
+    ...before,
     mats: before.mats.map((m) => ({ ...m, pricePence: v[m.key] })),
     caseDealPence: v.caseDealPence,
     positions: { lip: v.lip, underside: v.underside },
@@ -55,6 +56,41 @@ export async function updateMatPrices(ctx: Ctx, raw: Record<string, unknown>) {
       oldValue: { matEngraving: before }, newValue: { matEngraving: next }, metadata: { section: 'mat_engraving.prices' },
     });
   });
+}
+
+/** The shop's own photo of the carry case (shown with the deal); `remove` takes it away. */
+export async function setMatCasePhoto(ctx: Ctx, file: File | null, remove = false) {
+  requireRole(ctx, 'manager', 'change mat engraving prices');
+  const before = matPrices(ctx.org.matEngraving);
+  let caseImage: { key: string; mime: string } | null = null;
+  if (!remove) {
+    const img = await readImage(file, 'photo', MAX_LOGO_BYTES);
+    if (!img) throw new ServiceError('Choose a photo of the carry case.', { photo: 'Required' });
+    caseImage = { key: `orgs/${ctx.org.id}/mat-engraving/carry-case-${newToken().slice(0, 10)}.${LOGO_TYPES[img.mime]}`, mime: img.mime };
+    await storage().put(caseImage.key, img.buf, img.mime);
+  }
+  const next = { ...before, caseImage };
+  await withTenant(ctx.org.id, async (tx) => {
+    await tx.update(organisations).set({ matEngraving: next }).where(eq(organisations.id, ctx.org.id));
+    await recordEvent(tx, {
+      organisationId: ctx.org.id, actor: ctx.actor, eventType: 'settings_changed', entityType: 'organisation', entityId: ctx.org.id,
+      oldValue: { caseImage: before.caseImage ?? null }, newValue: { caseImage }, metadata: { section: 'mat_engraving.case_photo' },
+    });
+  });
+}
+
+/** Public URL of the carry case photo (changes when the photo does, so caches refresh). */
+export const matCasePhotoPath = (org: Pick<Organisation, 'slug' | 'matEngraving'>) => {
+  const img = matPrices(org.matEngraving).caseImage;
+  return img ? `/api/public/mat-case/${org.slug}?v=${img.key.slice(-15).replace(/\W/g, '')}` : null;
+};
+
+/** The carry case photo for a shop, by its slug (it's a product photo, so it's public). */
+export async function getMatCasePhoto(slug: string) {
+  if (!/^[a-z0-9-]{1,80}$/.test(slug)) return null;
+  const [org] = await systemDb().select().from(organisations).where(eq(organisations.slug, slug)).limit(1);
+  const img = org ? matPrices(org.matEngraving).caseImage : null;
+  return img ? { buf: await storage().get(img.key), mime: img.mime } : null;
 }
 
 /* ───────────────────────────── Quotes ───────────────────────────── */

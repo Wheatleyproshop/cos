@@ -52,7 +52,14 @@ export type MatOption = { key: MatPile; name: string; pricePence: number };
  * Mats you sell, each priced with the engraving included; the carry case deal (mat + case + engraving,
  * 0 = not offered); engraving-only prices per position for a customer's own mat; a setup fee per job.
  */
-export type MatPrices = { mats: MatOption[]; caseDealPence: number; positions: Record<MatPositionKey, number>; setupFeePence: number };
+export type MatPrices = {
+  mats: MatOption[];
+  caseDealPence: number;
+  /** The shop's own photo of the carry case, shown with the deal. */
+  caseImage?: { key: string; mime: string } | null;
+  positions: Record<MatPositionKey, number>;
+  setupFeePence: number;
+};
 
 export const DEFAULT_MAT_PRICES: MatPrices = {
   mats: [
@@ -72,6 +79,7 @@ export function matPrices(saved: Partial<MatPrices> | null | undefined): MatPric
   return {
     mats,
     caseDealPence: saved?.caseDealPence ?? DEFAULT_MAT_PRICES.caseDealPence,
+    caseImage: saved?.caseImage ?? null,
     positions: { ...DEFAULT_MAT_PRICES.positions, ...(saved?.positions ?? {}) },
     setupFeePence: saved?.setupFeePence ?? DEFAULT_MAT_PRICES.setupFeePence,
   };

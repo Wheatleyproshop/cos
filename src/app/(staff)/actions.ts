@@ -89,7 +89,7 @@ import {
   updatePrebookNotes,
 } from '@/lib/services/prebooks';
 import { TEMPLATE_KEYS } from '@/lib/email/templates';
-import { createMatQuote, setMatDesignLink, updateMatPrices } from '@/lib/services/mat-engraving';
+import { createMatQuote, setMatCasePhoto, setMatDesignLink, updateMatPrices } from '@/lib/services/mat-engraving';
 import { createCrestQuote, setCrestDesignLink, setCrestPositionRemoved, updateCrestPrices } from '@/lib/services/cresting';
 import { addBall, addStarterBalls, createBallPrintQuote, setBallActive, setBallDesignLink, setBallPhoto, setBallRemoved, updateBall, updateBallPrice, updateSetupFee } from '@/lib/services/ball-printing';
 
@@ -458,6 +458,21 @@ export async function matPricesAction(_: FormState, fd: FormData) {
     await updateMatPrices(ctx, obj(fd));
     return 'Engraving prices saved.';
   }, fd);
+}
+
+export async function matCasePhotoAction(_: FormState, fd: FormData) {
+  return act('manager', async (ctx) => {
+    const f = fd.get('photo');
+    await setMatCasePhoto(ctx, f instanceof File && f.size ? f : null);
+    return 'Photo saved.';
+  });
+}
+
+export async function matCasePhotoRemoveAction() {
+  return act('manager', async (ctx) => {
+    await setMatCasePhoto(ctx, null, true);
+    return 'Photo removed.';
+  });
 }
 
 export async function matDesignLinkAction(enabled: boolean) {

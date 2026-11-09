@@ -377,6 +377,9 @@ details.section[open] { padding-bottom: 16px; }
 .bp-thumb { width: 92px; height: 92px; object-fit: contain; display: block; }
 .bp-photoform { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .bp-photoform img { width: 44px; height: 44px; object-fit: contain; border-radius: 8px; background: #fff; border: 1px solid var(--line); }
+.mat-deal { display: flex; align-items: center; gap: 12px; margin-top: 10px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 12px; cursor: pointer; font-size: 13.5px; background: #fff; }
+.mat-deal.on { border-color: var(--ink, #1d2a22); box-shadow: 0 0 0 1px var(--ink, #1d2a22) inset; }
+.mat-deal img { width: 72px; height: 72px; object-fit: cover; border-radius: 8px; flex: none; background: #f4f5f7; }
 .bp-nophoto { width: 44px; height: 44px; border-radius: 8px; border: 1px dashed #c6d0de; font-size: 9px; color: #8a919c; display: grid; place-items: center; text-align: center; }
 .inlineactions { display: inline-flex; gap: 8px; align-items: center; flex-wrap: wrap; justify-content: flex-end; }
 .attention li { flex-wrap: wrap; }
