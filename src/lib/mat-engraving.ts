@@ -48,14 +48,18 @@ export const matPositionOf = (key: string) => MAT_POSITIONS.find((p) => p.key ==
 export type MatPile = 'short' | 'long';
 export type MatOption = { key: MatPile; name: string; pricePence: number };
 
-/** Mats you sell (each with its price), engraving price per position (each), and a one-off setup fee per job. */
-export type MatPrices = { mats: MatOption[]; positions: Record<MatPositionKey, number>; setupFeePence: number };
+/**
+ * Mats you sell, each priced with the engraving included; the carry case deal (mat + case + engraving,
+ * 0 = not offered); engraving-only prices per position for a customer's own mat; a setup fee per job.
+ */
+export type MatPrices = { mats: MatOption[]; caseDealPence: number; positions: Record<MatPositionKey, number>; setupFeePence: number };
 
 export const DEFAULT_MAT_PRICES: MatPrices = {
   mats: [
     { key: 'short', name: 'Spurk Fairway Mat — Short Pile', pricePence: 0 },
     { key: 'long', name: 'Spurk Fairway Mat — Long Pile', pricePence: 0 },
   ],
+  caseDealPence: 0,
   positions: { lip: 1000, underside: 800 },
   setupFeePence: 0,
 };
@@ -67,6 +71,7 @@ export function matPrices(saved: Partial<MatPrices> | null | undefined): MatPric
   const mats = DEFAULT_MAT_PRICES.mats.map((d) => ({ ...d, ...(saved?.mats?.find((m) => m.key === d.key) ?? {}) }));
   return {
     mats,
+    caseDealPence: saved?.caseDealPence ?? DEFAULT_MAT_PRICES.caseDealPence,
     positions: { ...DEFAULT_MAT_PRICES.positions, ...(saved?.positions ?? {}) },
     setupFeePence: saved?.setupFeePence ?? DEFAULT_MAT_PRICES.setupFeePence,
   };
@@ -82,7 +87,7 @@ export type MatEngraving = { position: MatPositionKey; artwork: MatArtwork; scal
 export type MatSpec = {
   kind: 'cos-mat-engraving';
   version: 1;
-  mat: { name: string; pricePence: number; pile: MatPile | null };
+  mat: { name: string; pricePence: number; pile: MatPile | null; carryCase?: boolean };
   quantity: number;
   engravings: MatEngraving[];
   setupFeePence: number;

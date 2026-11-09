@@ -11,10 +11,11 @@ export function MatPricesForm({ action, prices }: { action: BoundAction; prices:
         <>
           <div className="fields">
             {prices.mats.map((m) => (
-              <Field key={m.key} state={s} name={m.key} label={`${m.name} (£ each)`} inputMode="decimal" defaultValue={penceToInput(m.pricePence)} />
+              <Field key={m.key} state={s} name={m.key} label={`${m.name}, engraved (£ each)`} inputMode="decimal" defaultValue={penceToInput(m.pricePence)} />
             ))}
-            <Field state={s} name="lip" label="Front lip engraving, each (£)" inputMode="decimal" defaultValue={penceToInput(prices.positions.lip)} />
-            <Field state={s} name="underside" label="Underside engraving, each (£)" inputMode="decimal" defaultValue={penceToInput(prices.positions.underside)} />
+            <Field state={s} name="caseDealPence" label="Carry case deal: mat + carry case + engraving (£)" inputMode="decimal" defaultValue={penceToInput(prices.caseDealPence)} hint="0.00 to not offer the deal." />
+            <Field state={s} name="lip" label="Own mat: front lip engraving, each (£)" inputMode="decimal" defaultValue={penceToInput(prices.positions.lip)} />
+            <Field state={s} name="underside" label="Own mat: underside engraving, each (£)" inputMode="decimal" defaultValue={penceToInput(prices.positions.underside)} />
             <Field state={s} name="setupFeePence" label="Setup fee per job (£)" inputMode="decimal" defaultValue={penceToInput(prices.setupFeePence)} />
           </div>
           <FormMessage state={s} />

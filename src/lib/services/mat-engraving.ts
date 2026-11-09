@@ -35,6 +35,7 @@ export async function updateMatPrices(ctx: Ctx, raw: Record<string, unknown>) {
     z.object({
       short: pence('Short pile mat price'),
       long: pence('Long pile mat price'),
+      caseDealPence: pence('Carry case deal'),
       lip: pence('Front lip engraving'),
       underside: pence('Underside engraving'),
       setupFeePence: pence('Setup fee'),
@@ -43,6 +44,7 @@ export async function updateMatPrices(ctx: Ctx, raw: Record<string, unknown>) {
   );
   const next = {
     mats: before.mats.map((m) => ({ ...m, pricePence: v[m.key] })),
+    caseDealPence: v.caseDealPence,
     positions: { lip: v.lip, underside: v.underside },
     setupFeePence: v.setupFeePence,
   };
@@ -72,6 +74,7 @@ const matSchema = z.object({
   ...customerFields,
   mat: z.enum(['short', 'long', OWN_MAT], { message: 'Choose the mat' }),
   matPricePence: pence('Mat price'),
+  carryCase: z.preprocess((v) => v === true || v === 'on' || v === 'true' || v === '1', z.boolean()).default(false),
   quantity: z.coerce.number().int('Whole numbers only').min(1, 'At least 1').max(200),
   engravings: z.string().transform((v, c) => {
     try {
@@ -103,10 +106,11 @@ export async function createMatQuote(
   const input = parse(matSchema, raw);
   const prices = matPrices(ctx.org.matEngraving);
   const option = prices.mats.find((m) => m.key === input.mat);
-  const matName = option?.name ?? 'Customer’s own mat';
+  const carryCase = Boolean(option && input.carryCase && prices.caseDealPence);
+  const matName = option ? `${option.name}${carryCase ? ' + carry case' : ''}` : 'Customer’s own mat';
   // Online designs pay the shop's prices; staff can adjust the mat price on a job.
   if (fromCustomer) {
-    input.matPricePence = option?.pricePence ?? 0;
+    input.matPricePence = carryCase ? prices.caseDealPence : (option?.pricePence ?? 0);
     input.setupFeePence = prices.setupFeePence;
     input.validUntil = '';
     input.customerId = null;
@@ -141,7 +145,8 @@ export async function createMatQuote(
   const engravings: MatEngraving[] = input.engravings.map((e) => ({
     position: e.position,
     scale: e.scale,
-    pricePence: prices.positions[e.position],
+    // Our mats are priced with the engraving included; a customer's own mat pays for the engraving.
+    pricePence: option ? 0 : prices.positions[e.position],
     artwork: e.artwork.type === 'logo' ? { type: 'logo', logo: e.artwork.logo, ...logos.get(e.artwork.logo)! } : { type: 'text', lines: e.artwork.lines.filter(Boolean), font: e.artwork.font as PrintFontKey },
   }));
 
@@ -153,9 +158,9 @@ export async function createMatQuote(
     `Mat: ${matName}${input.quantity > 1 ? ` × ${input.quantity}` : ''}`,
     ...engravings.map((e) => {
       const what = e.artwork.type === 'logo' ? `logo (${e.artwork.filename})` : `“${e.artwork.lines.join(' / ')}” in ${fontLabel(e.artwork.font)}`;
-      return `${matPositionOf(e.position)!.label}: laser engraved — ${what} (${money(e.pricePence)} each)`;
+      return `${matPositionOf(e.position)!.label}: laser engraved — ${what}${option ? '' : ` (${money(e.pricePence)} each)`}`;
     }),
-    `Price each: ${money(each)}${input.matPricePence ? ` (mat ${money(input.matPricePence)} + engraving ${money(engravingEach)})` : ' (engraving only)'}`,
+    `Price each: ${money(each)}${option ? (carryCase ? ' (mat, carry case and engraving)' : ' (mat and engraving)') : ' (engraving only)'}`,
     ...(input.setupFeePence ? [`Setup: ${money(input.setupFeePence)}`] : []),
     ...(input.notes ? ['', input.notes] : []),
   ];
@@ -163,7 +168,7 @@ export async function createMatQuote(
   const spec: MatSpec = {
     kind: 'cos-mat-engraving',
     version: 1,
-    mat: { name: matName, pricePence: input.matPricePence, pile: option?.key ?? null },
+    mat: { name: matName, pricePence: input.matPricePence, pile: option?.key ?? null, ...(carryCase ? { carryCase: true } : {}) },
     quantity: input.quantity,
     engravings,
     setupFeePence: input.setupFeePence,

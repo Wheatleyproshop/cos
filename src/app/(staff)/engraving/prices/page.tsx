@@ -17,7 +17,7 @@ export default async function MatPricesPage() {
       <PageHeader
         staff={staff}
         title="Engraving prices."
-        sub="Short and long pile mats, a price per engraving position (each mat), and an optional setup fee per job."
+        sub="Short and long pile mats with the engraving included, the carry case deal, engraving-only prices for a customer’s own mat, and an optional setup fee per job."
         actions={
           <Link href="/engraving" className="btn">
             ← Mat Engraving
@@ -31,20 +31,26 @@ export default async function MatPricesPage() {
           <ul className="attention">
             {prices.mats.map((m) => (
               <li key={m.key}>
-                <span>{m.name}</span>
+                <span>{m.name}, engraved</span>
                 <span className="muted">{money(m.pricePence)} each</span>
               </li>
             ))}
+            {prices.caseDealPence ? (
+              <li>
+                <span>Carry case deal (mat + case + engraving)</span>
+                <span className="muted">{money(prices.caseDealPence)}</span>
+              </li>
+            ) : null}
             {MAT_POSITIONS.map((p) => (
               <li key={p.key}>
-                <span>{p.label} engraving</span>
+                <span>Own mat: {p.label.toLowerCase()} engraving</span>
                 <span className="muted">{money(prices.positions[p.key])} each</span>
               </li>
             ))}
           </ul>
         )}
         <p className="muted" style={{ marginTop: 14 }}>
-          Staff can change the mat price and setup fee on each job. “Customer’s own mat” is engraving only.
+          Engraving is included in the mat prices, on the lip, underneath or both. The per-position prices are only for engraving a customer’s own mat. Staff can change the price and setup fee on each job.
         </p>
       </section>
     </>

@@ -50,12 +50,19 @@ export function MatEngravingBuilder({
   const [logos, setLogos] = useState<Logo[]>([]);
   const [logoError, setLogoError] = useState('');
   const [mat, setMat] = useState<MatChoice>('short');
+  const [withCase, setWithCase] = useState(false);
   const option = prices.mats.find((m) => m.key === mat);
-  const matName = option?.name ?? 'Customer’s own mat';
+  const carryCase = Boolean(option && withCase && prices.caseDealPence);
+  const matName = option ? `${option.name}${carryCase ? ' + carry case' : ''}` : 'Customer’s own mat';
   const [matPrice, setMatPrice] = useState(penceToInput(prices.mats[0]?.pricePence ?? 0));
+  const listPrice = (m: MatChoice, c: boolean) => (m !== OWN_MAT && c && prices.caseDealPence ? prices.caseDealPence : (prices.mats.find((o) => o.key === m)?.pricePence ?? 0));
   const chooseMat = (m: MatChoice) => {
     setMat(m);
-    setMatPrice(penceToInput(prices.mats.find((o) => o.key === m)?.pricePence ?? 0));
+    setMatPrice(penceToInput(listPrice(m, withCase)));
+  };
+  const chooseCase = (c: boolean) => {
+    setWithCase(c);
+    setMatPrice(penceToInput(listPrice(mat, c)));
   };
   const [qty, setQty] = useState('1');
   const [setup, setSetup] = useState(penceToInput(prices.setupFeePence));
@@ -77,9 +84,10 @@ export function MatEngravingBuilder({
   const active = MAT_POSITIONS.filter((p) => places[p.key].on);
   const hasArt = active.length > 0 && active.every((p) => (places[p.key].kind === 'logo' ? Boolean(logos[places[p.key].logo]) : places[p.key].lines.some((l) => l.trim())));
   const n = Math.max(1, Math.floor(Number(qty) || 1));
-  const engravingEach = active.reduce((t, p) => t + prices.positions[p.key], 0);
+  // Engraving is included with our mats; only a customer's own mat pays per position.
+  const engravingEach = mat === OWN_MAT ? active.reduce((t, p) => t + prices.positions[p.key], 0) : 0;
   // Customers always see the shop's prices; staff can adjust them on the job.
-  const matPence = isPublic ? (option?.pricePence ?? 0) : mat === OWN_MAT ? 0 : (parseMoneyToPence(matPrice || '0') ?? 0);
+  const matPence = isPublic ? (mat === OWN_MAT ? 0 : listPrice(mat, withCase)) : mat === OWN_MAT ? 0 : (parseMoneyToPence(matPrice || '0') ?? 0);
   const setupPence = isPublic ? prices.setupFeePence : (parseMoneyToPence(setup || '0') ?? 0);
   const total = n * (matPence + engravingEach) + setupPence;
 
@@ -116,6 +124,7 @@ export function MatEngravingBuilder({
     const fd = new FormData(e.currentTarget);
     fd.set('intent', submitter?.value ?? 'save');
     fd.set('mat', mat);
+    fd.set('carryCase', carryCase ? 'on' : '');
     setBusy(true);
     try {
       fd.set('proof', await renderMatProof(draws, mat === 'long' ? 'long' : 'short'));
@@ -189,6 +198,17 @@ export function MatEngravingBuilder({
                 {isPublic ? 'I have my own mat' : 'Customer’s own mat'}
               </button>
             </div>
+            {prices.caseDealPence && mat !== OWN_MAT ? (
+              <label className="check" style={{ marginTop: 10 }}>
+                <input type="checkbox" checked={withCase} onChange={(e) => chooseCase(e.target.checked)} />
+                <span>
+                  <b>Carry case deal</b> — mat, carry case and engraving for {money(prices.caseDealPence)}
+                </span>
+              </label>
+            ) : null}
+            <p className="muted" style={{ fontSize: 12.5, marginTop: 8 }}>
+              {mat === OWN_MAT ? 'Engraving only, priced per place below.' : 'Engraving is included in the price, on the lip, underneath or both.'}
+            </p>
             <h2 style={{ marginTop: 18 }}>What to engrave, and where</h2>
             <p className="muted">A name, initials or a logo, on the front lip (seen from the top) and/or underneath.</p>
             <div className="cr-logos">
@@ -223,7 +243,7 @@ export function MatEngravingBuilder({
                         }}
                       />
                       <b>{p.label}</b>
-                      <span className="muted">{money(prices.positions[p.key])} each</span>
+                      <span className="muted">{mat === OWN_MAT ? `${money(prices.positions[p.key])} each` : 'Included'}</span>
                     </label>
                     <div className="muted" style={{ fontSize: 12.5 }}>{p.hint}</div>
                     {pl.on ? (
@@ -310,7 +330,7 @@ export function MatEngravingBuilder({
               <div>
                 <span>
                   {n} mat{n === 1 ? '' : 's'} × {money(matPence + engravingEach)}
-                  {mat === OWN_MAT ? ' (engraving only)' : matPence ? ` (mat ${money(matPence)} + engraving ${money(engravingEach)})` : ' (engraving: we’ll confirm the mat price)'}
+                  {mat === OWN_MAT ? ' (engraving only)' : matPence ? (carryCase ? ' (mat, carry case and engraving)' : ' (mat and engraving)') : ' (we’ll confirm the price)'}
                 </span>
                 {setupPence ? <span>Setup {money(setupPence)}</span> : null}
               </div>
@@ -352,7 +372,7 @@ export function MatEngravingBuilder({
               <div>
                 <span>
                   {n} mat{n === 1 ? '' : 's'} × {money(matPence + engravingEach)}
-                  {matPence ? ` (mat ${money(matPence)} + engraving ${money(engravingEach)})` : ' (engraving only)'}
+                  {mat === OWN_MAT ? ' (engraving only)' : carryCase ? ' (mat, carry case and engraving)' : ' (mat and engraving)'}
                 </span>
                 {setupPence ? <span>Setup {money(setupPence)}</span> : null}
               </div>

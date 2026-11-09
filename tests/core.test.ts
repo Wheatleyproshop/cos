@@ -769,14 +769,14 @@ describe('mat engraving', () => {
 
   it('prices mat + engraving per position, emails the proof and sends it for engraving when approved', async () => {
     const { createMatQuote, updateMatPrices } = await import('@/lib/services/mat-engraving');
-    await expect(updateMatPrices(staff, { short: '1', long: '1', lip: '1', underside: '1', setupFeePence: '0' })).rejects.toThrow(/manager/);
-    await updateMatPrices(admin, { short: '89.99', long: '109.99', lip: '12', underside: '8', setupFeePence: '0' });
+    await expect(updateMatPrices(staff, { short: '1', long: '1', caseDealPence: '0', lip: '1', underside: '1', setupFeePence: '0' })).rejects.toThrow(/manager/);
+    await updateMatPrices(admin, { short: '27.50', long: '30.00', caseDealPence: '35.00', lip: '12', underside: '8', setupFeePence: '0' });
     const [fresh] = await systemDb().select().from(organisations).where(eq(organisations.id, org.id));
     const ctx = { ...admin, org: fresh };
     const q = await createMatQuote(
       ctx,
       {
-        customerName: 'Mat Mike', email: 'matmike@example.com', phone: '', mat: 'short', matPricePence: '89.99', quantity: '2', setupFeePence: '0',
+        customerName: 'Mat Mike', email: 'matmike@example.com', phone: '', mat: 'short', matPricePence: '27.50', quantity: '2', setupFeePence: '0',
         engravings: JSON.stringify([
           { position: 'lip', scale: 0.8, artwork: { type: 'text', lines: ['MIKE JONES', ''], font: 'bold' } },
           { position: 'underside', scale: 0.6, artwork: { type: 'logo', logo: 0 } },
@@ -785,7 +785,8 @@ describe('mat engraving', () => {
       { logos: [png('club.png', 6), null], proof: jpeg('proof.jpg') },
       { send: true },
     );
-    expect(q.totalGrossPence).toBe(2 * (8999 + 1200 + 800));
+    // Engraving is included with our mats.
+    expect(q.totalGrossPence).toBe(2 * 2750);
     expect(q.specificationText).toContain('Mat: Spurk Fairway Mat — Short Pile × 2');
     expect(q.specificationText).toContain('Front lip: laser engraved — “MIKE JONES”');
     expect(q.specificationText).toContain('Underside: laser engraved — logo (club.png)');
@@ -819,6 +820,7 @@ describe('mat engraving', () => {
     await expect(createMatQuote(admin, withLogo, { logos: [png('solid.png', 2)], proof: jpeg() }, { send: false })).rejects.toThrow(/transparent background/);
     const q = await createMatQuote(admin, withLogo, { logos: [png('clear.png', 6)], proof: jpeg() }, { send: false });
     expect(q.specificationText).toContain('logo (clear.png)');
+    expect(q.totalGrossPence).toBe(800); // own mat: engraving only, underside price
   });
 
   it('lets a customer send in their own mat design: long pile at the shop’s prices, review by the shop', async () => {
@@ -834,7 +836,11 @@ describe('mat engraving', () => {
     const { matPrices } = await import('@/lib/mat-engraving');
     const p = matPrices(fresh.matEngraving);
     expect(q.status).toBe('draft');
-    expect(q.totalGrossPence).toBe(p.mats.find((m) => m.key === 'long')!.pricePence + p.positions.lip + p.setupFeePence);
+    expect(q.totalGrossPence).toBe(p.mats.find((m) => m.key === 'long')!.pricePence + p.setupFeePence);
+
+    const deal = await submitMatDesign('desirable-golf', { ...design, carryCase: 'on' }, { logos: [], proof: jpeg() }, { ip: '198.51.100.23' });
+    expect(deal.totalGrossPence).toBe(p.caseDealPence + p.setupFeePence);
+    expect(deal.specificationText).toContain('Long Pile + carry case');
     expect(q.specificationText).toContain('Long Pile');
     const { listNotifications } = await import('@/lib/services/notifications');
     expect((await listNotifications(org.id, admin.userId!)).items[0].title).toBe('New mat engraving design to review');
