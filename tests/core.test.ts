@@ -757,6 +757,53 @@ describe('clothing cresting', () => {
   });
 });
 
+describe('mat engraving', () => {
+  const jpeg = (name = 'img.jpg') => new File([new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 0, 16, 74, 70, 73, 70, 0, 1])], name, { type: 'image/jpeg' });
+
+  it('prices mat + engraving per position, emails the proof and sends it for engraving when approved', async () => {
+    const { createMatQuote, updateMatPrices } = await import('@/lib/services/mat-engraving');
+    await expect(updateMatPrices(staff, { matName: 'X', matPricePence: '1', lip: '1', underside: '1', setupFeePence: '0' })).rejects.toThrow(/manager/);
+    await updateMatPrices(admin, { matName: 'Spurk Fairway Mat', matPricePence: '89.99', lip: '12', underside: '8', setupFeePence: '0' });
+    const [fresh] = await systemDb().select().from(organisations).where(eq(organisations.id, org.id));
+    const ctx = { ...admin, org: fresh };
+    const q = await createMatQuote(
+      ctx,
+      {
+        customerName: 'Mat Mike', email: 'matmike@example.com', phone: '', matName: 'Spurk Fairway Mat', matPricePence: '89.99', quantity: '2', setupFeePence: '0',
+        engravings: JSON.stringify([
+          { position: 'lip', scale: 0.8, artwork: { type: 'text', lines: ['MIKE JONES', ''], font: 'bold' } },
+          { position: 'underside', scale: 0.6, artwork: { type: 'logo', logo: 0 } },
+        ]),
+      },
+      { logos: [jpeg('club.jpg'), null], proof: jpeg('proof.jpg') },
+      { send: true },
+    );
+    expect(q.totalGrossPence).toBe(2 * (8999 + 1200 + 800));
+    expect(q.specificationText).toContain('Front lip: laser engraved — “MIKE JONES”');
+    expect(q.specificationText).toContain('Underside: laser engraved — logo (club.jpg)');
+    const [msg] = await withTenant(org.id, (tx) => tx.select().from(messages).where(eq(messages.quoteId, q.id)));
+    expect(msg.subject).toContain('mat engraving proof');
+
+    const { acceptQuoteInStore } = await import('@/lib/services/quotes');
+    const order = await acceptQuoteInStore(ctx, q.id, 'Mat Mike');
+    expect(order.status).toBe('ordered');
+    const [confirm] = await withTenant(org.id, (tx) => tx.select().from(messages).where(eq(messages.orderId, order.id)));
+    expect(confirm.subject).toContain('gone onto the laser engraver');
+    expect(confirm.bodyHtml).not.toContain('manufacturer');
+  });
+
+  it('needs something to engrave, once per place', async () => {
+    const { createMatQuote } = await import('@/lib/services/mat-engraving');
+    const base = { customerName: 'X', email: 'x-mat@example.com', matName: 'Mat', matPricePence: '0', quantity: '1', setupFeePence: '0' };
+    await expect(createMatQuote(admin, { ...base, engravings: '[]' }, { logos: [], proof: jpeg() }, { send: false })).rejects.toThrow(/highlighted|engrave/);
+    const lipTwice = JSON.stringify([
+      { position: 'lip', artwork: { type: 'text', lines: ['A'] } },
+      { position: 'lip', artwork: { type: 'text', lines: ['B'] } },
+    ]);
+    await expect(createMatQuote(admin, { ...base, engravings: lipTwice }, { logos: [], proof: jpeg() }, { send: false })).rejects.toThrow(/once/);
+  });
+});
+
 describe('catalogue prices', () => {
   it('lets a manager change a head price, with the change in the audit trail', async () => {
     const { getCatalog, updateModelPrice } = await import('@/lib/services/fitting');

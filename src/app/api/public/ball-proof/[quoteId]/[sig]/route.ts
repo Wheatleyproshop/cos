@@ -15,5 +15,5 @@ export async function GET(_: Request, { params }: { params: Promise<{ quoteId: s
   const [q] = await systemDb().select({ spec: quotes.specificationJson }).from(quotes).where(eq(quotes.id, quoteId)).limit(1);
   const proof = proofOf(q?.spec);
   if (!proof) return new Response('Not found', { status: 404 });
-  return fileResponse(await storage().get(proof.proofKey), proof.mime, proof.kind === 'ball' ? 'golf-ball-proof' : 'cresting-proof');
+  return fileResponse(await storage().get(proof.proofKey), proof.mime, proof.kind === 'ball' ? 'golf-ball-proof' : `${proof.kind}-proof`);
 }

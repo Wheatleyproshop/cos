@@ -25,6 +25,7 @@ import {
   type AnyPgColumn,
 } from 'drizzle-orm/pg-core';
 import type { CrestPrices } from '../lib/cresting';
+import type { MatPrices } from '../lib/mat-engraving';
 
 const id = () => uuid('id').primaryKey().default(sql`gen_random_uuid()`);
 const orgId = () => uuid('organisation_id').notNull().references(() => organisations.id);
@@ -91,6 +92,8 @@ export const organisations = pgTable('organisations', {
   ballDesignLink: boolean('ball_design_link').notNull().default(true),
   /** Clothing cresting: price per position per method, and the setup / digitising fee. Gaps use DEFAULT_CREST_PRICES. */
   crestingPrices: jsonb('cresting_prices').$type<Partial<CrestPrices>>().notNull().default({}),
+  /** Laser-engraved mats: mat price, price per engraving position, setup fee. Gaps use DEFAULT_MAT_PRICES. */
+  matEngraving: jsonb('mat_engraving').$type<Partial<MatPrices>>().notNull().default({}),
   /** Public "design your own clothing" page at /design/<slug>/clothing. */
   crestDesignLink: boolean('crest_design_link').notNull().default(true),
   readyUncollectedDays: integer('ready_uncollected_days').notNull().default(7),

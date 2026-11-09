@@ -3,6 +3,7 @@ import { withTenant } from '@/db';
 import { auditEvents, orders, prebookLines, prebooks, quotes, users, workshopItems, workshopJobs, type Organisation } from '@/db/schema';
 import { asBallPrintSpec } from './ball-print';
 import { asCrestSpec } from './cresting';
+import { asMatSpec } from './mat-engraving';
 import { fitSpec } from './fit-spec';
 import { CLUB_CATEGORIES } from './fitting-rules';
 
@@ -287,7 +288,7 @@ function guessKind(product: string) {
 }
 
 function orderType(specificationJson: unknown) {
-  return fitSpec(specificationJson) ? 'Custom fitting' : asBallPrintSpec(specificationJson) ? 'Ball printing' : asCrestSpec(specificationJson) ? 'Clothing cresting' : 'Standard order';
+  return fitSpec(specificationJson) ? 'Custom fitting' : asBallPrintSpec(specificationJson) ? 'Ball printing' : asCrestSpec(specificationJson) ? 'Clothing cresting' : asMatSpec(specificationJson) ? 'Mat engraving' : 'Standard order';
 }
 
 function buckets(period: PeriodKey, from: Date, now: Date, tz: string): Bucket[] {

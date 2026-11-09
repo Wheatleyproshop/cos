@@ -11,6 +11,7 @@ const NAV = [
   { href: '/fitting', icon: '✎', label: 'Custom Fitting' },
   { href: '/ball-printing', icon: '◎', label: 'Ball Printing' },
   { href: '/cresting', icon: '✂', label: 'Clothing Cresting' },
+  { href: '/engraving', icon: '▭', label: 'Mat Engraving' },
   { href: '/workshop', icon: '⚒', label: 'Workshop' },
   { href: '/prebook', icon: '◷', label: 'Pre-book' },
   { href: '/customers', icon: '☺', label: 'Customers' },

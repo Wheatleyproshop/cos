@@ -31,6 +31,7 @@ import { templateName } from '@/lib/audit';
 import { PAYMENT_KIND_LABELS } from '@/db/schema';
 import { asBallPrintSpec } from '@/lib/ball-print';
 import { asCrestSpec, positionOf, type CrestSpec } from '@/lib/cresting';
+import { asMatSpec, matPositionOf, type MatSpec } from '@/lib/mat-engraving';
 import { bytes, longDate, money, niceDate, penceToInput, stamp, titleCase } from '@/lib/format';
 import { getBrandOptions, getCustomerDetail, getOrderDetail, getQuoteDetail } from '@/lib/queries';
 import { canTransition, DEFAULT_WORKFLOW, QUOTE_STATUS_LABELS, statusLabel } from '@/lib/status';
@@ -81,9 +82,43 @@ function CrestProof({ quoteId, spec }: { quoteId: string; spec: CrestSpec }) {
   );
 }
 
+function MatProof({ quoteId, spec }: { quoteId: string; spec: MatSpec }) {
+  const base = `/api/engraving/${quoteId}`;
+  const logos = spec.engravings.flatMap((e) => (e.artwork.type === 'logo' ? [e.artwork] : []));
+  return (
+    <div className="bp-proofbox">
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img src={`${base}/proof`} alt={`Proof: engraved ${spec.mat.name}`} className="cr-proof" />
+      <div>
+        <small>Engraving proof</small>
+        <b>
+          {spec.mat.name} · {spec.quantity} mat{spec.quantity === 1 ? '' : 's'}
+        </b>
+        <div className="muted">
+          {spec.engravings
+            .map((e) => `${matPositionOf(e.position)?.label}: ${e.artwork.type === 'text' ? `“${e.artwork.lines.join(' / ')}”` : 'logo'}`)
+            .join(' · ')}
+        </div>
+        <div className="actions" style={{ marginTop: 10 }}>
+          <a className="btn small" href={`${base}/proof`} target="_blank" rel="noreferrer">
+            Open proof
+          </a>
+          {logos.map((l) => (
+            <a key={l.logo} className="btn small" href={`${base}/logo-${l.logo + 1}`} download={l.filename}>
+              Download {l.filename}
+            </a>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function BallProof({ quoteId, spec }: { quoteId: string | null; spec: unknown }) {
   const crest = asCrestSpec(spec);
   if (crest && quoteId) return <CrestProof quoteId={quoteId} spec={crest} />;
+  const mat = asMatSpec(spec);
+  if (mat && quoteId) return <MatProof quoteId={quoteId} spec={mat} />;
   const p = asBallPrintSpec(spec);
   if (!p || !quoteId) return null;
   return (

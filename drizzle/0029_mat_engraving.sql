@@ -1,0 +1,1 @@
+ALTER TABLE "organisations" ADD COLUMN "mat_engraving" jsonb DEFAULT '{}'::jsonb NOT NULL;

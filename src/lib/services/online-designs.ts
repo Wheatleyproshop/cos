@@ -117,8 +117,8 @@ export async function listSubmittedDesigns(orgId: string, kind: DesignKind = 'ba
  * Everything in progress for an in-house service (ball printing / cresting): open proofs (quotes,
  * including designs sent in online) and approved jobs not yet collected, with what's still owed.
  */
-export async function inHouseWork(orgId: string, kind: DesignKind) {
-  const specKind = kind === 'cresting' ? 'cos-cresting' : 'cos-ball-print';
+export async function inHouseWork(orgId: string, kind: DesignKind | 'engraving') {
+  const specKind = kind === 'cresting' ? 'cos-cresting' : kind === 'engraving' ? 'cos-mat-engraving' : 'cos-ball-print';
   return withTenant(orgId, async (tx) => {
     const proofs = await tx
       .select({ q: quotes, customer: customers.name, email: customers.email })

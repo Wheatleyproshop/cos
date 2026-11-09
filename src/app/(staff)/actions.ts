@@ -89,6 +89,7 @@ import {
   updatePrebookNotes,
 } from '@/lib/services/prebooks';
 import { TEMPLATE_KEYS } from '@/lib/email/templates';
+import { createMatQuote, updateMatPrices } from '@/lib/services/mat-engraving';
 import { createCrestQuote, setCrestDesignLink, setCrestPositionRemoved, updateCrestPrices } from '@/lib/services/cresting';
 import { addBall, addStarterBalls, createBallPrintQuote, setBallActive, setBallDesignLink, setBallPhoto, setBallRemoved, updateBall, updateBallPrice, updateSetupFee } from '@/lib/services/ball-printing';
 
@@ -430,6 +431,33 @@ export async function ballPrintAction(_: FormState, fd: FormData): Promise<FormS
   );
   if (res?.ok && target) redirect(target);
   return res;
+}
+
+/* ── Mat engraving ───────────────────────────────────────────────────── */
+
+export async function matEngravingAction(_: FormState, fd: FormData): Promise<FormState> {
+  let target = '';
+  const file = (name: string) => {
+    const v = fd.get(name);
+    return v instanceof File && v.size ? v : null;
+  };
+  const res = await act(
+    'staff',
+    async (ctx) => {
+      const q = await createMatQuote(ctx, obj(fd), { logos: [file('logo0'), file('logo1')], proof: file('proof') }, { send: fd.get('intent') === 'send' });
+      target = `/quotes/${q.quoteNumber}`;
+    },
+    fd,
+  );
+  if (res?.ok && target) redirect(target);
+  return res;
+}
+
+export async function matPricesAction(_: FormState, fd: FormData) {
+  return act('manager', async (ctx) => {
+    await updateMatPrices(ctx, obj(fd));
+    return 'Engraving prices saved.';
+  }, fd);
 }
 
 /* ── Clothing cresting ──────────────────────────────────────────────── */

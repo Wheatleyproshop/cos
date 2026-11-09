@@ -40,8 +40,8 @@ export type EmailContext = {
   previewImageUrl?: string;
   /** Custom Fitting: each club with its details on separate lines (replaces the plain specification). */
   fit?: FitSpec | null;
-  /** 'print' = personalised balls sent to the printer; 'cresting' = clothing crested in-house. Neither is ordered from a manufacturer. */
-  journey?: 'supplier' | 'print' | 'cresting';
+  /** In-house jobs (not ordered from a manufacturer): 'print' = personalised balls, 'cresting' = clothing, 'engraving' = laser-engraved mats. */
+  journey?: 'supplier' | 'print' | 'cresting' | 'engraving';
   /** Order placed but the item is out of stock at the manufacturer (back order). */
   outOfStock?: boolean;
 };
@@ -170,18 +170,44 @@ function commercialRows(ctx: EmailContext): Block[] {
   return rows;
 }
 
+/** Wording for in-house jobs: approved proof → production → ready to collect. */
+const IN_HOUSE = {
+  print: {
+    personal: 'personalised golf balls', subject: 'golf balls', isAre: 'are', hasHave: 'have', itThey: 'they’re', goneInto: 'gone into print',
+    proofWord: 'golf ball', proofHeading: 'Your personalised golf balls',
+    proofIntro: 'Here is a preview of your personalised golf balls. Please check the artwork, quantity and price, then approve online and we will send them for printing.',
+    designWord: 'golf ball', designPriceLabel: 'Estimated price (incl. VAT)',
+    designIntro: 'Thank you for designing your personalised golf balls with us. Our team will check your artwork and be in touch shortly to confirm everything before it goes into print.',
+    readyLine: 'Great news. Your personalised golf balls have been printed and are ready to collect from our store.',
+  },
+  cresting: {
+    personal: 'personalised clothing', subject: 'clothing', isAre: 'is', hasHave: 'has', itThey: 'it’s', goneInto: 'gone into production',
+    proofWord: 'cresting', proofHeading: 'Your personalised clothing',
+    proofIntro: 'Here is a preview of your crested clothing. Please check the logo or text, the positions, sizes and price, then approve online and we will put it into production.',
+    designWord: 'clothing', designPriceLabel: 'Cresting estimate (incl. VAT, garments extra)',
+    designIntro: 'Thank you for designing your personalised clothing with us. Our team will check your artwork, positions and sizes, confirm the garment price and be in touch shortly before anything goes into production.',
+    readyLine: 'Great news. Your crested clothing is finished and ready to collect from our store.',
+  },
+  engraving: {
+    personal: 'engraved mat', subject: 'mat', isAre: 'is', hasHave: 'has', itThey: 'it’s', goneInto: 'gone onto the laser engraver',
+    proofWord: 'mat engraving', proofHeading: 'Your engraved fairway mat',
+    proofIntro: 'Here is a preview of your laser-engraved fairway mat. Please check the name or logo, where it goes and the price, then approve online and we will engrave it.',
+    designWord: 'mat', designPriceLabel: 'Estimated price (incl. VAT)',
+    designIntro: 'Thank you for designing your engraved fairway mat with us. Our team will check your design and be in touch shortly before anything is engraved.',
+    readyLine: 'Great news. Your engraved mat is finished and ready to collect from our store.',
+  },
+} as const;
+
 export function renderEmail(type: EmailAutomationKey, ctx: EmailContext): RenderedEmail {
   const s = ctx.store.storeName;
-  const crest = ctx.journey === 'cresting';
-  // In-house jobs (printed balls, crested clothing): approved proof → production → ready to collect.
-  const print = ctx.journey === 'print' || crest;
-  const thing = crest ? 'personalised clothing' : 'golf balls';
-  const goneInto = crest ? 'gone into production' : 'gone into print';
+  const journey = ctx.journey ?? 'supplier';
+  const print = journey !== 'supplier';
+  const W = IN_HOUSE[journey === 'supplier' ? 'print' : journey];
   switch (type) {
     case 'order_confirmation': {
       const backorder = !print && ctx.outOfStock;
       const intro = print
-        ? [`Thank you for approving your proof. Your ${crest ? thing : `personalised ${thing}`} ${crest ? 'has' : 'have'} ${goneInto}, and we’ll let you know as soon as ${crest ? 'it’s' : 'they’re'} ready to collect.`]
+        ? [`Thank you for approving your proof. Your ${W.personal} ${W.hasHave} ${W.goneInto}, and we’ll let you know as soon as ${W.itThey} ready to collect.`]
         : backorder
           ? [
               `Thank you for your order. We’ve placed it with ${ctx.brand}, but it’s currently out of stock with them, so it’s on back order.`,
@@ -191,15 +217,15 @@ export function renderEmail(type: EmailAutomationKey, ctx: EmailContext): Render
       if (backorder && ctx.etaReason) intro.push(ctx.etaReason);
       const etaRow = { label: print ? 'Estimated ready date' : backorder ? 'Expected from the manufacturer' : 'Estimated arrival', value: ctx.etaDate ? longDate(ctx.etaDate) : 'To be confirmed' };
       const r = layout(ctx, {
-        preheader: print ? `Your ${crest ? thing : `personalised ${thing}`} ${crest ? 'has' : 'have'} ${goneInto}.` : backorder ? `Your ${ctx.brand} order is placed — currently on back order.` : `Your ${ctx.brand} order has been placed.`,
-        heading: print ? `Your ${crest ? 'clothing has' : 'golf balls have'} ${goneInto}` : backorder ? 'Your order is placed — on back order' : 'Your order has been placed',
+        preheader: print ? `Your ${W.personal} ${W.hasHave} ${W.goneInto}.` : backorder ? `Your ${ctx.brand} order is placed — currently on back order.` : `Your ${ctx.brand} order has been placed.`,
+        heading: print ? `Your ${W.subject} ${W.hasHave} ${W.goneInto}` : backorder ? 'Your order is placed — on back order' : 'Your order has been placed',
         intro,
         rows: [...commercialRows(ctx), etaRow],
         cta: ctx.actionUrl ? { label: 'Track your order', url: ctx.actionUrl } : undefined,
       });
       return {
         subject: print
-          ? `Your ${crest ? 'clothing has' : 'golf balls have'} ${goneInto} (${ctx.reference})`
+          ? `Your ${W.subject} ${W.hasHave} ${W.goneInto} (${ctx.reference})`
           : backorder
             ? `Your order is placed — ${ctx.brand} ${ctx.product} is on back order (${ctx.reference})`
             : `Your order has been placed — ${ctx.brand} ${ctx.product} (${ctx.reference})`,
@@ -213,18 +239,16 @@ export function renderEmail(type: EmailAutomationKey, ctx: EmailContext): Render
       if (ctx.validUntil) rows.push({ label: 'Quote valid until', value: longDate(ctx.validUntil) });
       const proof = Boolean(ctx.previewImageUrl);
       const r = layout(ctx, {
-        preheader: proof ? `Your ${crest ? 'cresting' : 'golf ball'} proof from ${s}.` : `Your personalised quotation from ${s}.`,
-        heading: proof ? (crest ? 'Your personalised clothing' : 'Your personalised golf balls') : 'Your personalised quotation',
+        preheader: proof ? `Your ${W.proofWord} proof from ${s}.` : `Your personalised quotation from ${s}.`,
+        heading: proof ? W.proofHeading : 'Your personalised quotation',
         intro: proof
-          ? crest
-            ? ['Here is a preview of your crested clothing. Please check the logo or text, the positions, sizes and price, then approve online and we will put it into production.']
-            : ['Here is a preview of your personalised golf balls. Please check the artwork, quantity and price, then approve online and we will send them for printing.']
+          ? [W.proofIntro]
           : ['We have prepared your quote. Please review the specification and price, then approve it online and we will place your order.'],
         rows,
         cta: ctx.actionUrl ? { label: proof ? 'Review and approve your proof' : 'Review and approve your quote', url: ctx.actionUrl } : undefined,
         outro: ['No account is needed. If anything needs changing, just reply to this email.'],
       });
-      return { subject: proof ? `Please approve your ${crest ? 'cresting' : 'golf ball'} proof — ${s}` : `Your quote from ${s} — ${ctx.brand} ${ctx.product}`, ...r };
+      return { subject: proof ? `Please approve your ${W.proofWord} proof — ${s}` : `Your quote from ${s} — ${ctx.brand} ${ctx.product}`, ...r };
     }
     case 'eta_revised': {
       // Sent when an order is marked out of stock / delayed (date changes alone aren't emailed).
@@ -233,7 +257,7 @@ export function renderEmail(type: EmailAutomationKey, ctx: EmailContext): Render
       rows.push({ label: print ? 'Estimated ready date' : 'Now expected', value: longDate(ctx.etaDate) });
       const intro = [
         print
-          ? `There’s a short delay with your ${crest ? 'clothing' : 'golf balls'}. We will keep you updated and let you know as soon as ${crest ? 'it’s' : 'they’re'} ready.`
+          ? `There’s a short delay with your ${W.subject}. We will keep you updated and let you know as soon as ${W.itThey} ready.`
           : `There’s a delay with your ${ctx.brand} order: it’s currently out of stock or held up at the manufacturer. We’ll let you know as soon as it arrives in store.`,
       ];
       if (ctx.etaReason) intro.push(ctx.etaReason);
@@ -248,17 +272,15 @@ export function renderEmail(type: EmailAutomationKey, ctx: EmailContext): Render
     }
     case 'ball_design_received': {
       const r = layout(ctx, {
-        preheader: `We’ve received your ${crest ? 'clothing' : 'golf ball'} design.`,
+        preheader: `We’ve received your ${W.designWord} design.`,
         heading: 'Thanks — we’ve received your design',
         intro: [
-          crest
-            ? 'Thank you for designing your personalised clothing with us. Our team will check your artwork, positions and sizes, confirm the garment price and be in touch shortly before anything goes into production.'
-            : 'Thank you for designing your personalised golf balls with us. Our team will check your artwork and be in touch shortly to confirm everything before it goes into print.',
+          W.designIntro,
           'You don’t need to do anything else for now. If you’d like to change anything, just reply to this email.',
         ],
-        rows: [{ label: crest ? 'Cresting estimate (incl. VAT, garments extra)' : 'Estimated price (incl. VAT)', value: money(ctx.totalPence) }],
+        rows: [{ label: W.designPriceLabel, value: money(ctx.totalPence) }],
       });
-      return { subject: `We’ve received your ${crest ? 'clothing' : 'golf ball'} design (${ctx.reference})`, ...r };
+      return { subject: `We’ve received your ${W.designWord} design (${ctx.reference})`, ...r };
     }
     case 'workshop_checked_in': {
       const rows: Block[] = [{ label: 'Estimated ready', value: ctx.etaDate ? longDate(ctx.etaDate) : 'We’ll confirm shortly' }];
@@ -316,12 +338,12 @@ export function renderEmail(type: EmailAutomationKey, ctx: EmailContext): Render
       if (ctx.store.openingHours) rows.push({ label: 'Opening hours', value: ctx.store.openingHours });
       rows.push({ label: 'Balance due on collection', value: money(ctx.balancePence ?? 0) });
       const r = layout(ctx, {
-        preheader: reminder ? 'Your order is still waiting for you.' : print ? `Your ${crest ? thing : `personalised ${thing}`} ${crest ? 'is' : 'are'} ready.` : 'Your order has arrived in store.',
-        heading: reminder ? 'A friendly reminder — your order is waiting' : print ? `Your ${crest ? 'clothing is' : 'golf balls are'} ready to collect` : 'Your order has arrived in store',
+        preheader: reminder ? 'Your order is still waiting for you.' : print ? `Your ${W.personal} ${W.isAre} ready.` : 'Your order has arrived in store.',
+        heading: reminder ? 'A friendly reminder — your order is waiting' : print ? `Your ${W.subject} ${W.isAre} ready to collect` : 'Your order has arrived in store',
         intro: reminder
           ? ['Your order is ready and waiting for you in store. Pop in whenever suits you.']
           : print
-            ? [crest ? 'Great news. Your crested clothing is finished and ready to collect from our store.' : 'Great news. Your personalised golf balls have been printed and are ready to collect from our store.']
+            ? [W.readyLine]
             : ['Great news. Your order has arrived and is ready to collect from our store.'],
         rows,
         cta: ctx.actionUrl ? { label: 'View your order', url: ctx.actionUrl } : undefined,
@@ -330,7 +352,7 @@ export function renderEmail(type: EmailAutomationKey, ctx: EmailContext): Render
         subject: reminder
           ? `Reminder: your order ${ctx.reference} is ready to collect`
           : print
-            ? `Your ${crest ? 'clothing is' : 'golf balls are'} ready to collect — ${ctx.reference}`
+            ? `Your ${W.subject} ${W.isAre} ready to collect — ${ctx.reference}`
             : `Your order has arrived in store — ${ctx.reference}`,
         ...r,
       };
