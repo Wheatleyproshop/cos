@@ -11,7 +11,7 @@ import { inHouse, journeyFor } from '../status';
 import { appUrl, hashToken, newToken, signValue } from '../tokens';
 import { noteSchema, parse, quoteCreateSchema, quoteEditSchema } from '../validation';
 import { findOrCreateCustomer, issueTrackingLink, nextNumber, requireRole, ServiceError, type Ctx } from './common';
-import { noteDeletedState, orderEmailContext } from './orders';
+import { itemsOrError, noteDeletedState, orderEmailContext } from './orders';
 
 async function loadQuote(tx: DB, orgId: string, quoteId: string) {
   const [row] = await tx
@@ -73,6 +73,8 @@ export type CreateQuoteOptions = {
 
 export async function createQuote(ctx: Ctx, raw: unknown, opts: CreateQuoteOptions = {}) {
   if (!ctx.userId) throw new ServiceError('Quotes must be created by a signed-in staff member.');
+  const combined = opts.specificationJson ? { raw, spec: null } : itemsOrError(raw);
+  raw = combined.raw;
   const input = parse(quoteCreateSchema, withUnitTotal(raw, parseMoneyToPence));
   const unitPricePence = parseMoneyToPence(String((raw as { unitPricePence?: unknown } | null)?.unitPricePence ?? '')) || null;
   const { quote, messageId } = await withTenant(ctx.org.id, async (tx) => {
@@ -94,7 +96,7 @@ export async function createQuote(ctx: Ctx, raw: unknown, opts: CreateQuoteOptio
         estimatedLeadTime: input.estimatedLeadTime,
         validUntil: input.validUntil,
         internalNotes: input.internalNotes,
-        specificationJson: opts.specificationJson ?? null,
+        specificationJson: opts.specificationJson ?? combined.spec ?? null,
         createdByUserId: ctx.userId!,
       })
       .returning();

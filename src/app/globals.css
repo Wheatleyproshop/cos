@@ -869,3 +869,9 @@ td { border-bottom-color: #f0eee9; }
 :root[data-theme='dark']:has(#sidenav) :is(.badge.pb-confirmed, .badge.ws-in_progress) { background: #23254a; color: #b3b7ff; }
 :root[data-theme='dark']:has(#sidenav) :is(.badge.pb-delivered, .badge.ws-ready) { background: #183424; color: #8fdcab; }
 :root[data-theme='dark']:has(#sidenav) .delta.up { color: #8fdcab; }
+
+/* Multi-item orders */
+fieldset.itemcard { border: 1px solid var(--line); border-radius: 16px; padding: 14px 16px 16px; margin: 0; min-width: 0; }
+fieldset.itemcard legend { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 13px; color: var(--ink); padding: 0 6px; }
+.ordertotal b { font-size: 20px; }
+.error.wide { grid-column: 1 / -1; }

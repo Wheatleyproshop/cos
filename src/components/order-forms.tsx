@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { FormState } from '@/lib/action-utils';
 import { money, parseMoneyToPence } from '@/lib/format';
 import { HANDS, ORDER_CATEGORIES } from '@/lib/order-details';
@@ -56,6 +56,118 @@ const METHODS = [
 
 export type RequestDefaults = Partial<Record<'customerId' | 'customerName' | 'email' | 'phone' | 'brand' | 'category' | 'product' | 'sku' | 'specificationText', string>>;
 
+type ExtraItem = {
+  key: number; brand: string; category: string; product: string; variant: string; colour: string; size: string; hand: string; sku: string;
+  quantity: string; unitPricePence: string; notes: string;
+};
+const blankItem = (key: number): ExtraItem => ({
+  key, brand: '', category: '', product: '', variant: '', colour: '', size: '', hand: '', sku: '', quantity: '1', unitPricePence: '', notes: '',
+});
+const lineTotal = (it: { quantity: string; unitPricePence: string }) =>
+  Math.max(1, Math.floor(Number(it.quantity) || 1)) * (parseMoneyToPence(it.unitPricePence || '0') ?? 0);
+
+/** One extra item on a multi-item order or quote. */
+function ExtraItemCard({ item, index, brands, onChange, onRemove }: { item: ExtraItem; index: number; brands: string[]; onChange: (patch: Partial<ExtraItem>) => void; onRemove: () => void }) {
+  const known = brands.find((b) => b.toLowerCase() === item.brand.toLowerCase());
+  const [other, setOther] = useState(Boolean(item.brand) && !known);
+  const id = (f: string) => `item${item.key}-${f}`;
+  const total = lineTotal(item);
+  return (
+    <fieldset className="itemcard field wide">
+      <legend>
+        Item {index}
+        <button type="button" className="btn small" onClick={onRemove} aria-label={`Remove item ${index}`}>
+          Remove
+        </button>
+      </legend>
+      <div className="fields">
+        <label className="field">
+          <span>Brand *</span>
+          <select
+            id={id('brand')}
+            value={other ? '__other' : known ?? ''}
+            onChange={(e) => {
+              const v = e.target.value;
+              setOther(v === '__other');
+              onChange({ brand: v === '__other' ? '' : v });
+            }}
+          >
+            <option value="">Choose a brand…</option>
+            {brands.map((b) => (
+              <option key={b} value={b}>
+                {b}
+              </option>
+            ))}
+            <option value="__other">Other brand…</option>
+          </select>
+        </label>
+        {other ? (
+          <label className="field">
+            <span>Brand name *</span>
+            <input value={item.brand} maxLength={80} onChange={(e) => onChange({ brand: e.target.value })} placeholder="Type the brand" />
+          </label>
+        ) : null}
+        <label className="field">
+          <span>Category</span>
+          <select value={item.category} onChange={(e) => onChange({ category: e.target.value })}>
+            {CATEGORY_OPTIONS.map((o) => (
+              <option key={o.value} value={o.value}>
+                {o.label}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="field">
+          <span>Product *</span>
+          <input value={item.product} maxLength={160} onChange={(e) => onChange({ product: e.target.value })} placeholder="e.g. Pro V1 golf balls" />
+        </label>
+        <label className="field">
+          <span>Model / variant</span>
+          <input value={item.variant} maxLength={120} onChange={(e) => onChange({ variant: e.target.value })} />
+        </label>
+        <label className="field">
+          <span>Colour</span>
+          <input value={item.colour} maxLength={60} onChange={(e) => onChange({ colour: e.target.value })} />
+        </label>
+        <label className="field">
+          <span>Size</span>
+          <input value={item.size} maxLength={40} onChange={(e) => onChange({ size: e.target.value })} />
+        </label>
+        <label className="field">
+          <span>Hand</span>
+          <select value={item.hand} onChange={(e) => onChange({ hand: e.target.value })}>
+            {HAND_OPTIONS.map((o) => (
+              <option key={o.value} value={o.value}>
+                {o.label}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="field">
+          <span>Product ID / SKU</span>
+          <input value={item.sku} maxLength={80} onChange={(e) => onChange({ sku: e.target.value })} />
+        </label>
+        <label className="field">
+          <span>Quantity</span>
+          <input type="number" min={1} max={999} value={item.quantity} onChange={(e) => onChange({ quantity: e.target.value })} />
+        </label>
+        <label className="field">
+          <span>Price each (GBP, incl. VAT) *</span>
+          <input inputMode="decimal" placeholder="0.00" value={item.unitPricePence} onChange={(e) => onChange({ unitPricePence: e.target.value })} />
+        </label>
+        <label className="field wide">
+          <span>Details for this item</span>
+          <input value={item.notes} maxLength={1000} onChange={(e) => onChange({ notes: e.target.value })} placeholder="e.g. Shaft, loft, personalisation…" />
+        </label>
+        <div className="field wide qtytotal" aria-live="polite">
+          <span>Item total</span>
+          <b>{money(total)}</b>
+        </div>
+      </div>
+    </fieldset>
+  );
+}
+
 export function CreateRequestForm({
   action,
   staffName,
@@ -75,6 +187,10 @@ export function CreateRequestForm({
 }) {
   const [mode, setMode] = useState(initialMode);
   const quote = mode === 'quote';
+  const [extras, setExtras] = useState<ExtraItem[]>([]);
+  const [firstTotal, setFirstTotal] = useState(0);
+  const nextKey = () => (extras.length ? Math.max(...extras.map((e) => e.key)) + 1 : 1);
+  const orderTotal = firstTotal + extras.reduce((n, it) => n + lineTotal(it), 0);
   return (
     <ActionForm action={action}>
       {(s) => (
@@ -91,9 +207,44 @@ export function CreateRequestForm({
             <Field state={s} name="size" label="Size" placeholder="e.g. L, UK 9, 34W 31L" />
             <Field state={s} name="hand" label="Hand" options={HAND_OPTIONS} />
             <Field state={s} name="sku" label="Product ID / SKU" defaultValue={defaults.sku} placeholder="Supplier product code" />
-            <Field state={s} name="specificationText" label="Specification / other details" wide textarea defaultValue={defaults.specificationText} placeholder="Loft, shaft, flex, length, lie, grip, grip size, wraps… anything the supplier needs" />
+            <QtyPrice state={s} onTotal={setFirstTotal} label={extras.length ? 'Item total' : 'Total (incl. VAT)'} />
+            <Field
+              state={s}
+              name="specificationText"
+              label={extras.length ? 'Specification / other details (whole order)' : 'Specification / other details'}
+              wide
+              textarea
+              defaultValue={defaults.specificationText}
+              placeholder="Loft, shaft, flex, length, lie, grip, grip size, wraps… anything the supplier needs"
+            />
+            {extras.map((it, i) => (
+              <ExtraItemCard
+                key={it.key}
+                item={it}
+                index={i + 2}
+                brands={brands}
+                onChange={(patch) => setExtras((list) => list.map((x) => (x.key === it.key ? { ...x, ...patch } : x)))}
+                onRemove={() => setExtras((list) => list.filter((x) => x.key !== it.key))}
+              />
+            ))}
+            <input type="hidden" name="extraItems" value={extras.length ? JSON.stringify(extras.map(({ key: _k, ...rest }) => rest)) : ''} />
+            {s?.fieldErrors?.extraItems ? (
+              <p className="error wide" role="alert">
+                {s.fieldErrors.extraItems}
+              </p>
+            ) : null}
+            <div className="field wide">
+              <button type="button" className="btn" onClick={() => setExtras((list) => [...list, blankItem(nextKey())])}>
+                ＋ Add another item
+              </button>
+            </div>
             <div className="field wide formsection">Price &amp; payment</div>
-            <QtyPrice state={s} />
+            {extras.length ? (
+              <div className="field wide qtytotal ordertotal" aria-live="polite">
+                <span>Order total ({extras.length + 1} items, incl. VAT)</span>
+                <b>{money(orderTotal)}</b>
+              </div>
+            ) : null}
             {quote ? (
               <>
                 <Field state={s} name="depositRequiredPence" label="Deposit required to proceed (GBP)" inputMode="decimal" defaultValue="0.00" />
@@ -467,12 +618,13 @@ export function VoidPaymentForm({ action, label }: { action: BoundAction; label:
 }
 
 /** Quantity × price each (incl. VAT), with the total shown live. The server recalculates it the same way. */
-function QtyPrice({ state }: { state: FormState }) {
+function QtyPrice({ state, onTotal, label = 'Total (incl. VAT)' }: { state: FormState; onTotal?: (pence: number) => void; label?: string }) {
   const [qty, setQty] = useState(String(state?.values?.quantity ?? '1'));
   const [each, setEach] = useState(String(state?.values?.unitPricePence ?? ''));
   const n = Math.max(1, Math.floor(Number(qty) || 1));
   const total = (parseMoneyToPence(each || '0') ?? 0) * n;
   const err = state?.fieldErrors?.unitPricePence ?? state?.fieldErrors?.totalGrossPence;
+  useEffect(() => onTotal?.(total), [total, onTotal]);
   return (
     <>
       <label className="field">
@@ -486,7 +638,7 @@ function QtyPrice({ state }: { state: FormState }) {
       </label>
       <input type="hidden" name="totalGrossPence" value={(total / 100).toFixed(2)} />
       <div className="field qtytotal" aria-live="polite">
-        <span>Total (incl. VAT)</span>
+        <span>{label}</span>
         <b>
           {money(total)}
           {n > 1 && total ? <small> · {n} × {money(total / n)}</small> : null}

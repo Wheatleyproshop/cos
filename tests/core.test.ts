@@ -150,6 +150,35 @@ describe('order lifecycle', () => {
     });
   });
 
+  it('takes several items on one order (and quote), totalled and listed', async () => {
+    const extraItems = JSON.stringify([
+      { brand: 'Titleist', category: 'Golf balls', product: 'Pro V1', quantity: '2', unitPricePence: '54.99', notes: 'White' },
+      { brand: 'FootJoy', product: 'Premiere Series shoes', size: 'UK 9', quantity: '1', unitPricePence: '179.00' },
+    ]);
+    const order = await createOrder(staff, {
+      customerName: 'Multi Max', email: 'multi@example.com', brand: 'Nike', category: 'Clothing', product: 'Victory Polo', colour: 'Navy', size: 'L',
+      quantity: '2', unitPricePence: '50.00', totalGrossPence: '1.00', specificationText: 'Gift wrap please', extraItems,
+    });
+    expect(order.totalGrossPence).toBe(2 * 5000 + 2 * 5499 + 17900);
+    expect(order.product).toBe('Victory Polo (+2 more)');
+    expect(order.brand).toBe('Nike');
+    expect(order.specificationText).toContain('3 items:');
+    expect(order.specificationText).toContain('1. Nike Victory Polo · 2 × £50.00 = £100.00');
+    expect(order.specificationText).toContain('   Colour: Navy');
+    expect(order.specificationText).toContain('2. Titleist Pro V1 · 2 × £54.99 = £109.98');
+    expect(order.specificationText).toContain('3. FootJoy Premiere Series shoes · £179.00');
+    expect(order.specificationText).toContain('Gift wrap please');
+    expect((order.specificationJson as { kind: string; items: unknown[] }).items).toHaveLength(3);
+
+    const q = await createQuote(staff, { customerName: 'Multi Max', email: 'multi@example.com', brand: 'Nike', product: 'Club Cap', quantity: '1', unitPricePence: '25', validUntil: '', extraItems });
+    expect(q.totalGrossPence).toBe(2500 + 2 * 5499 + 17900);
+    expect(q.product).toBe('Club Cap (+2 more)');
+
+    await expect(
+      createOrder(staff, { customerName: 'X', email: 'x-multi@example.com', brand: 'Nike', product: 'P', unitPricePence: '10', extraItems: JSON.stringify([{ brand: 'Nike', product: '', unitPricePence: '5' }]) }),
+    ).rejects.toThrow(/Item 2: Product is required/);
+  });
+
   it('validates input with field errors', async () => {
     await expect(createOrder(staff, { customerName: '', email: 'nope' })).rejects.toMatchObject({
       fieldErrors: expect.objectContaining({ customerName: expect.any(String), email: expect.any(String) }),

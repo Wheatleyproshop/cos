@@ -8,6 +8,7 @@ import { ALLOWED_UPLOAD_TYPES, MAX_UPLOAD_BYTES, storage } from '../storage';
 import { fitSpec } from '../fit-spec';
 import { money, parseMoneyToPence } from '../format';
 import { composeSpec, withUnitTotal } from '../order-details';
+import { combineItems, ItemsError } from '../order-items';
 import { canTransition, journeyFor, statusLabel } from '../status';
 import { newToken } from '../tokens';
 import {
@@ -59,6 +60,8 @@ export function orderEmailContext(o: Order, c: Customer, t: PaymentTotals, actio
  */
 export async function createOrder(ctx: Ctx, raw: unknown, opts: { notify?: boolean } = {}) {
   if (!ctx.userId) throw new ServiceError('Orders must be taken by a signed-in staff member.');
+  const combined = itemsOrError(raw);
+  raw = combined.raw;
   const input = parse(orderCreateSchema, withUnitTotal(raw, parseMoneyToPence));
   const unitPricePence = parseMoneyToPence(String((raw as { unitPricePence?: unknown } | null)?.unitPricePence ?? '')) || null;
   const notify = opts.notify !== false || !atLeast(ctx, 'manager');
@@ -79,6 +82,7 @@ export async function createOrder(ctx: Ctx, raw: unknown, opts: { notify?: boole
         sku: input.sku,
         supplier: input.brand,
         specificationText: composeSpec({ ...input, unitPricePence, notes: input.specificationText }),
+        ...(combined.spec ? { specificationJson: combined.spec } : {}),
         totalGrossPence: input.totalGrossPence,
         etaDate: input.etaDate,
         supplierReference: input.supplierReference,
@@ -130,6 +134,16 @@ export async function createOrder(ctx: Ctx, raw: unknown, opts: { notify?: boole
   });
   await dispatchMessages(ctx.org, [messageId]);
   return order;
+}
+
+/** Several items on one order/quote (see order-items). */
+export function itemsOrError(raw: unknown) {
+  try {
+    return combineItems(raw, parseMoneyToPence);
+  } catch (e) {
+    if (e instanceof ItemsError) throw new ServiceError(e.message, { extraItems: e.message });
+    throw e;
+  }
 }
 
 function actorName(ctx: Ctx) {
