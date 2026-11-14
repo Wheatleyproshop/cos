@@ -22,7 +22,7 @@ function arc(cx: number, cy: number, r0: number, r1: number, a0: number, a1: num
   return `M${p(r1, a0)}A${r1},${r1} 0 ${large} 1 ${p(r1, a1)}L${p(r0, a1)}A${r0},${r0} 0 ${large} 0 ${p(r0, a0)}Z`;
 }
 
-function BrandDonut({ rows }: { rows: Ranked[] }) {
+export function BrandDonut({ rows }: { rows: Ranked[] }) {
   const total = rows.reduce((s, r) => s + r.valuePence, 0);
   if (!total) return <p className="muted">No sales in this period yet.</p>;
   let a = 0;
@@ -66,6 +66,55 @@ function BrandDonut({ rows }: { rows: Ranked[] }) {
   );
 }
 
+/** A card per top brand: its sales, items, average per item and three most-ordered products. */
+export function BrandCards({ data }: { data: Performance }) {
+  const shareTotal = data.brandShare.reduce((s, r) => s + r.valuePence, 0);
+  return (
+    <>
+        {data.brandProducts.length ? (
+          <div className="dash-brands">
+            {data.brandProducts.map((b, i) => (
+              <article key={b.brand} className="dash-brand">
+                <header>
+                  <i className={`dash-swatch dc-${i}`} aria-hidden="true" />
+                  <h3>{b.brand}</h3>
+                  <span className="muted">
+                    {pct(b.valuePence, shareTotal)}% of sales
+                  </span>
+                </header>
+                <div className="dash-brand-figs">
+                  <div>
+                    <b>{pounds(b.valuePence)}</b>
+                    <small>sales</small>
+                  </div>
+                  <div>
+                    <b>{b.count}</b>
+                    <small>item{b.count === 1 ? '' : 's'}</small>
+                  </div>
+                  <div>
+                    <b>{pounds(Math.round(b.valuePence / Math.max(1, b.count)))}</b>
+                    <small>avg per item</small>
+                  </div>
+                </div>
+                <ol>
+                  {b.products.map((p) => (
+                    <li key={p.name}>
+                      <span>{p.name}</span>
+                      <b>×{p.count}</b>
+                      <em>{money(p.valuePence)}</em>
+                    </li>
+                  ))}
+                </ol>
+              </article>
+            ))}
+          </div>
+        ) : (
+          <p className="muted">No sales in this period yet.</p>
+        )}
+    </>
+  );
+}
+
 function Change({ pct: p, per }: { pct: number | null; per: string }) {
   if (p === null) return <>{per === 'all time' ? 'all time' : `in the last ${per}`}</>;
   return (
@@ -81,7 +130,6 @@ function Change({ pct: p, per }: { pct: number | null; per: string }) {
 export function Dashboard({ data, canExport, updatedAt }: { data: Performance; canExport?: boolean; updatedAt: string }) {
   const k = data.kpis;
   const per = data.period.label.toLowerCase();
-  const shareTotal = data.brandShare.reduce((s, r) => s + r.valuePence, 0);
   const tiles = [
     { icon: 'orders', label: 'Sales', value: money(k.valuePence), note: <Change pct={k.valueChange} per={per} /> },
     { icon: 'check', label: 'Orders', value: String(k.orders), note: <Change pct={k.ordersChange} per={per} /> },
@@ -104,6 +152,9 @@ export function Dashboard({ data, canExport, updatedAt }: { data: Performance; c
           <LiveUpdates updatedAt={updatedAt} />
           <Link href={`/?view=performance&period=${data.period.key}`} className="muted">
             Full performance report →
+          </Link>
+          <Link href={`/tv?period=${data.period.key}`} className="btn small" title="Full-screen view for a TV in the shop">
+            ▣ TV mode
           </Link>
           {canExport ? (
             <a className="btn small" href={`/api/export/dashboard?period=${data.period.key}`} download>
@@ -160,46 +211,7 @@ export function Dashboard({ data, canExport, updatedAt }: { data: Performance; c
           <h2 id="dash-bybrand">Most ordered, by brand</h2>
           <span className="muted">Top products from your five biggest brands</span>
         </div>
-        {data.brandProducts.length ? (
-          <div className="dash-brands">
-            {data.brandProducts.map((b, i) => (
-              <article key={b.brand} className="dash-brand">
-                <header>
-                  <i className={`dash-swatch dc-${i}`} aria-hidden="true" />
-                  <h3>{b.brand}</h3>
-                  <span className="muted">
-                    {pct(b.valuePence, shareTotal)}% of sales
-                  </span>
-                </header>
-                <div className="dash-brand-figs">
-                  <div>
-                    <b>{pounds(b.valuePence)}</b>
-                    <small>sales</small>
-                  </div>
-                  <div>
-                    <b>{b.count}</b>
-                    <small>item{b.count === 1 ? '' : 's'}</small>
-                  </div>
-                  <div>
-                    <b>{pounds(Math.round(b.valuePence / Math.max(1, b.count)))}</b>
-                    <small>avg per item</small>
-                  </div>
-                </div>
-                <ol>
-                  {b.products.map((p) => (
-                    <li key={p.name}>
-                      <span>{p.name}</span>
-                      <b>×{p.count}</b>
-                      <em>{money(p.valuePence)}</em>
-                    </li>
-                  ))}
-                </ol>
-              </article>
-            ))}
-          </div>
-        ) : (
-          <p className="muted">No sales in this period yet.</p>
-        )}
+        <BrandCards data={data} />
       </section>
 
       <section className="panel" aria-labelledby="dash-cust">

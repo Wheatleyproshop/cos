@@ -965,3 +965,78 @@ fieldset.itemcard legend { display: flex; align-items: center; gap: 10px; font-w
 @keyframes livepulse { 0% { box-shadow: 0 0 0 0 rgba(27, 175, 122, .45); } 70% { box-shadow: 0 0 0 7px rgba(27, 175, 122, 0); } 100% { box-shadow: 0 0 0 0 rgba(27, 175, 122, 0); } }
 @media (prefers-reduced-motion: reduce) { .live i { animation: none; } }
 @media (max-width: 600px) { .dash-actions { flex-wrap: wrap; gap: 10px; } }
+
+/* ---------- Shop TV mode (always dark, large type, no customer data) ---------- */
+html:has(.tv) body { background: #0f1115; }
+.tv {
+  --dc0: #3987e5; --dc1: #d95926; --dc2: #199e70; --dc3: #c98500; --dc4: #d55181; --dcother: #6b6a66; --dcgap: #1a1d23;
+  --ink: #eef0f4; --muted: #9aa0ab; --line: #2b2f37;
+  min-height: 100vh; background: #0f1115; color: var(--ink); padding: clamp(16px, 2.4vw, 44px); display: grid; gap: clamp(14px, 1.6vw, 28px); align-content: start;
+  font-size: clamp(14px, 1.05vw, 22px);
+}
+.tv .muted { color: var(--muted); }
+.tv-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 20px; flex-wrap: wrap; }
+.tv-eyebrow { margin: 0; text-transform: uppercase; letter-spacing: 2px; font-size: .75em; color: var(--muted); font-weight: 700; }
+.tv h1 { margin: 4px 0 10px; font-size: clamp(28px, 2.8vw, 60px); letter-spacing: -.02em; color: var(--ink); }
+.tv-periods { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.tv-periods a { color: var(--muted); text-decoration: none; padding: .3em .8em; border-radius: 99px; font-size: .85em; border: 1px solid transparent; }
+.tv-periods a.on { color: var(--ink); border-color: var(--line); background: #1a1d23; }
+.tv-periods .live { margin-left: 10px; font-size: .8em; color: var(--muted); }
+.tv-clock-wrap { display: grid; justify-items: end; gap: 10px; }
+.tv-clock { text-align: right; display: grid; }
+.tv-clock b { font-size: clamp(34px, 3.6vw, 80px); line-height: 1; font-variant-numeric: tabular-nums; letter-spacing: -.02em; }
+.tv-clock span { color: var(--muted); font-size: .9em; margin-top: 4px; }
+.tv-buttons { display: flex; gap: 8px; transition: opacity .4s; }
+.tv-btn { background: #1a1d23; color: var(--ink); border: 1px solid var(--line); border-radius: 10px; padding: 8px 14px; font: inherit; font-size: 13px; cursor: pointer; text-decoration: none; }
+.tv-btn:hover { border-color: #4a505c; }
+html.tv-idle .tv-buttons { opacity: 0; pointer-events: none; }
+html.tv-idle .tv { cursor: none; }
+.tv-tiles { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: clamp(10px, 1.2vw, 24px); }
+.tv-tile, .tv-panel { background: #1a1d23; border: 1px solid var(--line); border-radius: 18px; padding: clamp(14px, 1.5vw, 30px); min-width: 0; }
+.tv-tile small { color: var(--muted); font-size: .85em; display: block; }
+.tv-tile strong { display: block; font-size: clamp(30px, 3.3vw, 72px); line-height: 1.1; margin: 6px 0 4px; font-variant-numeric: tabular-nums; letter-spacing: -.02em; }
+.tv-tile em { font-style: normal; color: var(--muted); font-size: .85em; }
+.tv-tile em.up { color: #4fd1a1; }
+.tv-tile em.down { color: #ff9a92; }
+.tv-row { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); gap: clamp(14px, 1.6vw, 28px); }
+.tv-panel h2 { margin: 0 0 14px; font-size: 1.15em; color: var(--ink); }
+.tv .dash-donut svg { width: clamp(180px, 15vw, 340px); height: auto; aspect-ratio: 1; }
+.tv .dash-donut-n { fill: var(--ink); }
+.tv .dash-legend { font-size: 1em; gap: .7em; }
+.tv .dash-legend li { grid-template-columns: .8em 1fr auto 3em; }
+.tv .dash-legend i { width: .8em; height: .8em; }
+.tv-spark { height: clamp(160px, 14vw, 320px); }
+.tv .dash-brand { border-color: var(--line); background: #15181d; }
+.tv .dash-brand header h3 { font-size: 1.05em; color: var(--ink); }
+.tv .dash-brand ol { font-size: .9em; border-color: var(--line); }
+.tv .dash-brand-figs b { font-size: 1em; }
+.tv .dash-brands { grid-template-columns: repeat(auto-fill, minmax(clamp(200px, 15vw, 340px), 1fr)); }
+@media (max-width: 900px) { .tv-tiles { grid-template-columns: 1fr 1fr; } .tv-row { grid-template-columns: 1fr; } }
+/* Fit a 1080p TV without scrolling */
+.tv { gap: clamp(12px, 1.1vw, 24px); padding: clamp(16px, 1.8vw, 40px); }
+.tv .dash-donut svg { width: clamp(160px, 10.5vw, 300px); }
+.tv-spark { height: clamp(140px, 10vw, 300px); }
+.tv-tile strong { font-size: clamp(28px, 2.7vw, 64px); }
+.tv h1 { margin-bottom: 6px; }
+.tv-panel h2 { margin-bottom: 10px; }
+.tv .dash-brand { gap: 8px; padding: 12px; }
+.tv-tile { padding: clamp(12px, 1vw, 24px) clamp(14px, 1.3vw, 30px); }
+.tv-tile strong { font-size: clamp(28px, 2.4vw, 60px); margin: 2px 0; }
+.tv .dash-donut svg { width: clamp(150px, 9vw, 280px); }
+.tv-spark { height: clamp(130px, 8.6vw, 280px); }
+.tv-panel { padding: clamp(12px, 1.1vw, 26px); }
+.tv .dash-brands { grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); }
+.tv h1 { font-size: clamp(26px, 2.3vw, 54px); margin: 2px 0 4px; }
+.tv-clock b { font-size: clamp(32px, 3vw, 72px); }
+.tv { min-height: 0; }
+html:has(.tv), html:has(.tv) body { overflow: hidden; height: 100%; }
+/* TV mode scales itself to the screen (see TvControls), so size it for a 1080p base, not the viewport */
+.tv { font-size: 18px; padding: 28px; gap: 18px; }
+.tv h1 { font-size: 40px; }
+.tv-clock b { font-size: 56px; }
+.tv-tile, .tv-panel { padding: 18px 22px; border-radius: 16px; }
+.tv-tile strong { font-size: 48px; }
+.tv-tiles, .tv-row { gap: 18px; }
+.tv .dash-donut svg { width: 220px; }
+.tv-spark { height: 200px; }
+.tv .dash-brands { grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); }
