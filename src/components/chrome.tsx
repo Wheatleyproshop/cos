@@ -127,6 +127,7 @@ export function Sidebar({
               {sharedLoginName} login · <Link href="/who">Change person</Link>
             </div>
           ) : null}
+          <ThemeToggle />
           <form action={signOut}>
             <button className="signout" type="submit" data-label="Sign out" aria-label="Sign out">
               <Icon name="signout" size={18} />
@@ -136,6 +137,25 @@ export function Sidebar({
         </div>
       </aside>
     </>
+  );
+}
+
+/** Light/dark switch for staff pages. Remembered on this device for a year. */
+function ThemeToggle() {
+  const [dark, setDark] = useState(false);
+  useEffect(() => setDark(document.documentElement.dataset.theme === 'dark'), []);
+  const toggle = () => {
+    const next = dark ? 'light' : 'dark';
+    document.documentElement.dataset.theme = next;
+    document.cookie = `cos-theme=${next}; path=/; max-age=31536000; samesite=lax`;
+    setDark(!dark);
+  };
+  const label = dark ? 'Light mode' : 'Dark mode';
+  return (
+    <button type="button" className="signout themebtn" onClick={toggle} aria-label={label} aria-pressed={dark} data-label={label}>
+      <Icon name={dark ? 'sun' : 'moon'} size={18} />
+      <span className="navtext">{label}</span>
+    </button>
   );
 }
 

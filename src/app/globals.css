@@ -782,3 +782,90 @@ th { color: #9a968c; }
 td { border-bottom-color: #f0eee9; }
 
 @media (prefers-reduced-motion: reduce) { .metric:hover { transform: none; } }
+
+/* ── Rail expands on hover (or keyboard focus) to list every page by name ── */
+@media (min-width: 951px) {
+  aside { transition: width .2s ease, box-shadow .2s ease; }
+  aside .nav::after, aside .signout::after { display: none; }
+  aside:hover, aside:has(:focus-visible) { width: 236px; align-items: stretch; padding-left: 12px; padding-right: 12px; box-shadow: var(--shadow-lift); }
+  aside:hover nav, aside:has(:focus-visible) nav { align-items: stretch; }
+  aside:hover .nav, aside:has(:focus-visible) .nav { width: 100%; justify-content: flex-start; gap: 12px; padding: 0 12px; border-radius: 23px; }
+  aside:hover .nav .navtext, aside:has(:focus-visible) .nav .navtext { display: inline; white-space: nowrap; font-weight: 600; font-size: 14px; }
+  aside:hover .logo, aside:has(:focus-visible) .logo { align-self: center; }
+  aside:hover .asidebottom, aside:has(:focus-visible) .asidebottom { align-items: stretch; }
+  aside:hover .asidebottom .who, aside:has(:focus-visible) .asidebottom .who { padding: 0 3px; gap: 10px; }
+  aside:hover .asidebottom .who > span:not(.avatar), aside:has(:focus-visible) .asidebottom .who > span:not(.avatar) { display: inline; font-size: 12px; line-height: 1.35; white-space: nowrap; }
+  aside:hover .signout, aside:has(:focus-visible) .signout { width: 100%; display: flex; justify-content: flex-start; gap: 12px; padding: 0 12px; border-radius: 23px; }
+  aside:hover .signout .navtext, aside:has(:focus-visible) .signout .navtext { display: inline; font-weight: 600; font-size: 14px; white-space: nowrap; }
+}
+@media (max-width: 950px) { .themebtn { margin-top: 10px; } }
+
+/* ═══ Dark mode (staff pages only: customer pages have no sidebar and stay light) ═══ */
+:root[data-theme='dark']:has(#sidenav) {
+  color-scheme: dark;
+  --bg: #121317; --card: #1c1e24; --panel: #1c1e24; --line: #2c2f37; --ink: #eceef2; --muted: #9a9fa9;
+  --green: #eceef2; --green-dark: #0c0d10; --accent: #6e9bff; --focus: #6e9bff;
+  --warn-bg: #3a2c16; --warn-ink: #f2c27a; --err-bg: #3b1c1b; --err-ink: #ff9a92;
+  --shadow: 0 1px 2px rgba(0, 0, 0, .35), 0 10px 28px rgba(0, 0, 0, .35);
+  --shadow-lift: 0 2px 4px rgba(0, 0, 0, .4), 0 18px 40px rgba(0, 0, 0, .5);
+}
+:root[data-theme='dark']:has(#sidenav) body { background: var(--bg); color: var(--ink); }
+:root[data-theme='dark']:has(#sidenav) :is(p, .lede, .muted, small, .metric small, .metric em, .eyebrow, th) { color: var(--muted); }
+:root[data-theme='dark']:has(#sidenav) :is(aside, .metric, .panel, .pagecard, .modal, details.section, .btn, .search, .pill, .bell, .bellmenu, .seg, .bp-panel, .detailbox, .notice, .picker, .whobtn, .fitting-main, .pick, .buildsummary, .specbuild, .specbuild-head, .specnotes, .ws-row, .quickplace, .bp-ball, .bp-font, .bp-drop, .bp-proofbox, .cr-photo, .mat-deal, .acct-notes, .stepper .num, .stepperinput button, .range, .boardcol, .authcard, .preview-frame) {
+  background: var(--card); color: var(--ink); border-color: var(--line);
+}
+:root[data-theme='dark']:has(#sidenav) :is(input, select, textarea) { background: #16171c; border-color: #34373f; color: var(--ink); }
+:root[data-theme='dark']:has(#sidenav) input[readonly] { background: #202228; color: var(--muted); }
+:root[data-theme='dark']:has(#sidenav) .btn.primary, :root[data-theme='dark']:has(#sidenav) .pill.selected { background: var(--ink); color: #121317; border-color: var(--ink); }
+:root[data-theme='dark']:has(#sidenav) .btn.primary:hover { background: #ffffff; }
+:root[data-theme='dark']:has(#sidenav) td { border-bottom-color: var(--line); }
+:root[data-theme='dark']:has(#sidenav) th { border-bottom-color: var(--line); }
+:root[data-theme='dark']:has(#sidenav) tr.rowlink:hover { background: #22242b; }
+:root[data-theme='dark']:has(#sidenav) .x:hover { background: #2a2d35; }
+:root[data-theme='dark']:has(#sidenav) .badge { background: #2a2d35; color: #c9ccd3; }
+:root[data-theme='dark']:has(#sidenav) .badge.ready { background: #183424; color: #8fdcab; }
+:root[data-theme='dark']:has(#sidenav) .badge.delayed { background: #3a2c16; color: #f2c27a; }
+:root[data-theme='dark']:has(#sidenav) .badge.quoted { background: #2a2342; color: #c4b5fd; }
+:root[data-theme='dark']:has(#sidenav) .badge.progress { background: #1d2a3d; color: #9ec0ff; }
+:root[data-theme='dark']:has(#sidenav) .badge.failed { background: #3b1c1b; color: #ff9a92; }
+:root[data-theme='dark']:has(#sidenav) .flag { background: #3a2c16; color: #f2c27a; }
+:root[data-theme='dark']:has(#sidenav) .boardcol li a { background: #24262d; border-color: #30333b; }
+:root[data-theme='dark']:has(#sidenav) .metric-icon { background: #2a2d35; color: var(--ink); }
+:root[data-theme='dark']:has(#sidenav) .metric--active .metric-icon { background: #1d2a44; color: #9ec0ff; }
+:root[data-theme='dark']:has(#sidenav) .metric--awaiting .metric-icon { background: #3a2a18; color: #f5b971; }
+:root[data-theme='dark']:has(#sidenav) .metric--overdue .metric-icon { background: #3b1c1b; color: #ff9a92; }
+:root[data-theme='dark']:has(#sidenav) .metric--ready .metric-icon { background: #183424; color: #8fdcab; }
+:root[data-theme='dark']:has(#sidenav) .metric--quote .metric-icon { background: #2a2342; color: #c4b5fd; }
+:root[data-theme='dark']:has(#sidenav) .metric--attention .metric-icon { background: #3a3215; color: #f3d36b; }
+:root[data-theme='dark']:has(#sidenav) .metric.alert strong { color: #ff9a92; }
+:root[data-theme='dark']:has(#sidenav) aside .nav { color: #a3a7b0; }
+:root[data-theme='dark']:has(#sidenav) aside :is(.nav, .signout):hover { background: #2a2d35; color: var(--ink); }
+:root[data-theme='dark']:has(#sidenav) aside .nav.active { background: var(--ink); color: #121317; }
+:root[data-theme='dark']:has(#sidenav) aside .logo-mini, :root[data-theme='dark']:has(#sidenav) aside .logo { color: var(--ink); }
+:root[data-theme='dark']:has(#sidenav) aside .signout { color: #a3a7b0; }
+:root[data-theme='dark']:has(#sidenav) .mobilebar { background: rgba(18, 19, 23, .9); border-bottom-color: var(--line); }
+:root[data-theme='dark']:has(#sidenav) .menubtn { background: var(--card); }
+:root[data-theme='dark']:has(#sidenav) .navclose { background: #2a2d35; color: var(--ink); }
+:root[data-theme='dark']:has(#sidenav) .linkbtn { color: #9ec0ff; }
+:root[data-theme='dark']:has(#sidenav) .modalbg { background: rgba(0, 0, 0, .6); }
+@media (min-width: 951px) {
+  aside .asidebottom b { color: var(--ink); }
+  aside nav { gap: 2px; }
+  aside .nav, aside .signout { height: 42px; width: 42px; }
+  aside .asidebottom { gap: 4px; }
+  aside .asidebottom .avatar { width: 36px; height: 36px; }
+}
+@media (min-width: 951px) and (max-height: 820px) { aside .nav, aside .signout { height: 38px; width: 38px; } aside .logo { margin-bottom: 10px; } }
+:root[data-theme='dark']:has(#sidenav) :is(.seg a.on, .seg button.on) { background: var(--ink); color: #121317; }
+:root[data-theme='dark']:has(#sidenav) :is(.seg a, .seg button) { color: #b5b9c2; }
+:root[data-theme='dark']:has(#sidenav) :is(.bc-item, .ws-summary, .quickplace label, .bp-caption, .design-intro p, .bellmenu li span, .check) { color: #c9ccd3; }
+:root[data-theme='dark']:has(#sidenav) .bc-meta { color: var(--muted); }
+:root[data-theme='dark']:has(#sidenav) .notice { background: #1d2a3d; color: #9ec0ff; }
+:root[data-theme='dark']:has(#sidenav) .notice.warn { background: var(--warn-bg); color: var(--warn-ink); }
+:root[data-theme='dark']:has(#sidenav) .notice.error { background: var(--err-bg); color: var(--err-ink); }
+:root[data-theme='dark']:has(#sidenav) :is(.returning, .rb-pos, .acct-row a, .pb-for, .stepper .done .num) { color: #9ec0ff; }
+:root[data-theme='dark']:has(#sidenav) .bell { color: var(--ink); }
+:root[data-theme='dark']:has(#sidenav) :is(.badge.pb-placed, .badge.ws-checked_in) { background: #1d2a3d; color: #9ec0ff; }
+:root[data-theme='dark']:has(#sidenav) :is(.badge.pb-confirmed, .badge.ws-in_progress) { background: #23254a; color: #b3b7ff; }
+:root[data-theme='dark']:has(#sidenav) :is(.badge.pb-delivered, .badge.ws-ready) { background: #183424; color: #8fdcab; }
+:root[data-theme='dark']:has(#sidenav) .delta.up { color: #8fdcab; }
