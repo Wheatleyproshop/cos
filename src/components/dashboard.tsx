@@ -193,6 +193,52 @@ export function Dashboard({ data }: { data: Performance }) {
         )}
       </section>
 
+      <section className="panel" aria-labelledby="dash-cust">
+        <div className="panel-head">
+          <h2 id="dash-cust">Best-value customers</h2>
+          <span className="muted">Biggest spenders · {per}</span>
+        </div>
+        {data.topCustomers.length ? (
+          <div className="tablewrap">
+            <table className="compact dash-cust">
+              <thead>
+                <tr>
+                  <th>Customer</th>
+                  <th className="num">Spent</th>
+                  <th className="num">Orders</th>
+                  <th className="num">Average order</th>
+                  <th>Favourite brand</th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.topCustomers.map((c, i) => (
+                  <tr key={c.id}>
+                    <td>
+                      <span className="rb-pos">{i + 1}</span>
+                      <Link href={`/customers/${c.id}`} className="rowtitle">
+                        {c.name}
+                      </Link>
+                      {c.lifetimeOrders > c.orders ? <span className="returning dash-ret">Returning</span> : null}
+                    </td>
+                    <td className="num">
+                      <b>{money(c.valuePence)}</b>
+                    </td>
+                    <td className="num">
+                      {c.orders}
+                      {c.lifetimeOrders > c.orders ? <small className="muted"> ({c.lifetimeOrders} ever)</small> : null}
+                    </td>
+                    <td className="num">{money(c.avgOrderPence)}</td>
+                    <td>{c.favouriteBrand || '—'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <p className="muted">No orders in this period yet.</p>
+        )}
+      </section>
+
       <div className="dash-row">
         <section className="panel" aria-labelledby="dash-top">
           <div className="panel-head">

@@ -413,9 +413,29 @@ export async function getPerformance(org: Organisation, period: PeriodKey | Repo
     ).sort((x, y) => y.count - x.count || y.valuePence - x.valuePence),
   }));
   const biggest = [...periodOrders].sort((a, b) => b.totalGrossPence - a.totalGrossPence).slice(0, 5);
-  const names = biggest.length
-    ? await withTenant(org.id, (tx) => tx.select({ id: customers.id, name: customers.name }).from(customers).where(inArray(customers.id, biggest.map((o) => o.customerId))))
+  // Best-value customers: who spent the most in the period.
+  const spend = new Map<string, { valuePence: number; orders: number; brands: Map<string, number> }>();
+  for (const o of periodOrders) {
+    const c = spend.get(o.customerId) ?? { valuePence: 0, orders: 0, brands: new Map() };
+    c.valuePence += o.totalGrossPence;
+    c.orders += 1;
+    for (const i of itemsOf(o)) c.brands.set(i.brand.trim(), (c.brands.get(i.brand.trim()) ?? 0) + i.valuePence);
+    spend.set(o.customerId, c);
+  }
+  const bestCustomers = [...spend.entries()].sort((a, b) => b[1].valuePence - a[1].valuePence || b[1].orders - a[1].orders).slice(0, 5);
+  const nameIds = [...new Set([...biggest.map((o) => o.customerId), ...bestCustomers.map(([id]) => id)])];
+  const names = nameIds.length
+    ? await withTenant(org.id, (tx) => tx.select({ id: customers.id, name: customers.name }).from(customers).where(inArray(customers.id, nameIds)))
     : [];
+  const topCustomers = bestCustomers.map(([id, c]) => ({
+    id,
+    name: names.find((n) => n.id === id)?.name ?? 'Customer',
+    valuePence: c.valuePence,
+    orders: c.orders,
+    avgOrderPence: Math.round(c.valuePence / c.orders),
+    lifetimeOrders: ordersByCustomer.get(id) ?? c.orders,
+    favouriteBrand: [...c.brands.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? '',
+  }));
   const topOrders = biggest.map((o) => ({
     orderNumber: o.orderNumber, brand: o.brand, product: o.product, valuePence: o.totalGrossPence, createdAt: o.createdAt,
     customerName: names.find((n) => n.id === o.customerId)?.name ?? '',
@@ -485,6 +505,7 @@ export async function getPerformance(org: Organisation, period: PeriodKey | Repo
     brandShare,
     brandProducts,
     topOrders,
+    topCustomers,
     mix,
     team,
     turnaround,
