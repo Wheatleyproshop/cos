@@ -3,22 +3,23 @@
 import Link from 'next/link';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { Icon } from './icons';
 
 const NAV = [
-  { href: '/', icon: '◫', label: 'Overview' },
-  { href: '/orders', icon: '▤', label: 'All orders' },
-  { href: '/quotes', icon: '◇', label: 'Quotes' },
-  { href: '/fitting', icon: '✎', label: 'Custom Fitting' },
-  { href: '/ball-printing', icon: '◎', label: 'Ball Printing' },
-  { href: '/cresting', icon: '✂', label: 'Clothing Cresting' },
-  { href: '/engraving', icon: '▭', label: 'Mat Engraving' },
-  { href: '/workshop', icon: '⚒', label: 'Workshop' },
-  { href: '/prebook', icon: '◷', label: 'Pre-book' },
-  { href: '/customers', icon: '☺', label: 'Customers' },
-  { href: '/products', icon: '▣', label: 'Products' },
-  { href: '/accounts', icon: '☏', label: 'Accounts' },
-  { href: '/emails', icon: '✉', label: 'Email previews' },
-  { href: '/settings', icon: '⚙', label: 'Store settings' },
+  { href: '/', icon: 'overview', label: 'Overview' },
+  { href: '/orders', icon: 'orders', label: 'All orders' },
+  { href: '/quotes', icon: 'quotes', label: 'Quotes' },
+  { href: '/fitting', icon: 'fitting', label: 'Custom Fitting' },
+  { href: '/ball-printing', icon: 'ball', label: 'Ball Printing' },
+  { href: '/cresting', icon: 'cresting', label: 'Clothing Cresting' },
+  { href: '/engraving', icon: 'engraving', label: 'Mat Engraving' },
+  { href: '/workshop', icon: 'workshop', label: 'Workshop' },
+  { href: '/prebook', icon: 'prebook', label: 'Pre-book' },
+  { href: '/customers', icon: 'customers', label: 'Customers' },
+  { href: '/products', icon: 'products', label: 'Products' },
+  { href: '/accounts', icon: 'accounts', label: 'Accounts' },
+  { href: '/emails', icon: 'emails', label: 'Email previews' },
+  { href: '/settings', icon: 'settings', label: 'Store settings' },
 ];
 
 export function Sidebar({
@@ -95,12 +96,15 @@ export function Sidebar({
             COS<span className="logo-dot" aria-hidden="true" />
           </span>
           <span className="logo-sub">GOLF</span>
+          <span className="logo-mini" aria-hidden="true">
+            C<span className="logo-dot" />
+          </span>
         </Link>
         <nav>
           {NAV.map((n) => (
-            <Link key={n.href} href={n.href} className={`nav${isActive(n.href) ? ' active' : ''}`} aria-current={isActive(n.href) ? 'page' : undefined} title={n.label}>
+            <Link key={n.href} href={n.href} className={`nav${isActive(n.href) ? ' active' : ''}`} aria-current={isActive(n.href) ? 'page' : undefined} data-label={n.label}>
               <span className="icon" aria-hidden="true">
-                {n.icon}
+                <Icon name={n.icon} />
               </span>
               <span className="navtext">{n.label}</span>
             </Link>
@@ -109,7 +113,7 @@ export function Sidebar({
         <div className="asidebottom">
           <div className="org">{storeName.toUpperCase()}</div>
           <div className="who">
-            <span className="avatar" aria-hidden="true">
+            <span className="avatar" aria-hidden="true" title={`${userName} · ${roleLabel}`}>
               {userName.split(/\s+/).map((p) => p[0]).slice(0, 2).join('').toUpperCase()}
             </span>
             <span>
@@ -124,8 +128,9 @@ export function Sidebar({
             </div>
           ) : null}
           <form action={signOut}>
-            <button className="signout" type="submit">
-              Sign out
+            <button className="signout" type="submit" data-label="Sign out" aria-label="Sign out">
+              <Icon name="signout" size={18} />
+              <span className="navtext">Sign out</span>
             </button>
           </form>
         </div>

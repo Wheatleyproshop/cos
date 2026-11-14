@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { Icon } from '@/components/icons';
 import { OrderBoard } from '@/components/order-board';
 import { PerformanceView } from '@/components/performance';
 import { PageHeader } from '@/components/views';
@@ -105,12 +106,12 @@ export default async function Overview({ searchParams }: { searchParams: SP }) {
   const attention = all.filter((r) => r.flags.length).slice(0, 6);
 
   const cards = [
-    { key: 'active', label: 'Active orders', value: m.active, note: 'Currently in progress' },
-    { key: 'awaiting', label: 'Awaiting supplier', value: m.awaiting, note: 'Follow up as needed' },
-    { key: 'overdue', label: 'Delayed / overdue', value: m.overdue, note: 'ETA passed or delayed', alert: m.overdue > 0 },
-    { key: 'ready', label: 'Ready to collect', value: m.ready, note: 'Customer has been notified' },
-    { key: 'quote', label: 'Open quotes', value: m.quotes, note: 'Awaiting approval' },
-    { key: 'attention', label: 'Needs attention', value: m.attention, note: 'See the list below', alert: m.attention > 0 },
+    { key: 'active', icon: 'orders', label: 'Active orders', value: m.active, note: 'Currently in progress' },
+    { key: 'awaiting', icon: 'truck', label: 'Awaiting supplier', value: m.awaiting, note: 'Follow up as needed' },
+    { key: 'overdue', icon: 'clock', label: 'Delayed / overdue', value: m.overdue, note: 'ETA passed or delayed', alert: m.overdue > 0 },
+    { key: 'ready', icon: 'check', label: 'Ready to collect', value: m.ready, note: 'Customer has been notified' },
+    { key: 'quote', icon: 'quotes', label: 'Open quotes', value: m.quotes, note: 'Awaiting approval' },
+    { key: 'attention', icon: 'alert', label: 'Needs attention', value: m.attention, note: 'See the list below', alert: m.attention > 0 },
   ];
 
   return (
@@ -121,7 +122,10 @@ export default async function Overview({ searchParams }: { searchParams: SP }) {
       {filter === 'all' && !q ? <OrderBoard rows={all} today={today} paymentTracking={staff.org.paymentTracking} /> : null}
       <div className="grid">
         {cards.map((c) => (
-          <Link key={c.key} href={`/?filter=${c.key}`} className={`metric${c.alert ? ' alert' : ''}`} scroll={false}>
+          <Link key={c.key} href={`/?filter=${c.key}`} className={`metric metric--${c.key}${c.alert ? ' alert' : ''}`} scroll={false}>
+            <span className="metric-icon" aria-hidden="true">
+              <Icon name={c.icon} size={18} />
+            </span>
             <small>{c.label}</small>
             <strong>{c.value}</strong>
             <em>{c.note}</em>
