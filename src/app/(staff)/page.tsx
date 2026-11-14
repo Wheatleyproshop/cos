@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { Dashboard } from '@/components/dashboard';
 import { Icon } from '@/components/icons';
 import { OrderBoard } from '@/components/order-board';
 import { PerformanceView } from '@/components/performance';
@@ -55,17 +56,20 @@ function PadNotice({ added, moved, to, emailed }: { added?: string; moved?: stri
         </Link>{' '}
         {text}
       </span>
-      <Link href="/" className="muted" scroll={false} aria-label="Dismiss">
+      <Link href="/?view=orders" className="muted" scroll={false} aria-label="Dismiss">
         ✕
       </Link>
     </div>
   );
 }
 
-function ViewTabs({ view }: { view: 'orders' | 'performance' }) {
+function ViewTabs({ view }: { view: 'dashboard' | 'orders' | 'performance' }) {
   return (
     <div className="seg viewtabs" role="tablist" aria-label="Overview">
-      <Link href="/" className={view === 'orders' ? 'on' : ''} role="tab" aria-selected={view === 'orders'} scroll={false}>
+      <Link href="/" className={view === 'dashboard' ? 'on' : ''} role="tab" aria-selected={view === 'dashboard'} scroll={false}>
+        Dashboard
+      </Link>
+      <Link href="/?view=orders" className={view === 'orders' ? 'on' : ''} role="tab" aria-selected={view === 'orders'} scroll={false}>
         Orders
       </Link>
       <Link href="/?view=performance" className={view === 'performance' ? 'on' : ''} role="tab" aria-selected={view === 'performance'} scroll={false}>
@@ -85,6 +89,17 @@ export default async function Overview({ searchParams }: { searchParams: SP }) {
         <PageHeader staff={staff} title={greeting(staff.org.timezone)} sub="How the shop is performing, from your own orders." />
         <ViewTabs view="performance" />
         <PerformanceView data={data} canExport={hasRole(staff, 'manager')} />
+      </>
+    );
+  }
+  const showOrders = sp.view === 'orders' || Boolean(sp.added || sp.moved || sp.filter || sp.q);
+  if (!showOrders) {
+    const data = await getPerformance(staff.org, parsePeriod(sp.period));
+    return (
+      <>
+        <PageHeader staff={staff} title={greeting(staff.org.timezone)} sub="How your brands are performing at a glance." />
+        <ViewTabs view="dashboard" />
+        <Dashboard data={data} />
       </>
     );
   }

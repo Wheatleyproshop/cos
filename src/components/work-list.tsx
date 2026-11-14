@@ -29,6 +29,7 @@ export function WorkList({
 }) {
   const href = (key: string) => {
     const p = new URLSearchParams();
+    if (base === '/' && key === 'all') p.set('view', 'orders');
     if (key !== 'all') p.set('filter', key);
     if (q) p.set('q', q);
     return `${base}${p.size ? `?${p}` : ''}`;

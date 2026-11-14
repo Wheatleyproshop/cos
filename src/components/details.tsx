@@ -713,7 +713,7 @@ export async function NewRequest({
 
 function CancelLink({ inModal }: { inModal: boolean }) {
   return inModal ? <CancelButton /> : (
-    <Link href="/" className="btn">
+    <Link href="/?view=orders" className="btn">
       Cancel
     </Link>
   );

@@ -1,6 +1,7 @@
 import { and, eq, gte, inArray, isNull, lt, sql } from 'drizzle-orm';
 import { withTenant } from '@/db';
-import { auditEvents, orders, prebookLines, prebooks, quotes, users, workshopItems, workshopJobs, type Organisation } from '@/db/schema';
+import { auditEvents, customers, orders, prebookLines, prebooks, quotes, users, workshopItems, workshopJobs, type Organisation } from '@/db/schema';
+import { asItemsSpec } from './order-items';
 import { asBallPrintSpec } from './ball-print';
 import { asCrestSpec } from './cresting';
 import { asMatSpec } from './mat-engraving';
@@ -262,6 +263,10 @@ function itemsOf(o: { brand: string; product: string; category?: string; totalGr
       };
     });
   }
+  const multi = asItemsSpec(o.specificationJson);
+  if (multi) {
+    return multi.items.map((it) => ({ brand: it.brand, product: it.product, category: it.category || guessKind(it.product), valuePence: it.linePence, qty: it.quantity }));
+  }
   const ball = asBallPrintSpec(o.specificationJson);
   if (ball) {
     return [{ brand: ball.ball.brand, product: `${ball.ball.name} (printed)`, category: 'Printed balls', valuePence: o.totalGrossPence, qty: 1 }];
@@ -321,7 +326,7 @@ export async function getPerformance(org: Organisation, period: PeriodKey | Repo
   const { allOrders, allQuotes, staff, statusEvents } = await withTenant(org.id, async (tx) => {
     const allOrders = await tx
       .select({
-        id: orders.id, brand: orders.brand, product: orders.product, category: orders.category, totalGrossPence: orders.totalGrossPence, status: orders.status,
+        id: orders.id, orderNumber: orders.orderNumber, brand: orders.brand, product: orders.product, category: orders.category, totalGrossPence: orders.totalGrossPence, status: orders.status,
         createdAt: orders.createdAt, readyAt: orders.readyAt, specificationJson: orders.specificationJson,
         takenByUserId: orders.takenByUserId, customerId: orders.customerId,
       })
@@ -390,6 +395,31 @@ export async function getPerformance(org: Organisation, period: PeriodKey | Repo
   const products = rank(items.map((i) => ({ name: `${i.brand} ${i.product}`.trim(), valuePence: i.valuePence, qty: i.qty })));
   const categories = rank(items.map((i) => ({ name: i.category, valuePence: i.valuePence, qty: i.qty })), 10);
   const mix = rank(periodOrders.map((o) => ({ name: orderType(o.specificationJson), valuePence: o.totalGrossPence, qty: 1 })), 5);
+  // Dashboard: each brand's share of sales (top 5 + Other), its most-ordered products, and the biggest orders.
+  const allBrands = rank(items.map((i) => ({ name: i.brand, valuePence: i.valuePence, qty: i.qty })), 1000);
+  const brandShare = [
+    ...allBrands.slice(0, 5),
+    ...(allBrands.length > 5
+      ? [{ name: 'Other brands', valuePence: allBrands.slice(5).reduce((n, b) => n + b.valuePence, 0), count: allBrands.slice(5).reduce((n, b) => n + b.count, 0) }]
+      : []),
+  ];
+  const brandProducts = allBrands.slice(0, 5).map((b) => ({
+    brand: b.name,
+    valuePence: b.valuePence,
+    count: b.count,
+    products: rank(
+      items.filter((i) => i.brand.trim().toLowerCase() === b.name.trim().toLowerCase()).map((i) => ({ name: i.product, valuePence: i.valuePence, qty: i.qty })),
+      3,
+    ).sort((x, y) => y.count - x.count || y.valuePence - x.valuePence),
+  }));
+  const biggest = [...periodOrders].sort((a, b) => b.totalGrossPence - a.totalGrossPence).slice(0, 5);
+  const names = biggest.length
+    ? await withTenant(org.id, (tx) => tx.select({ id: customers.id, name: customers.name }).from(customers).where(inArray(customers.id, biggest.map((o) => o.customerId))))
+    : [];
+  const topOrders = biggest.map((o) => ({
+    orderNumber: o.orderNumber, brand: o.brand, product: o.product, valuePence: o.totalGrossPence, createdAt: o.createdAt,
+    customerName: names.find((n) => n.id === o.customerId)?.name ?? '',
+  }));
   const staffNames = new Map(staff.map((u) => [u.id, u.name]));
   const team = rank(periodOrders.map((o) => ({ name: staffNames.get(o.takenByUserId) ?? 'Unknown', valuePence: o.totalGrossPence, qty: 1 })), 10);
 
@@ -452,6 +482,9 @@ export async function getPerformance(org: Organisation, period: PeriodKey | Repo
     brands,
     products,
     categories,
+    brandShare,
+    brandProducts,
+    topOrders,
     mix,
     team,
     turnaround,
