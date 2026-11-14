@@ -23,6 +23,7 @@ export type EventType =
   | 'eta_changed'
   | 'supplier_reference_changed'
   | 'specification_changed'
+  | 'order_item_changed'
   | 'payment_recorded'
   | 'payment_voided'
   | 'note_added'
@@ -154,6 +155,8 @@ export function describeEvent(e: Pick<AuditEvent, 'eventType' | 'oldValueJson' |
     checked_in: 'Checked in', in_progress: 'In progress', waiting_parts: 'Waiting for parts', ready: 'Ready to collect', collected: 'Collected', cancelled: 'Cancelled',
   };
   switch (e.eventType) {
+    case 'order_item_changed':
+      return `Item ${n.index}: ${n.item}${o.status !== n.status ? ` · ${o.statusLabel ?? o.status} → ${n.statusLabel ?? n.status}` : ''}${(o.etaDate ?? null) !== (n.etaDate ?? null) ? ` · expected ${n.etaDate ?? 'not set'}` : ''}${(o.supplierReference ?? '') !== (n.supplierReference ?? '') ? ` · supplier ref ${n.supplierReference || 'removed'}` : ''}`;
     case 'ball_design_submitted':
       return 'Ball design submitted online by the customer';
     case 'crest_design_submitted':

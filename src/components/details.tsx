@@ -25,7 +25,10 @@ import {
   trackingLinkAction,
   updateProgressAction,
   uploadAttachmentAction,
+  orderItemAction,
 } from '@/app/(staff)/actions';
+import { asItemsSpec, itemStatus, ITEM_STATUS_LABELS } from '@/lib/order-items';
+import { OrderItemForm } from './order-item-form';
 import { hasRole, type Staff } from '@/lib/auth';
 import { templateName } from '@/lib/audit';
 import { PAYMENT_KIND_LABELS } from '@/db/schema';
@@ -150,6 +153,50 @@ function BallProof({ quoteId, spec }: { quoteId: string | null; spec: unknown })
 
 /* ── Order ───────────────────────────────────────────────────────────── */
 
+/** Multi-item orders: each item's own progress, editable in place. */
+function OrderItems({ order }: { order: { id: string; specificationJson: unknown; archivedAt: Date | null } }) {
+  const spec = asItemsSpec(order.specificationJson);
+  if (!spec) return null;
+  const arrived = spec.items.filter((it) => ['arrived', 'collected'].includes(itemStatus(it))).length;
+  return (
+    <section className="orderitems" aria-labelledby="oi-head">
+      <div className="panel-head">
+        <h3 id="oi-head" style={{ margin: 0 }}>Items</h3>
+        <span className="muted" style={{ marginTop: 0 }}>
+          {arrived} of {spec.items.length} arrived
+        </span>
+      </div>
+      <ul>
+        {spec.items.map((it, i) => (
+          <li key={i} className={`oi oi-${itemStatus(it)}`}>
+            <div className="oi-what">
+              <b>
+                {i + 1}. {it.brand} {it.product}
+              </b>
+              <span className="muted" style={{ marginTop: 2 }}>
+                {[it.variant, it.colour, it.size, it.hand].filter(Boolean).join(' · ')}
+                {it.quantity > 1 ? `${[it.variant, it.colour, it.size, it.hand].some(Boolean) ? ' · ' : ''}${it.quantity} × ${money(it.unitPricePence)}` : ''}
+              </span>
+            </div>
+            <span className="oi-price">{money(it.linePence)}</span>
+            {order.archivedAt ? (
+              <span className="badge">{ITEM_STATUS_LABELS[itemStatus(it)]}</span>
+            ) : (
+              <OrderItemForm
+                action={orderItemAction.bind(null, order.id, i)}
+                label={`${it.brand} ${it.product}`}
+                status={itemStatus(it)}
+                etaDate={it.etaDate ?? ''}
+                supplierReference={it.supplierReference ?? ''}
+              />
+            )}
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
 export async function OrderDetail({ staff, number, inModal }: { staff: Staff; number: string; inModal: boolean }) {
   const [d, brands] = await Promise.all([getOrderDetail(staff.org, decodeURIComponent(number)), getBrandOptions(staff.organisationId)]);
   if (!d) notFound();
@@ -192,6 +239,7 @@ export async function OrderDetail({ staff, number, inModal }: { staff: Staff; nu
 
       <BallProof quoteId={o.quoteId} spec={o.specificationJson} />
       <SpecView json={o.specificationJson} text={o.specificationText} label="Custom specification" />
+      <OrderItems order={o} />
       <div className="detailgrid">
         <DetailBox label="Product ID">{o.sku || '—'}</DetailBox>
         <DetailBox label="Order value / Paid" sub={`${d.credit ? `Includes ${money(d.credit)} account credit · ` : ''}Balance due: ${money(d.balance)}`}>

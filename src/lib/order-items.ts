@@ -8,10 +8,42 @@ import { z } from 'zod';
 import { money as fmt } from './format';
 import { composeSpec } from './order-details';
 
+/** Each item on a multi-item order moves on its own. */
+export const ITEM_STATUSES = ['to_order', 'ordered', 'delayed', 'arrived', 'collected'] as const;
+export type ItemStatus = (typeof ITEM_STATUSES)[number];
+export const ITEM_STATUS_LABELS: Record<ItemStatus, string> = {
+  to_order: 'To order', ordered: 'Ordered', delayed: 'Out of stock', arrived: 'Arrived', collected: 'Collected',
+};
+/** What the customer sees on their tracking page. */
+export const ITEM_STATUS_CUSTOMER: Record<ItemStatus, string> = {
+  to_order: 'Being ordered', ordered: 'On order', delayed: 'Delayed at the supplier', arrived: 'In the shop', collected: 'Collected',
+};
+
 export type OrderItem = {
   brand: string; category: string; product: string; variant: string; colour: string; size: string; hand: string; sku: string;
   quantity: number; unitPricePence: number; linePence: number; notes: string;
+  status?: ItemStatus; etaDate?: string | null; supplierReference?: string;
 };
+
+export function asItemsSpec(json: unknown): ItemsSpec | null {
+  const s = json as ItemsSpec | null;
+  return s && typeof s === 'object' && s.kind === 'cos-items' && Array.isArray(s.items) && s.items.length > 0 ? s : null;
+}
+
+export const itemStatus = (it: OrderItem): ItemStatus => it.status ?? 'to_order';
+
+/** "2 of 3 arrived" for the order pad. Collected counts as arrived. */
+export function itemsProgress(json: unknown): { total: number; arrived: number; collected: number; delayed: number } | null {
+  const s = asItemsSpec(json);
+  if (!s) return null;
+  const st = s.items.map(itemStatus);
+  return {
+    total: st.length,
+    arrived: st.filter((x) => x === 'arrived' || x === 'collected').length,
+    collected: st.filter((x) => x === 'collected').length,
+    delayed: st.filter((x) => x === 'delayed').length,
+  };
+}
 export type ItemsSpec = { kind: 'cos-items'; version: 1; items: OrderItem[] };
 
 const t = (n: number) => z.string().trim().max(n).default('');

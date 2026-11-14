@@ -8,7 +8,8 @@ import { ALLOWED_UPLOAD_TYPES, MAX_UPLOAD_BYTES, storage } from '../storage';
 import { fitSpec } from '../fit-spec';
 import { money, parseMoneyToPence } from '../format';
 import { composeSpec, withUnitTotal } from '../order-details';
-import { combineItems, ItemsError } from '../order-items';
+import { asItemsSpec, combineItems, ITEM_STATUS_LABELS, ITEM_STATUSES, itemStatus, ItemsError } from '../order-items';
+import { z } from 'zod';
 import { canTransition, journeyFor, statusLabel } from '../status';
 import { newToken } from '../tokens';
 import {
@@ -134,6 +135,38 @@ export async function createOrder(ctx: Ctx, raw: unknown, opts: { notify?: boole
   });
   await dispatchMessages(ctx.org, [messageId]);
   return order;
+}
+
+const itemUpdateSchema = z.object({
+  status: z.enum(ITEM_STATUSES),
+  etaDate: z.string().trim().regex(/^(\d{4}-\d{2}-\d{2})?$/, 'Use a valid date').transform((v) => v || null),
+  supplierReference: z.string().trim().max(120).default(''),
+});
+
+/** Moves one item on a multi-item order on its own (status, expected date, supplier reference). */
+export async function updateOrderItem(ctx: Ctx, orderId: string, index: number, raw: unknown) {
+  const v = parse(itemUpdateSchema, raw);
+  return withTenant(ctx.org.id, async (tx) => {
+    const { order } = await loadOrder(tx, ctx, orderId);
+    if (order.archivedAt) throw new ServiceError('This order is archived.');
+    const spec = asItemsSpec(order.specificationJson);
+    const item = spec?.items[index];
+    if (!spec || !item) throw new ServiceError('Item not found on this order.');
+    const before = { status: itemStatus(item), statusLabel: ITEM_STATUS_LABELS[itemStatus(item)], etaDate: item.etaDate ?? null, supplierReference: item.supplierReference ?? '' };
+    const items = spec.items.map((it, i) => (i === index ? { ...it, status: v.status, etaDate: v.etaDate, supplierReference: v.supplierReference } : it));
+    await tx.update(orders).set({ specificationJson: { ...spec, items }, updatedAt: new Date() }).where(eq(orders.id, order.id));
+    await recordEvent(tx, {
+      organisationId: ctx.org.id, actor: ctx.actor, eventType: 'order_item_changed', entityType: 'order', orderId: order.id, customerId: order.customerId,
+      oldValue: before,
+      newValue: { index: index + 1, item: `${item.brand} ${item.product}`, status: v.status, statusLabel: ITEM_STATUS_LABELS[v.status], etaDate: v.etaDate, supplierReference: v.supplierReference },
+    });
+    const st = items.map(itemStatus);
+    return {
+      orderNumber: order.orderNumber,
+      allArrived: st.every((x) => x === 'arrived' || x === 'collected'),
+      allCollected: st.every((x) => x === 'collected'),
+    };
+  });
 }
 
 /** Several items on one order/quote (see order-items). */

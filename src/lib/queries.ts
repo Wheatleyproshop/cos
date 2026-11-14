@@ -25,6 +25,15 @@ import { orderAttention, quoteAttention, type AttentionFlag } from './attention'
 import { todayInTz } from './format';
 import { livePayment } from './services/common';
 import { QUOTE_STATUS_LABELS, statusLabel, step } from './status';
+import { itemsProgress } from './order-items';
+
+function itemsSummary(json: unknown): string | undefined {
+  const p = itemsProgress(json);
+  if (!p) return undefined;
+  if (p.collected === p.total) return `All ${p.total} items collected`;
+  if (p.collected) return `${p.collected} of ${p.total} items collected`;
+  return `${p.arrived} of ${p.total} items arrived${p.delayed ? ` · ${p.delayed} out of stock` : ''}`;
+}
 
 export type WorkRow = {
   kind: 'order' | 'quote';
@@ -46,6 +55,8 @@ export type WorkRow = {
   flags: AttentionFlag[];
   archived: boolean;
   createdAt: Date;
+  /** Multi-item orders: e.g. "1 of 3 arrived". */
+  itemsText?: string;
 };
 
 export const FILTERS = [
@@ -157,6 +168,7 @@ export async function listWork(
         flags: orderAttention(o, org, today),
         archived: Boolean(o.archivedAt),
         createdAt: o.createdAt,
+        itemsText: itemsSummary(o.specificationJson),
       })),
       ...quoteRows.map(({ qt, c }) => ({
         kind: 'quote' as const,

@@ -875,3 +875,23 @@ fieldset.itemcard { border: 1px solid var(--line); border-radius: 16px; padding:
 fieldset.itemcard legend { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 13px; color: var(--ink); padding: 0 6px; }
 .ordertotal b { font-size: 20px; }
 .error.wide { grid-column: 1 / -1; }
+
+/* Per-item progress on multi-item orders */
+.orderitems { margin: 6px 0 16px; }
+.orderitems ul { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 8px; }
+.oi { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px 14px; align-items: center; background: var(--card, #fff); border: 1px solid var(--line); border-left: 4px solid #9aa3ae; border-radius: 14px; padding: 12px 14px; }
+.oi-what { display: flex; flex-direction: column; min-width: 0; }
+.oi-price { font-weight: 700; }
+.oi .oi-form { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.oi .oi-form select, .oi .oi-form input { width: auto; padding: 8px 10px; font-size: 13px; }
+.oi .oi-form input[name='supplierReference'] { width: 150px; }
+.oi-msg { font-size: 12.5px; color: #237a45; font-weight: 600; flex-basis: 100%; }
+.oi.oi-ordered { border-left-color: #2f6bff; }
+.oi.oi-delayed { border-left-color: #d08a1e; }
+.oi.oi-arrived { border-left-color: #1f9d55; }
+.oi.oi-collected { border-left-color: #7b7f86; opacity: .8; }
+.bc-items { font-size: 11.5px; font-weight: 700; color: #237a45; }
+:root[data-theme='dark']:has(#sidenav) .oi { background: #24262d; }
+:root[data-theme='dark']:has(#sidenav) .bc-items, :root[data-theme='dark']:has(#sidenav) .oi-msg { color: #8fdcab; }
+.track-items { list-style: none; padding: 0; margin: 10px 0 16px; display: grid; gap: 8px; }
+.track-items .oi { grid-template-columns: minmax(0, 1fr) auto; }

@@ -4,6 +4,7 @@ import { JOURNEY_WORDS, type Journey } from '@/lib/status';
 import { fitSpec } from '@/lib/fit-spec';
 import { PublicShell } from './public-shell';
 import { SpecView } from './spec-view';
+import { asItemsSpec, itemStatus, ITEM_STATUS_CUSTOMER } from '@/lib/order-items';
 
 export type TrackingOrder = {
   orderNumber: string; status: OrderStatus; brand: string; product: string; specificationText: string;
@@ -80,7 +81,35 @@ export function TrackingView({
       <h1 style={{ fontSize: 26 }}>
         {o.brand} {o.product}
       </h1>
-      {fitSpec(o.specificationJson) ? (
+      {asItemsSpec(o.specificationJson) ? (
+        <>
+          <ul className="track-items">
+            {asItemsSpec(o.specificationJson)!.items.map((it, i) => (
+              <li key={i} className={`oi oi-${itemStatus(it)}`}>
+                <div className="oi-what">
+                  <b>
+                    {it.brand} {it.product}
+                  </b>
+                  <span className="muted" style={{ marginTop: 2 }}>
+                    {[it.variant, it.colour, it.size, it.quantity > 1 ? `Qty ${it.quantity}` : ''].filter(Boolean).join(' · ')}
+                  </span>
+                </div>
+                <span className="oi-price" style={{ textAlign: 'right' }}>
+                  {ITEM_STATUS_CUSTOMER[itemStatus(it)]}
+                  {it.etaDate && !['arrived', 'collected'].includes(itemStatus(it)) ? (
+                    <span className="muted" style={{ display: 'block', fontWeight: 400, marginTop: 2 }}>
+                      Expected {niceDate(it.etaDate)}
+                    </span>
+                  ) : null}
+                </span>
+              </li>
+            ))}
+          </ul>
+          {o.specificationText.split('\n\n').slice(2).join('\n\n') ? (
+            <p style={{ whiteSpace: 'pre-line' }}>{o.specificationText.split('\n\n').slice(2).join('\n\n')}</p>
+          ) : null}
+        </>
+      ) : fitSpec(o.specificationJson) ? (
         <SpecView json={o.specificationJson} text={o.specificationText} label="Your specification" />
       ) : (
         <p style={{ whiteSpace: 'pre-line', marginTop: 0 }}>{o.specificationText}</p>

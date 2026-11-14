@@ -59,6 +59,7 @@ export function OrderBoard({ rows, today, paymentTracking }: { rows: WorkRow[]; 
                       <span className="bc-item">
                         {r.brand} {r.product}
                       </span>
+                      {r.itemsText ? <span className="bc-items">{r.itemsText}</span> : null}
                       <span className="bc-meta">
                         {c.key === 'place' ? (
                           <span className={r.flags.some((f) => f.code === 'not_placed') ? 'flag' : ''}>Taken {ago(r.createdAt, now)}</span>

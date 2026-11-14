@@ -17,6 +17,7 @@ import {
   setArchived,
   setNoteDeleted,
   setOrderDeleted,
+  updateOrderItem,
   updateOrderProgress,
   voidPayment,
 } from '@/lib/services/orders';
@@ -120,6 +121,15 @@ export async function createRequestAction(_: FormState, fd: FormData): Promise<F
 }
 
 /* ── Orders ──────────────────────────────────────────────────────────── */
+
+export async function orderItemAction(orderId: string, index: number, _: FormState, fd: FormData) {
+  return act('staff', async (ctx) => {
+    const r = await updateOrderItem(ctx, orderId, index, obj(fd));
+    if (r.allCollected) return 'Saved. Every item has been collected: set the order to Collected below to close it.';
+    if (r.allArrived) return 'Saved. Every item has arrived: mark the order Ready for collection below to email the customer.';
+    return 'Item updated.';
+  }, fd);
+}
 
 export async function updateProgressAction(orderId: string, _: FormState, fd: FormData) {
   let target = '';

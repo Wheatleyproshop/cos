@@ -170,6 +170,23 @@ describe('order lifecycle', () => {
     expect(order.specificationText).toContain('Gift wrap please');
     expect((order.specificationJson as { kind: string; items: unknown[] }).items).toHaveLength(3);
 
+    // Each item moves on its own.
+    const { updateOrderItem } = await import('@/lib/services/orders');
+    const { itemsProgress } = await import('@/lib/order-items');
+    let r = await updateOrderItem(staff, order.id, 0, { status: 'arrived', etaDate: '', supplierReference: '' });
+    expect(r.allArrived).toBe(false);
+    await updateOrderItem(staff, order.id, 1, { status: 'delayed', etaDate: '2026-12-20', supplierReference: 'TIT-99' });
+    const fresh = (await withTenant(org.id, (tx) => tx.select().from(orders).where(eq(orders.id, order.id))))[0];
+    expect(itemsProgress(fresh.specificationJson)).toEqual({ total: 3, arrived: 1, collected: 0, delayed: 1 });
+    const it2 = (fresh.specificationJson as { items: { status: string; etaDate: string; supplierReference: string }[] }).items[1];
+    expect(it2).toMatchObject({ status: 'delayed', etaDate: '2026-12-20', supplierReference: 'TIT-99' });
+    await updateOrderItem(staff, order.id, 1, { status: 'arrived', etaDate: '', supplierReference: 'TIT-99' });
+    r = await updateOrderItem(staff, order.id, 2, { status: 'arrived', etaDate: '', supplierReference: '' });
+    expect(r.allArrived).toBe(true);
+    const ev = await withTenant(org.id, (tx) => tx.select().from(auditEvents).where(and(eq(auditEvents.orderId, order.id), eq(auditEvents.eventType, 'order_item_changed'))));
+    expect(ev).toHaveLength(4);
+    await expect(updateOrderItem(staff, order.id, 9, { status: 'arrived', etaDate: '' })).rejects.toThrow(/Item not found/);
+
     const q = await createQuote(staff, { customerName: 'Multi Max', email: 'multi@example.com', brand: 'Nike', product: 'Club Cap', quantity: '1', unitPricePence: '25', validUntil: '', extraItems });
     expect(q.totalGrossPence).toBe(2500 + 2 * 5499 + 17900);
     expect(q.product).toBe('Club Cap (+2 more)');
