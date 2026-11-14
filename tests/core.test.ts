@@ -1304,6 +1304,17 @@ describe('performance: pre-book arrivals', () => {
     expect(csv).toContain('Pre-book stock received by brand');
     expect(csv).toContain('Titleist,6,2800.00,100,');
   });
+
+  it('builds the dashboard download with brand share, customers and biggest orders', async () => {
+    const { getPerformance } = await import('@/lib/analytics');
+    const p = await getPerformance(org, 'all');
+    const csv = (await import('@/lib/performance-report')).dashboardCsv(org, p, '2026-10-17');
+    for (const s of ['Brand performance (share of sales)', 'Most ordered, by brand', 'Best-value customers', 'Highest-value orders']) expect(csv).toContain(s);
+    expect(p.brandShare.length).toBeGreaterThan(0);
+    expect(p.brandShare.length).toBeLessThanOrEqual(6);
+    const spent = p.topCustomers.map((c) => c.valuePence);
+    expect([...spent].sort((a, b) => b - a)).toEqual(spent);
+  });
 });
 
 describe('monthly report: pre-book arrivals', () => {

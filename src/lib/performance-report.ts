@@ -99,3 +99,51 @@ export function performanceCsv(org: Pick<Organisation, 'storeName'>, p: Performa
   // BOM so Excel opens £ signs and accents correctly.
   return '﻿' + out.join('\r\n') + '\r\n';
 }
+
+/** The landing dashboard as one CSV: headline figures, brand share, most-ordered by brand, best customers, biggest orders. */
+export function dashboardCsv(org: Pick<Organisation, 'storeName'>, p: Performance, asOf: string): string {
+  const k = p.kpis;
+  const out: string[] = [];
+  const section = (title: string, header: string[], rows: unknown[][]) => {
+    if (out.length) out.push('');
+    out.push(csvRow([title]));
+    out.push(csvRow(header));
+    if (rows.length) rows.forEach((r) => out.push(csvRow(r)));
+    else out.push(csvRow(['No data for this period']));
+  };
+  const shareTotal = p.brandShare.reduce((s, r) => s + r.valuePence, 0);
+  const share = (v: number) => (shareTotal ? Math.round((v / shareTotal) * 100) : 0);
+  section(`${org.storeName} dashboard — ${p.period.label} (to ${asOf})`, ['Measure', 'Value'], [
+    ['Period start', p.from.toISOString().slice(0, 10)],
+    ['Sales (GBP)', gbp(k.valuePence)],
+    ['Change vs previous period (%)', k.valueChange ?? ''],
+    ['Orders', k.orders],
+    ['Change in orders vs previous period (%)', k.ordersChange ?? ''],
+    ['Average order (GBP)', gbp(k.avgOrderPence)],
+    ['Customers', k.customers],
+    ['Repeat customers (%)', k.repeatPct ?? ''],
+    ['Open orders (now)', k.openOrders],
+    ['Open order value (GBP, now)', gbp(k.openValuePence)],
+  ]);
+  section('Brand performance (share of sales)', ['Brand', 'Items sold', 'Sales (GBP)', 'Share (%)'], p.brandShare.map((r) => [r.name, r.count, gbp(r.valuePence), share(r.valuePence)]));
+  section(
+    'Most ordered, by brand',
+    ['Brand', 'Brand sales (GBP)', 'Brand items', 'Average per item (GBP)', 'Product', 'Quantity', 'Product sales (GBP)'],
+    p.brandProducts.flatMap((b) =>
+      b.products.map((pr) => [b.brand, gbp(b.valuePence), b.count, gbp(Math.round(b.valuePence / Math.max(1, b.count))), pr.name, pr.count, gbp(pr.valuePence)]),
+    ),
+  );
+  section(
+    'Best-value customers',
+    ['Rank', 'Customer', 'Spent (GBP)', 'Orders in period', 'Orders ever', 'Average order (GBP)', 'Favourite brand'],
+    p.topCustomers.map((c, i) => [i + 1, c.name, gbp(c.valuePence), c.orders, c.lifetimeOrders, gbp(c.avgOrderPence), c.favouriteBrand]),
+  );
+  section(
+    'Highest-value orders',
+    ['Rank', 'Order', 'Customer', 'Brand', 'Product', 'Date', 'Value (GBP)'],
+    p.topOrders.map((o, i) => [i + 1, o.orderNumber, o.customerName, o.brand, o.product, o.createdAt.toISOString().slice(0, 10), gbp(o.valuePence)]),
+  );
+  section('Sales over time', ['Period starting', 'Orders', 'Sales (GBP)'], p.trend.map((b) => [b.start.toISOString().slice(0, 10), b.count, gbp(b.valuePence)]));
+  section("What's selling", ['Category', 'Items sold', 'Sales (GBP)'], p.categories.map((r) => [r.name, r.count, gbp(r.valuePence)]));
+  return '\ufeff' + out.join('\r\n') + '\r\n';
+}

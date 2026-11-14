@@ -77,7 +77,7 @@ function Change({ pct: p, per }: { pct: number | null; per: string }) {
   );
 }
 
-export function Dashboard({ data }: { data: Performance }) {
+export function Dashboard({ data, canExport }: { data: Performance; canExport?: boolean }) {
   const k = data.kpis;
   const per = data.period.label.toLowerCase();
   const shareTotal = data.brandShare.reduce((s, r) => s + r.valuePence, 0);
@@ -99,9 +99,16 @@ export function Dashboard({ data }: { data: Performance }) {
             </Link>
           ))}
         </div>
-        <Link href={`/?view=performance&period=${data.period.key}`} className="muted">
-          Full performance report →
-        </Link>
+        <div className="dash-actions">
+          <Link href={`/?view=performance&period=${data.period.key}`} className="muted">
+            Full performance report →
+          </Link>
+          {canExport ? (
+            <a className="btn small" href={`/api/export/dashboard?period=${data.period.key}`} download>
+              ⤓ Download
+            </a>
+          ) : null}
+        </div>
       </div>
 
       <div className="grid dash-tiles">

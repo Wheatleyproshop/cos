@@ -958,3 +958,4 @@ fieldset.itemcard legend { display: flex; align-items: center; gap: 10px; font-w
 }
 .dash-ret { margin-left: 8px; font-size: 11px; }
 .dash-cust td { vertical-align: middle; }
+.dash-actions { display: flex; align-items: center; gap: 14px; }

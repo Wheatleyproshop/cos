@@ -99,7 +99,7 @@ export default async function Overview({ searchParams }: { searchParams: SP }) {
       <>
         <PageHeader staff={staff} title={greeting(staff.org.timezone)} sub="How your brands are performing at a glance." />
         <ViewTabs view="dashboard" />
-        <Dashboard data={data} />
+        <Dashboard data={data} canExport={hasRole(staff, 'manager')} />
       </>
     );
   }
