@@ -1,4 +1,4 @@
-import { and, eq, gte, inArray, isNull, lt, sql } from 'drizzle-orm';
+import { and, eq, gte, inArray, isNull, lt, lte, sql } from 'drizzle-orm';
 import { withTenant } from '@/db';
 import { auditEvents, customers, orders, prebookLines, prebooks, quotes, users, workshopItems, workshopJobs, type Organisation } from '@/db/schema';
 import { asItemsSpec } from './order-items';
@@ -138,7 +138,7 @@ async function prebookArrivals(orgId: string, from: Date, end: Date, inclusiveEn
           eq(auditEvents.eventType, 'prebook_received'),
           isNull(prebooks.removedAt),
           gte(auditEvents.createdAt, from),
-          inclusiveEnd ? sql`${auditEvents.createdAt} <= ${end}` : lt(auditEvents.createdAt, end),
+          inclusiveEnd ? lte(auditEvents.createdAt, end) : lt(auditEvents.createdAt, end),
         ),
       );
     // Older booking-in entries didn't record the line, cost or due date: look the line up by id or by name.
