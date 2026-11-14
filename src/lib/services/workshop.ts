@@ -4,7 +4,8 @@ import { withTenant, type DB } from '@/db';
 import type { Organisation } from '@/db/schema';
 import {
   auditEvents, customers, messages, organisations, trackingTokens, users, workshopItems, workshopJobs,
-  type Customer, type WorkshopItem, type WorkshopJob, type WorkshopStatus,
+  WORKSHOP_ITEM_STATUSES, WORKSHOP_ITEM_STATUS_LABELS,
+  type Customer, type WorkshopItem, type WorkshopItemStatus, type WorkshopJob, type WorkshopStatus,
 } from '@/db/schema';
 import { recordEvent, SYSTEM } from '../audit';
 import { dispatchMessages, enqueueEmail } from '../email/outbox';
@@ -213,6 +214,14 @@ export async function updateWorkshopProgress(
       if (input.status === 'collected') patch.collectedAt = now;
     }
     await tx.update(workshopJobs).set(patch).where(eq(workshopJobs.id, id));
+    // Marking the whole job ready / collected carries every club with it.
+    if (statusChanged && (input.status === 'ready' || input.status === 'collected')) {
+      const to: WorkshopItemStatus = input.status === 'ready' ? 'done' : 'collected';
+      await tx
+        .update(workshopItems)
+        .set({ status: to })
+        .where(and(eq(workshopItems.jobId, id), isNull(workshopItems.removedAt), sql`${workshopItems.status} <> 'collected'`));
+    }
     if (statusChanged) {
       await recordEvent(tx, {
         organisationId: ctx.org.id, actor: ctx.actor, eventType: 'workshop_status_changed', entityType: 'workshop_job', entityId: id,
@@ -271,6 +280,48 @@ export async function addWorkshopItem(ctx: Ctx, id: string, raw: unknown) {
       customerId: job.customerId, newValue: { club: v.club, work: v.work, parts: v.parts, pricePence: v.pricePence },
     });
   });
+}
+
+const itemStatusSchema = z.object({ status: z.enum(WORKSHOP_ITEM_STATUSES) });
+
+/** Moves one club on a job on its own; optionally emails the customer that it's ready. */
+export async function updateWorkshopItemStatus(ctx: Ctx, id: string, itemId: string, raw: unknown, opts: { emailDone?: boolean } = {}) {
+  const v = parse(itemStatusSchema, raw);
+  const res = await withTenant(ctx.org.id, async (tx) => {
+    const { job, customer } = await load(tx, ctx, id);
+    if (job.status === 'cancelled') throw new ServiceError('This job is cancelled.');
+    const items = await liveItems(tx, id);
+    const item = items.find((i) => i.id === itemId);
+    if (!item) throw new ServiceError('Club not found on this job.');
+    if (item.status === v.status) return { messageId: null, items };
+    await tx.update(workshopItems).set({ status: v.status }).where(eq(workshopItems.id, itemId));
+    await tx.update(workshopJobs).set({ updatedAt: new Date() }).where(eq(workshopJobs.id, id));
+    await recordEvent(tx, {
+      organisationId: ctx.org.id, actor: ctx.actor, eventType: 'workshop_item_status_changed', entityType: 'workshop_job', entityId: id,
+      customerId: customer.id, oldValue: { status: item.status, label: WORKSHOP_ITEM_STATUS_LABELS[item.status] },
+      newValue: { club: item.club, work: item.work, status: v.status, label: WORKSHOP_ITEM_STATUS_LABELS[v.status] },
+    });
+    const after = items.map((i) => (i.id === itemId ? { ...i, status: v.status } : i));
+    let messageId: string | null = null;
+    if (opts.emailDone && v.status === 'done') {
+      const toCome = after
+        .filter((i) => !['done', 'collected'].includes(i.status))
+        .map((i) => `${i.club}: ${i.work}${i.status === 'waiting_parts' ? ' – waiting for parts' : job.etaDate ? ` – expected ${job.etaDate.split('-').reverse().join('/')}` : ''}`);
+      messageId = await enqueueEmail(tx, {
+        org: ctx.org, template: 'workshop_item_ready', recipient: customer.email, customerId: customer.id, workshopJobId: id,
+        context: { ...emailContext(job, customer, after, { link: await issueWorkshopLink(tx, ctx.org.id, id) }), itemName: `${item.club} (${item.work})`, itemsToCome: toCome },
+        actor: ctx.actor, suppressedBy: null,
+      });
+    }
+    return { messageId, items: after };
+  });
+  if (res.messageId) await dispatchMessages(ctx.org, [res.messageId]);
+  const st = res.items.map((i) => i.status);
+  return {
+    emailed: Boolean(res.messageId),
+    allDone: st.every((s) => s === 'done' || s === 'collected'),
+    allCollected: st.every((s) => s === 'collected'),
+  };
 }
 
 export async function removeWorkshopItem(ctx: Ctx, id: string, itemId: string) {
@@ -336,7 +387,7 @@ export async function restoreWorkshopItem(ctx: Ctx, id: string, itemId: string) 
   });
 }
 
-export type JobRow = WorkshopJob & { customerName: string; customerEmail: string; items: number; summary: string; totalPence: number };
+export type JobRow = WorkshopJob & { customerName: string; customerEmail: string; items: number; summary: string; totalPence: number; itemsDone: number; itemsCollected: number };
 
 /** Matches the job number, customer name/email/phone (digits too), or any club, work or parts on the job. */
 function jobSearch(q: string) {
@@ -365,6 +416,8 @@ export async function listJobs(orgId: string, opts: { customerId?: string; q?: s
         items: sql<number>`count(${workshopItems.id})::int`,
         summary: sql<string>`coalesce(string_agg(${workshopItems.club} || ': ' || ${workshopItems.work}, ', ' order by ${workshopItems.createdAt}), '')`,
         totalPence: sql<number>`coalesce(sum(${workshopItems.pricePence}), 0)::int`,
+        itemsDone: sql<number>`count(${workshopItems.id}) filter (where ${workshopItems.status} in ('done', 'collected'))::int`,
+        itemsCollected: sql<number>`count(${workshopItems.id}) filter (where ${workshopItems.status} = 'collected')::int`,
       })
       .from(workshopJobs)
       .innerJoin(customers, eq(customers.id, workshopJobs.customerId))

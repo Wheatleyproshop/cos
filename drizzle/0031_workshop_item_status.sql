@@ -1,0 +1,3 @@
+ALTER TABLE "organisations" ALTER COLUMN "email_automations" SET DEFAULT '{"order_confirmation":true,"quote_approval":true,"eta_revised":true,"ready_for_collection":true,"collection_reminder":true,"workshop_checked_in":true,"workshop_delayed":true,"workshop_ready":true,"workshop_reminder":true,"ball_design_received":true,"item_arrived":true}'::jsonb;--> statement-breakpoint
+ALTER TABLE "workshop_items" ADD COLUMN "status" text DEFAULT 'to_do' NOT NULL;--> statement-breakpoint
+UPDATE "workshop_items" wi SET "status" = CASE j."status" WHEN 'ready' THEN 'done' WHEN 'collected' THEN 'collected' WHEN 'in_progress' THEN 'in_progress' WHEN 'waiting_parts' THEN 'waiting_parts' ELSE 'to_do' END FROM "workshop_jobs" j WHERE j."id" = wi."job_id";

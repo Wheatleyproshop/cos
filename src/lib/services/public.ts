@@ -91,7 +91,7 @@ export async function findWorkshopByToken(token: string) {
       .limit(1);
     if (!row) return null;
     const items = await tx
-      .select({ club: workshopItems.club, work: workshopItems.work, parts: workshopItems.parts, quantity: workshopItems.quantity, pricePence: workshopItems.pricePence })
+      .select({ club: workshopItems.club, work: workshopItems.work, parts: workshopItems.parts, quantity: workshopItems.quantity, pricePence: workshopItems.pricePence, status: workshopItems.status })
       .from(workshopItems)
       .where(and(eq(workshopItems.jobId, jobId), isNull(workshopItems.removedAt)))
       .orderBy(asc(workshopItems.createdAt));

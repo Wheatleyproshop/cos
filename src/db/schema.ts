@@ -42,7 +42,8 @@ export type EmailAutomationKey =
   | 'workshop_ready'
   | 'workshop_reminder'
   | 'ball_design_received'
-  | 'item_arrived';
+  | 'item_arrived'
+  | 'workshop_item_ready';
 
 export type EmailAutomations = Record<EmailAutomationKey, boolean>;
 
@@ -83,6 +84,7 @@ export const organisations = pgTable('organisations', {
     workshop_reminder: true,
     ball_design_received: true,
     item_arrived: true,
+    workshop_item_ready: true,
   }),
   /** Off = payments are taken at the shop's till: no Payments section, no balance check at collection. */
   paymentTracking: boolean('payment_tracking').notNull().default(true),
@@ -541,6 +543,15 @@ export const workshopJobs = pgTable(
   (t) => [uniqueIndex('workshop_org_ref_idx').on(t.organisationId, t.reference), index('workshop_customer_idx').on(t.customerId)],
 );
 
+export const WORKSHOP_ITEM_STATUSES = ['to_do', 'in_progress', 'waiting_parts', 'done', 'collected'] as const;
+export type WorkshopItemStatus = (typeof WORKSHOP_ITEM_STATUSES)[number];
+export const WORKSHOP_ITEM_STATUS_LABELS: Record<WorkshopItemStatus, string> = {
+  to_do: 'To do', in_progress: 'In progress', waiting_parts: 'Waiting for parts', done: 'Done', collected: 'Collected',
+};
+export const WORKSHOP_ITEM_STATUS_CUSTOMER: Record<WorkshopItemStatus, string> = {
+  to_do: 'Booked in', in_progress: 'Being worked on', waiting_parts: 'Waiting for parts', done: 'Ready to collect', collected: 'Collected',
+};
+
 export const workshopItems = pgTable(
   'workshop_items',
   {
@@ -552,6 +563,8 @@ export const workshopItems = pgTable(
     parts: text('parts').notNull().default(''),
     quantity: integer('quantity').notNull().default(1),
     pricePence: integer('price_pence').notNull().default(0),
+    /** Each club moves on its own: to_do → in_progress → waiting_parts → done → collected. */
+    status: text('status', { enum: WORKSHOP_ITEM_STATUSES }).notNull().default('to_do'),
     createdAt: createdAt(),
   removedAt: timestamp('removed_at', { withTimezone: true }),
   },

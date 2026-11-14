@@ -6,13 +6,15 @@ import { BuildTable } from '@/components/spec-view';
 import { MessageBadge } from '@/components/views';
 import { PageHeader } from '@/components/views';
 import { AddWorkshopItemForm, InternalNotesForm, WorkshopProgressForm } from '@/components/workshop-forms';
+import { WorkshopItemForm } from '@/components/workshop-item-form';
+import { WORKSHOP_ITEM_STATUS_LABELS } from '@/db/schema';
 import { describeEvent, templateName } from '@/lib/audit';
 import { hasRole, requireStaff } from '@/lib/auth';
 import { money, stamp, todayInTz } from '@/lib/format';
 import { shortDate } from '@/lib/short-date';
 import { getJob, jobSpec, WORKSHOP_STATUS_LABELS } from '@/lib/services/workshop';
 import {
-  addWorkshopItemAction, deleteJobAction, removeWorkshopItemAction, restoreWorkshopItemAction, workshopProgressAction,
+  addWorkshopItemAction, deleteJobAction, removeWorkshopItemAction, restoreWorkshopItemAction, workshopProgressAction, workshopItemStatusAction,
   workshopNotesAction, clearWorkshopNotesAction, restoreWorkshopNotesAction,
 } from '../../actions';
 
@@ -139,6 +141,37 @@ export default async function WorkshopJobPage({ params }: { params: Promise<{ re
             ) : undefined
           }
         />
+        {items.length > 1 ? (
+          <div className="orderitems" style={{ marginTop: 14 }}>
+            <div className="panel-head">
+              <h3 style={{ margin: 0 }}>Progress by club</h3>
+              <span className="muted" style={{ marginTop: 0 }}>
+                {items.filter((i) => i.status === 'done' || i.status === 'collected').length} of {items.length} done
+              </span>
+            </div>
+            <ul>
+              {items.map((i) => {
+                const cls = { to_do: '', in_progress: 'ordered', waiting_parts: 'delayed', done: 'arrived', collected: 'collected' }[i.status];
+                return (
+                  <li key={i.id} className={`oi oi-${cls}`}>
+                    <div className="oi-what">
+                      <b>
+                        {i.club}: {i.work}
+                      </b>
+                      {i.parts ? <span className="muted" style={{ marginTop: 2 }}>{i.parts}</span> : null}
+                    </div>
+                    <span className="oi-price">{money(i.pricePence)}</span>
+                    {editable ? (
+                      <WorkshopItemForm action={workshopItemStatusAction.bind(null, j.id, i.id)} label={`${i.club} (${i.work})`} status={i.status} />
+                    ) : (
+                      <span className="badge">{WORKSHOP_ITEM_STATUS_LABELS[i.status]}</span>
+                    )}
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+        ) : null}
         {open ? (
           <details className="section">
             <summary>Add a club</summary>

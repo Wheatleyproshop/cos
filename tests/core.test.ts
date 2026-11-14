@@ -1355,6 +1355,18 @@ describe('workshop', () => {
     expect(checkIn.bodyHtml).toContain('Golf Pride MCC midsize');
     expect(checkIn.bodyHtml).toContain('£88.00');
 
+    // Each club moves on its own; the customer can be told one is ready.
+    const { workshopItems } = await import('@/db/schema');
+    const clubs = await withTenant(org.id, (tx) => tx.select().from(workshopItems).where(eq(workshopItems.jobId, job.id)));
+    const driver = clubs.find((c) => c.club === 'Driver')!;
+    expect(driver.status).toBe('to_do');
+    const r1 = await ws.updateWorkshopItemStatus(staff, job.id, driver.id, { status: 'done' }, { emailDone: true });
+    expect(r1).toMatchObject({ emailed: true, allDone: false });
+    const [oneReady] = await sent('workshop_item_ready');
+    expect(oneReady.subject).toBe(`One of your clubs is ready — ${job.reference}`);
+    expect(oneReady.bodyHtml).toContain('Driver (Loft &amp; lie adjustment)');
+    expect(oneReady.bodyHtml).toContain('Irons 5-PW: Regrip');
+
     // Waiting for parts needs a reason the customer will see.
     await expect(ws.updateWorkshopProgress(staff, job.id, { status: 'waiting_parts', etaDate: revised })).rejects.toThrow(/waiting for/);
     await ws.updateWorkshopProgress(staff, job.id, { status: 'waiting_parts', etaDate: revised, delayReason: 'Waiting for midsize grips to arrive' });
@@ -1366,6 +1378,9 @@ describe('workshop', () => {
     await expect(ws.updateWorkshopProgress(staff, job.id, { status: 'cancelled' })).rejects.toThrow(/manager/);
 
     await ws.updateWorkshopProgress(staff, job.id, { status: 'ready', etaDate: revised });
+    // Marking the whole job ready carries every club with it.
+    const afterReady = await withTenant(org.id, (tx) => tx.select().from(workshopItems).where(eq(workshopItems.jobId, job.id)));
+    expect(afterReady.every((c) => c.status === 'done')).toBe(true);
     const [ready] = await sent('workshop_ready');
     expect(ready.subject).toContain('ready to collect');
     const d = (await ws.getJob(org.id, job.reference))!;

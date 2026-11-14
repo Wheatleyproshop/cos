@@ -69,6 +69,7 @@ import {
   checkInClubs,
   quickMoveJob,
   removeWorkshopItem,
+  updateWorkshopItemStatus,
   restoreJobNotes,
   restoreWorkshopItem,
   setJobDeleted,
@@ -787,6 +788,16 @@ export async function addWorkshopItemAction(id: string, _: FormState, fd: FormDa
   return act('staff', async (ctx) => {
     await addWorkshopItem(ctx, id, obj(fd));
     return 'Club added.';
+  }, fd);
+}
+
+export async function workshopItemStatusAction(id: string, itemId: string, _: FormState, fd: FormData) {
+  return act('staff', async (ctx) => {
+    const r = await updateWorkshopItemStatus(ctx, id, itemId, obj(fd), { emailDone: flag(fd, 'emailDone') });
+    const sent = r.emailed ? ' The customer has been emailed that it’s ready.' : '';
+    if (r.allCollected) return `Saved.${sent} Every club has been collected: mark the job Collected below.`;
+    if (r.allDone) return `Saved.${sent} Every club is done: mark the job Ready to collect below to email the customer.`;
+    return sent ? `Saved.${sent}` : 'Club updated.';
   }, fd);
 }
 

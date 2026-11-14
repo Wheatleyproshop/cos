@@ -29,6 +29,7 @@ export async function renderSample(org: Organisation, template: EmailAutomationK
       etaDate: addDays(today, 5),
       previousEtaDate: template === 'workshop_delayed' ? addDays(today, 2) : null,
       etaReason: template === 'workshop_delayed' ? 'We’re waiting for the midsize grips to arrive from Golf Pride.' : '',
+      ...(template === 'workshop_item_ready' ? { itemName: 'Driver (Loft & lie adjustment)', itemsToCome: ['Irons 5-PW: Regrip – waiting for parts'] } : {}),
       fit: {
         kind: 'cos-configure', version: 2, totalPence: total,
         builds: [{ title: 'Workshop job WS-1001', totalPence: total, lines: items.map((i) => ({ label: i.quantity > 1 ? `${i.club} ×${i.quantity}` : i.club, value: [i.work, i.parts].filter(Boolean).join(' — '), pricePence: i.pricePence })) }],

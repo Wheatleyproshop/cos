@@ -1,9 +1,9 @@
-import type { Organisation, WorkshopStatus } from '@/db/schema';
+import { WORKSHOP_ITEM_STATUS_CUSTOMER, type Organisation, type WorkshopItemStatus, type WorkshopStatus } from '@/db/schema';
 import { longDate, money, stamp } from '@/lib/format';
 import { PublicShell } from './public-shell';
 import { BuildTable } from './spec-view';
 
-type Item = { club: string; work: string; parts: string; quantity: number; pricePence: number };
+type Item = { club: string; work: string; parts: string; quantity: number; pricePence: number; status?: WorkshopItemStatus };
 type Job = {
   reference: string; status: WorkshopStatus; etaDate: string | null; createdAt: Date; readyAt: Date | null; collectedAt: Date | null; delayReason: string;
 };
@@ -79,6 +79,20 @@ export function WorkshopTrackingView({ org, job: j, items, customerName }: { org
       ) : null}
 
       <h3>Your clubs</h3>
+      {items.length > 1 && !['ready', 'collected'].includes(j.status) ? (
+        <ul className="track-items">
+          {items.map((i, n) => (
+            <li key={n} className="oi">
+              <div className="oi-what">
+                <b>
+                  {i.club}: {i.work}
+                </b>
+              </div>
+              <span className="oi-price">{WORKSHOP_ITEM_STATUS_CUSTOMER[i.status ?? 'to_do']}</span>
+            </li>
+          ))}
+        </ul>
+      ) : null}
       <BuildTable build={build} />
       <p className="muted">Checked in {stamp(j.createdAt, org.timezone)}. Questions? Just reply to any of our emails or give us a call.</p>
     </PublicShell>

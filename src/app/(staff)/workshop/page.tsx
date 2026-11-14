@@ -118,7 +118,14 @@ export default async function WorkshopPage({
                         </Link>
                         <div className="muted">{j.reference}</div>
                       </td>
-                      <td className="ws-summary">{j.summary}</td>
+                      <td className="ws-summary">
+                        {j.summary}
+                        {j.items > 1 && j.status !== 'collected' ? (
+                          <div className="bc-items">
+                            {j.itemsCollected ? `${j.itemsCollected} of ${j.items} collected` : `${j.itemsDone} of ${j.items} done`}
+                          </div>
+                        ) : null}
+                      </td>
                       <td>
                         <span className={`badge ws-${j.status}`}>{WORKSHOP_STATUS_LABELS[j.status]}</span>
                       </td>

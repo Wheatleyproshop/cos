@@ -63,6 +63,7 @@ export const TEMPLATE_KEYS: EmailAutomationKey[] = [
   'workshop_reminder',
   'ball_design_received',
   'item_arrived',
+  'workshop_item_ready',
 ];
 
 const esc = (s: unknown) =>
@@ -294,6 +295,27 @@ export function renderEmail(type: EmailAutomationKey, ctx: EmailContext): Render
         cta: ctx.actionUrl ? { label: 'View your order', url: ctx.actionUrl } : undefined,
       });
       return { subject: `Part of your order has arrived — ${ctx.reference}`, ...r };
+    }
+    case 'workshop_item_ready': {
+      const item = ctx.itemName || 'One of your clubs';
+      const toCome = ctx.itemsToCome ?? [];
+      const rows: Block[] = [{ label: 'Ready', value: item }];
+      if (toCome.length) rows.push({ label: 'Still being worked on', value: toCome.join('\n') });
+      rows.push({ label: 'Collect from', value: ctx.store.collectionLocation || s });
+      if (ctx.store.openingHours) rows.push({ label: 'Opening hours', value: ctx.store.openingHours });
+      const r = layout(ctx, {
+        preheader: `${item} is ready to collect.`,
+        heading: 'One of your clubs is ready',
+        intro: [
+          `Good news. The work on your ${item} is finished.`,
+          toCome.length
+            ? 'We’re still working on the rest. You’re welcome to collect this one now, or wait and collect everything together. We’ll let you know when the rest is ready.'
+            : 'You’re welcome to pop in and collect it.',
+        ],
+        rows,
+        cta: ctx.actionUrl ? { label: 'Check your clubs', url: ctx.actionUrl } : undefined,
+      });
+      return { subject: `One of your clubs is ready — ${ctx.reference}`, ...r };
     }
     case 'ball_design_received': {
       const r = layout(ctx, {

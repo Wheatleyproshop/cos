@@ -86,6 +86,7 @@ export type EventType =
   | 'workshop_eta_changed'
   | 'workshop_item_added'
   | 'workshop_item_removed'
+  | 'workshop_item_status_changed'
   | 'workshop_item_restored'
   | 'workshop_job_deleted'
   | 'workshop_notes_changed'
@@ -139,6 +140,7 @@ const TEMPLATE_NAMES: Record<string, string> = {
   workshop_reminder: 'Workshop collection reminder',
   ball_design_received: 'Online design received',
   item_arrived: 'Item arrived',
+  workshop_item_ready: 'Workshop: club ready',
 };
 
 export function templateName(key: string): string {
@@ -170,6 +172,8 @@ export function describeEvent(e: Pick<AuditEvent, 'eventType' | 'oldValueJson' |
       return `Status changed: ${WS[o.status] ?? o.status} → ${WS[n.status] ?? n.status}${n.delayReason ? ` (${n.delayReason})` : ''}`;
     case 'workshop_eta_changed':
       return `Ready date ${o.etaDate ? `changed from ${o.etaDate} ` : 'set '}to ${n.etaDate ?? 'none'}${n.reason ? ` — ${n.reason}` : ''}`;
+    case 'workshop_item_status_changed':
+      return `${n.club} (${n.work}): ${o.label ?? o.status} → ${n.label ?? n.status}`;
     case 'workshop_item_added':
       return `Added ${n.club}: ${n.work}${n.parts ? ` (${n.parts})` : ''}`;
     case 'quote_deleted':
