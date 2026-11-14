@@ -6,7 +6,7 @@ import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Icon } from './icons';
 
 const NAV = [
-  { href: '/', icon: 'overview', label: 'Overview' },
+  { href: '/', icon: 'overview', label: 'Dashboard' },
   { href: '/orders', icon: 'orders', label: 'All orders' },
   { href: '/quotes', icon: 'quotes', label: 'Quotes' },
   { href: '/fitting', icon: 'fitting', label: 'Custom Fitting' },

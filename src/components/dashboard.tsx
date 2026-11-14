@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { Icon } from '@/components/icons';
+import { LiveUpdates } from '@/components/live-updates';
 import { PERIODS, type Performance, type Ranked } from '@/lib/analytics';
 import { money } from '@/lib/format';
 import { shortDate } from '@/lib/short-date';
@@ -77,7 +78,7 @@ function Change({ pct: p, per }: { pct: number | null; per: string }) {
   );
 }
 
-export function Dashboard({ data, canExport }: { data: Performance; canExport?: boolean }) {
+export function Dashboard({ data, canExport, updatedAt }: { data: Performance; canExport?: boolean; updatedAt: string }) {
   const k = data.kpis;
   const per = data.period.label.toLowerCase();
   const shareTotal = data.brandShare.reduce((s, r) => s + r.valuePence, 0);
@@ -100,6 +101,7 @@ export function Dashboard({ data, canExport }: { data: Performance; canExport?: 
           ))}
         </div>
         <div className="dash-actions">
+          <LiveUpdates updatedAt={updatedAt} />
           <Link href={`/?view=performance&period=${data.period.key}`} className="muted">
             Full performance report →
           </Link>

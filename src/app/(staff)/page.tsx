@@ -99,7 +99,11 @@ export default async function Overview({ searchParams }: { searchParams: SP }) {
       <>
         <PageHeader staff={staff} title={greeting(staff.org.timezone)} sub="How your brands are performing at a glance." />
         <ViewTabs view="dashboard" />
-        <Dashboard data={data} canExport={hasRole(staff, 'manager')} />
+        <Dashboard
+          data={data}
+          canExport={hasRole(staff, 'manager')}
+          updatedAt={new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', timeZone: staff.org.timezone })}
+        />
       </>
     );
   }

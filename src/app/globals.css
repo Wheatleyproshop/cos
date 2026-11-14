@@ -959,3 +959,9 @@ fieldset.itemcard legend { display: flex; align-items: center; gap: 10px; font-w
 .dash-ret { margin-left: 8px; font-size: 11px; }
 .dash-cust td { vertical-align: middle; }
 .dash-actions { display: flex; align-items: center; gap: 14px; }
+.live { display: inline-flex; align-items: center; gap: 7px; font-size: 12px; color: var(--muted); white-space: nowrap; }
+.live i { width: 8px; height: 8px; border-radius: 50%; background: #1baf7a; box-shadow: 0 0 0 0 rgba(27, 175, 122, .5); animation: livepulse 2s infinite; }
+.live--busy i { background: #eda100; }
+@keyframes livepulse { 0% { box-shadow: 0 0 0 0 rgba(27, 175, 122, .45); } 70% { box-shadow: 0 0 0 7px rgba(27, 175, 122, 0); } 100% { box-shadow: 0 0 0 0 rgba(27, 175, 122, 0); } }
+@media (prefers-reduced-motion: reduce) { .live i { animation: none; } }
+@media (max-width: 600px) { .dash-actions { flex-wrap: wrap; gap: 10px; } }
