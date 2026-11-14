@@ -5,6 +5,7 @@ import { withTenant, type DB } from '@/db';
 import { messages, type EmailAutomationKey, type Organisation } from '@/db/schema';
 import { recordEvent, SYSTEM, type Actor } from '../audit';
 import { fromHeader } from './sender';
+import { sendSms, ukMobile } from '../sms';
 import { renderEmail, type EmailContext, type StoreBranding } from './templates';
 
 export function brandingFor(org: Organisation): StoreBranding {
@@ -80,6 +81,58 @@ export async function enqueueEmail(tx: DB, input: EnqueueInput): Promise<string 
   return reason ? null : msg.id;
 }
 
+export type EnqueueSmsInput = {
+  org: Organisation;
+  template: EmailAutomationKey;
+  phone: string;
+  customerId: string;
+  orderId?: string | null;
+  workshopJobId?: string | null;
+  text: string;
+  actor: Actor;
+  suppressedBy?: string | null;
+};
+
+/**
+ * Records an outgoing text message alongside an email (same ledger, same suppression rules). Only when
+ * the shop has texts switched on and the customer has a UK mobile number; otherwise nothing is recorded.
+ */
+export async function enqueueSms(tx: DB, input: EnqueueSmsInput): Promise<string | null> {
+  const { org, template } = input;
+  const to = ukMobile(input.phone);
+  if (!org.smsReady || !to) return null;
+  const automationOn = org.emailAutomations?.[template] !== false;
+  const reason = !automationOn ? 'automation turned off in store settings' : input.suppressedBy ? `customer notification skipped by ${input.suppressedBy}` : null;
+  const [msg] = await tx
+    .insert(messages)
+    .values({
+      organisationId: org.id,
+      orderId: input.orderId ?? null,
+      workshopJobId: input.workshopJobId ?? null,
+      customerId: input.customerId,
+      templateType: template,
+      channel: 'sms',
+      recipient: to,
+      subject: 'Text message',
+      bodyHtml: '',
+      bodyText: input.text,
+      status: reason ? 'suppressed' : 'queued',
+      sentByUserId: input.actor.type === 'user' ? input.actor.userId : null,
+    })
+    .returning({ id: messages.id });
+  await recordEvent(tx, {
+    organisationId: org.id,
+    actor: input.actor,
+    eventType: reason ? 'email_suppressed' : 'email_queued',
+    entityType: input.orderId ? 'order' : 'workshop_job',
+    entityId: input.workshopJobId ?? undefined,
+    orderId: input.orderId,
+    customerId: input.customerId,
+    metadata: { template, channel: 'sms', recipient: to, messageId: msg.id, ...(reason ? { reason } : {}) },
+  });
+  return reason ? null : msg.id;
+}
+
 let resendClient: Resend | null = null;
 function resend(): Resend | null {
   if (!resendApiKey()) return null;
@@ -102,9 +155,15 @@ export async function dispatchMessages(org: Organisation, ids: (string | null | 
     if (m.status !== 'queued') continue;
     let providerId: string | null = null;
     let error: string | null = null;
-    const simulated = !client;
+    let simulated = !client;
     try {
-      if (client) {
+      if (m.channel === 'sms') {
+        const res = await sendSms(m.recipient, m.bodyText);
+        if (res.ok) {
+          providerId = res.id;
+          simulated = res.simulated;
+        } else error = res.error;
+      } else if (client) {
         const res = await client.emails.send({
           from: fromHeader(org),
           to: [m.recipient],
@@ -143,7 +202,10 @@ export async function dispatchMessages(org: Organisation, ids: (string | null | 
         orderId: m.orderId,
         quoteId: m.quoteId,
         customerId: m.customerId,
-        metadata: { template: m.templateType, recipient: m.recipient, messageId: m.id, providerMessageId: providerId, simulated, error },
+        metadata: {
+          template: m.templateType, recipient: m.recipient, messageId: m.id, providerMessageId: providerId, simulated, error,
+          ...(m.channel === 'sms' ? { channel: 'sms' } : {}),
+        },
       });
     });
   }

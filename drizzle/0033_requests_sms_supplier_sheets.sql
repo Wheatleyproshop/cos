@@ -1,0 +1,5 @@
+ALTER TABLE "organisations" ALTER COLUMN "email_automations" SET DEFAULT '{"order_confirmation":true,"quote_approval":true,"eta_revised":true,"ready_for_collection":true,"collection_reminder":true,"workshop_checked_in":true,"workshop_delayed":true,"workshop_ready":true,"workshop_reminder":true,"ball_design_received":true,"item_arrived":true,"workshop_item_ready":true,"order_request_received":true}'::jsonb;--> statement-breakpoint
+ALTER TABLE "messages" ADD COLUMN "channel" text DEFAULT 'email' NOT NULL;--> statement-breakpoint
+ALTER TABLE "organisations" ADD COLUMN "order_request_link" boolean DEFAULT true NOT NULL;--> statement-breakpoint
+ALTER TABLE "organisations" ADD COLUMN "sms_ready" boolean DEFAULT false NOT NULL;--> statement-breakpoint
+ALTER TABLE "organisations" ADD COLUMN "supplier_chase_days" integer DEFAULT 14 NOT NULL;

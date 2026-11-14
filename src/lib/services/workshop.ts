@@ -8,7 +8,8 @@ import {
   type Customer, type WorkshopItem, type WorkshopItemStatus, type WorkshopJob, type WorkshopStatus,
 } from '@/db/schema';
 import { recordEvent, SYSTEM } from '../audit';
-import { dispatchMessages, enqueueEmail } from '../email/outbox';
+import { dispatchMessages, enqueueEmail, enqueueSms } from '../email/outbox';
+import { readyText } from '../sms';
 import type { FitSpec } from '../fit-spec';
 import { money, parseMoneyToPence } from '../format';
 import { appUrl, hashToken, newToken } from '../tokens';
@@ -239,10 +240,18 @@ export async function updateWorkshopProgress(
     const items = await liveItems(tx, id);
     const suppressedBy = notify ? null : ctx.actor.type === 'user' ? ctx.actor.name : 'COS';
     if (statusChanged && input.status === 'ready') {
-      return enqueueEmail(tx, {
+      const email = await enqueueEmail(tx, {
         org: ctx.org, template: 'workshop_ready', recipient: customer.email, customerId: customer.id, workshopJobId: id,
         context: emailContext(updated, customer, items, { link: await issueWorkshopLink(tx, ctx.org.id, id) }), actor: ctx.actor, suppressedBy,
       });
+      const text = await enqueueSms(tx, {
+        org: ctx.org, template: 'workshop_ready', phone: customer.phone, customerId: customer.id, workshopJobId: id, actor: ctx.actor, suppressedBy,
+        text: readyText({
+          storeName: ctx.org.storeName, customerName: customer.name, reference: updated.reference,
+          what: items.length === 1 ? `${items[0].club.toLowerCase()} from the workshop` : 'clubs from the workshop', openingHours: ctx.org.openingHours,
+        }),
+      });
+      return [email, text];
     }
     // Like orders: waiting for parts is the one update before "ready"; a new date alone isn't emailed.
     const delayed = statusChanged && input.status === 'waiting_parts';
@@ -255,8 +264,9 @@ export async function updateWorkshopProgress(
     }
     return null;
   });
-  await dispatchMessages(ctx.org, [messageId]);
-  return { reference, status: input.status, emailed: notify && Boolean(messageId) };
+  const ids = Array.isArray(messageId) ? messageId : [messageId];
+  await dispatchMessages(ctx.org, ids);
+  return { reference, status: input.status, emailed: notify && ids.some(Boolean) };
 }
 
 /**

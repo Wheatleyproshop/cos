@@ -93,7 +93,8 @@ export type EventType =
   | 'workshop_job_restored'
   | 'ball_design_submitted'
   | 'crest_design_submitted'
-  | 'mat_design_submitted';
+  | 'mat_design_submitted'
+  | 'order_request_submitted';
 
 export type EventInput = {
   organisationId: string;
@@ -141,6 +142,7 @@ const TEMPLATE_NAMES: Record<string, string> = {
   ball_design_received: 'Online design received',
   item_arrived: 'Item arrived',
   workshop_item_ready: 'Workshop: club ready',
+  order_request_received: 'Website request received',
 };
 
 export function templateName(key: string): string {
@@ -271,15 +273,15 @@ export function describeEvent(e: Pick<AuditEvent, 'eventType' | 'oldValueJson' |
     case 'quote_cancelled':
       return 'Quote cancelled';
     case 'email_queued':
-      return `${templateName(m.template)} email queued to ${m.recipient}`;
+      return `${templateName(m.template)} ${m.channel === 'sms' ? 'text' : 'email'} queued to ${m.recipient}`;
     case 'email_sent':
-      return `${templateName(m.template)} email sent${m.simulated ? ' (simulated — no email provider configured)' : ''}`;
+      return `${templateName(m.template)} ${m.channel === 'sms' ? 'text' : 'email'} sent${m.simulated ? (m.channel === 'sms' ? ' (simulated — no text provider connected)' : ' (simulated — no email provider configured)') : ''}`;
     case 'email_delivered':
-      return `${templateName(m.template)} email delivered`;
+      return `${templateName(m.template)} ${m.channel === 'sms' ? 'text' : 'email'} delivered`;
     case 'email_failed':
-      return `${templateName(m.template)} email failed${m.error ? `: ${m.error}` : ''}`;
+      return `${templateName(m.template)} ${m.channel === 'sms' ? 'text' : 'email'} failed${m.error ? `: ${m.error}` : ''}`;
     case 'email_suppressed':
-      return `${templateName(m.template)} email not sent (${m.reason})`;
+      return `${templateName(m.template)} ${m.channel === 'sms' ? 'text' : 'email'} not sent (${m.reason})`;
     case 'customer_created':
       return 'Customer record created';
     case 'customer_updated':

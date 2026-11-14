@@ -17,6 +17,7 @@ import {
   userCreateSchema,
 } from '../validation';
 import { requireRole, ServiceError, type Ctx } from './common';
+import { readyText, sendSms, ukMobile } from '../sms';
 
 /* ─────────────────────────────── Customers ─────────────────────────────── */
 
@@ -166,6 +167,7 @@ export async function updateAutomations(ctx: Ctx, enabled: Partial<Record<EmailA
     ball_design_received: Boolean(enabled.ball_design_received),
     item_arrived: Boolean(enabled.item_arrived),
     workshop_item_ready: Boolean(enabled.workshop_item_ready),
+    order_request_received: Boolean(enabled.order_request_received),
   };
   await updateOrg(ctx, 'automations', { emailAutomations: next });
 }
@@ -181,6 +183,45 @@ export async function setAutomation(ctx: Ctx, key: EmailAutomationKey, enabled: 
 export async function updatePaymentTracking(ctx: Ctx, enabled: boolean) {
   requireRole(ctx, 'admin', 'change payment settings');
   await updateOrg(ctx, 'payments', { paymentTracking: enabled });
+}
+
+/** Text customers when orders and workshop jobs are ready to collect. */
+export async function updateSmsReady(ctx: Ctx, enabled: boolean) {
+  requireRole(ctx, 'admin', 'change text message settings');
+  await updateOrg(ctx, 'sms', { smsReady: enabled });
+}
+
+/** Sends a sample "ready to collect" text so the shop can check the provider works. Not recorded against a customer. */
+export async function sendTestSms(ctx: Ctx, phone: string) {
+  requireRole(ctx, 'admin', 'send a test text');
+  const to = ukMobile(phone);
+  if (!to) throw new ServiceError('Enter a UK mobile number, e.g. 07700 900123.', { phone: 'Enter a UK mobile number' });
+  const res = await sendSms(
+    to,
+    readyText({ storeName: ctx.org.storeName, customerName: ctx.actor.type === 'user' ? ctx.actor.name : 'there', reference: 'TEST', what: 'test order', openingHours: ctx.org.openingHours }),
+  );
+  if (!res.ok) throw new ServiceError(`The text didn’t send: ${res.error}`);
+  await withTenant(ctx.org.id, (tx) =>
+    recordEvent(tx, {
+      organisationId: ctx.org.id, actor: ctx.actor, eventType: 'settings_changed', entityType: 'organisation', entityId: ctx.org.id,
+      metadata: { section: 'sms.test', recipient: to, simulated: res.simulated },
+    }),
+  );
+  return res.simulated;
+}
+
+/** Supplier sheets: days after placing an order (with no expected date) before it's listed to chase. */
+export async function updateSupplierChaseDays(ctx: Ctx, raw: string) {
+  requireRole(ctx, 'manager', 'change when orders are chased');
+  const n = Number(raw);
+  if (!Number.isInteger(n) || n < 1 || n > 120) throw new ServiceError('Enter a number of days between 1 and 120.', { supplierChaseDays: 'Between 1 and 120' });
+  await updateOrg(ctx, 'supplier_sheets', { supplierChaseDays: n });
+}
+
+/** The public special order request page at /request/<slug>. */
+export async function updateOrderRequestLink(ctx: Ctx, enabled: boolean) {
+  requireRole(ctx, 'manager', 'change the request page');
+  await updateOrg(ctx, 'order_requests', { orderRequestLink: enabled });
 }
 
 export async function updateThresholds(ctx: Ctx, raw: unknown) {

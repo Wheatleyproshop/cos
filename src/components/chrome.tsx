@@ -8,6 +8,7 @@ import { Icon } from './icons';
 const NAV = [
   { href: '/', icon: 'overview', label: 'Dashboard' },
   { href: '/orders', icon: 'orders', label: 'All orders' },
+  { href: '/orders/suppliers', icon: 'truck', label: 'Supplier orders' },
   { href: '/quotes', icon: 'quotes', label: 'Quotes' },
   { href: '/fitting', icon: 'fitting', label: 'Custom Fitting' },
   { href: '/ball-printing', icon: 'ball', label: 'Ball Printing' },
@@ -26,7 +27,10 @@ export function Sidebar({
   storeName, userName, roleLabel, signOut, sharedLoginName,
 }: { storeName: string; userName: string; roleLabel: string; signOut: () => Promise<void>; sharedLoginName?: string | null }) {
   const path = usePathname();
-  const isActive = (href: string) => (href === '/' ? path === '/' : path === href || path.startsWith(href + '/'));
+  // The most specific match wins, so Supplier orders (/orders/suppliers) doesn't also light up All orders.
+  const matches = (href: string) => (href === '/' ? path === '/' : path === href || path.startsWith(href + '/'));
+  const best = NAV.filter((n) => matches(n.href)).sort((a, b) => b.href.length - a.href.length)[0]?.href;
+  const isActive = (href: string) => href === best;
   // Phones and small tablets: the sidebar is a drawer opened from the ☰ button.
   const [open, setOpen] = useState(false);
   const [compact, setCompact] = useState(false);

@@ -9,7 +9,10 @@ import { money, niceDate, stamp } from '@/lib/format';
 import { listQuotes } from '@/lib/queries';
 import { listDeletedQuotes } from '@/lib/services/quotes';
 import { QUOTE_STATUS_LABELS } from '@/lib/status';
-import { deleteQuoteAction } from '../actions';
+import { deleteQuoteAction, orderRequestLinkAction } from '../actions';
+import { CopyLink } from '@/components/copy-link';
+import { listOpenRequests } from '@/lib/services/order-requests';
+import { appUrl } from '@/lib/tokens';
 import { QuoteNextStep } from '@/components/next-steps';
 
 export const metadata: Metadata = { title: 'Quotes' };
@@ -18,7 +21,13 @@ export default async function QuotesPage({ searchParams }: { searchParams: Promi
   const staff = await requireStaff();
   const sp = await searchParams;
   const status = sp.status === 'closed' || sp.status === 'all' ? sp.status : 'open';
-  const [rows, deleted] = await Promise.all([listQuotes(staff.org, { q: sp.q, status }), listDeletedQuotes(staff.organisationId)]);
+  const [rows, deleted, requests] = await Promise.all([
+    listQuotes(staff.org, { q: sp.q, status }),
+    listDeletedQuotes(staff.organisationId),
+    listOpenRequests(staff.organisationId),
+  ]);
+  const requestOn = staff.org.orderRequestLink;
+  const manager = hasRole(staff, 'manager');
   const tz = staff.org.timezone;
   return (
     <>
@@ -32,6 +41,48 @@ export default async function QuotesPage({ searchParams }: { searchParams: Promi
           </Link>
         }
       />
+      <section className="panel requests-panel" aria-labelledby="web-requests">
+        <div className="panel-head">
+          <h2 id="web-requests">Website special order requests</h2>
+          <span className={`badge ${requestOn ? 'ready' : 'pb-cancelled'}`}>{requestOn ? 'On' : 'Off'}</span>
+        </div>
+        {requests.length ? (
+          <ul className="attention">
+            {requests.map((r) => {
+              const spec = r.spec as { neededBy?: string; budget?: string } | null;
+              return (
+                <li key={r.quoteNumber}>
+                  <span>
+                    <Link href={`/quotes/${r.quoteNumber}`} className="rowtitle">
+                      {r.quoteNumber} · {r.customer}
+                    </Link>
+                    <span className="muted" style={{ marginLeft: 8 }}>
+                      {r.brand} {r.product}
+                    </span>
+                  </span>
+                  <span className="muted">
+                    {[spec?.neededBy, spec?.budget && `budget ${spec.budget}`, `sent ${stamp(r.createdAt, tz)}`].filter(Boolean).join(' · ')}
+                  </span>
+                </li>
+              );
+            })}
+          </ul>
+        ) : (
+          <p className="muted" style={{ marginTop: 0 }}>
+            {requestOn
+              ? 'Customers ask for something you don’t stock and it arrives here as a draft quote to price and send. Link to it from your website, e.g. a “Special orders” menu item.'
+              : 'Switched off: customers who open the link are asked to contact the shop.'}
+          </p>
+        )}
+        {requestOn ? <CopyLink url={appUrl(`/request/${staff.org.slug}`)} label="Special order request page" /> : null}
+        {manager ? (
+          <div style={{ marginTop: 10 }}>
+            <ActionButton action={orderRequestLinkAction.bind(null, !requestOn)} className="btn small">
+              {requestOn ? 'Switch page off' : 'Switch page on'}
+            </ActionButton>
+          </div>
+        ) : null}
+      </section>
       <div className="toolbar">
         <Suspense>
           <SearchBox placeholder="Search quotes by customer, email, phone, quote ID, brand, product or SKU…" />

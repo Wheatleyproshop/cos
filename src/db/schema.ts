@@ -43,7 +43,8 @@ export type EmailAutomationKey =
   | 'workshop_reminder'
   | 'ball_design_received'
   | 'item_arrived'
-  | 'workshop_item_ready';
+  | 'workshop_item_ready'
+  | 'order_request_received';
 
 export type EmailAutomations = Record<EmailAutomationKey, boolean>;
 
@@ -85,6 +86,7 @@ export const organisations = pgTable('organisations', {
     ball_design_received: true,
     item_arrived: true,
     workshop_item_ready: true,
+    order_request_received: true,
   }),
   /** Off = payments are taken at the shop's till: no Payments section, no balance check at collection. */
   paymentTracking: boolean('payment_tracking').notNull().default(true),
@@ -102,6 +104,12 @@ export const organisations = pgTable('organisations', {
   crestDesignLink: boolean('crest_design_link').notNull().default(true),
   /** Public "design your own engraved mat" page at /design/<slug>/mat. */
   matDesignLink: boolean('mat_design_link').notNull().default(true),
+  /** Public "request a special order" page at /request/<slug>. */
+  orderRequestLink: boolean('order_request_link').notNull().default(true),
+  /** Text the customer (as well as email) when an order or workshop job is ready to collect. Needs an SMS provider. */
+  smsReady: boolean('sms_ready').notNull().default(false),
+  /** Supplier sheets: chase an order placed this many days ago that hasn't arrived and has no expected date. */
+  supplierChaseDays: integer('supplier_chase_days').notNull().default(14),
   readyUncollectedDays: integer('ready_uncollected_days').notNull().default(7),
   quoteFollowupDays: integer('quote_followup_days').notNull().default(5),
   missingSupplierRefDays: integer('missing_supplier_ref_days').notNull().default(2),
@@ -371,6 +379,8 @@ export const messages = pgTable(
     workshopJobId: uuid('workshop_job_id').references(() => workshopJobs.id),
     customerId: uuid('customer_id').references(() => customers.id),
     templateType: text('template_type').$type<EmailAutomationKey>().notNull(),
+    /** How it was sent: email (default) or a text message. */
+    channel: text('channel', { enum: ['email', 'sms'] }).notNull().default('email'),
     recipient: text('recipient').notNull(),
     subject: text('subject').notNull(),
     bodyHtml: text('body_html').notNull(),

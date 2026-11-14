@@ -1,8 +1,9 @@
 import type { Metadata } from 'next';
 import { ActionButton } from '@/components/forms';
 import {
-  AutomationsForm, NewUserForm, PasswordForm, PaymentTrackingForm, PerformanceReportForm, StoreForm, TeamMemberControls, ThresholdsForm,
+  AutomationsForm, NewUserForm, PasswordForm, PaymentTrackingForm, PerformanceReportForm, SmsSettingsForm, StoreForm, TeamMemberControls, TestSmsForm, ThresholdsForm,
 } from '@/components/misc-forms';
+import { smsConfig } from '@/lib/sms';
 import { PageHeader } from '@/components/views';
 import { resolveBrand } from '@/lib/branding';
 import { fromHeader } from '@/lib/email/sender';
@@ -26,6 +27,8 @@ import {
   resetUserPasswordAction,
   performanceReportAction,
   sendReportNowAction,
+  smsReadyAction,
+  testSmsAction,
 } from '../actions';
 
 export const metadata: Metadata = { title: 'Store settings' };
@@ -89,6 +92,27 @@ export default async function SettingsPage() {
           <PaymentTrackingForm action={paymentTrackingAction} enabled={org.paymentTracking} disabled={!admin} />
         </section>
       </div>
+
+      <section className="panel" id="texts" style={{ scrollMarginTop: 20, marginTop: 18 }}>
+        <h2>Text messages</h2>
+        {smsConfig() ? (
+          <p>
+            <span className="badge ready">Connected</span> Texts are sent through your Twilio account, from “{process.env.TWILIO_FROM}”. Each text costs a few pence, billed by Twilio.
+          </p>
+        ) : (
+          <div className="notice warn">
+            <b>No text provider connected yet.</b> COS sends texts through Twilio (about 4p a text in the UK). Once you have an account, add three settings to the COS hosting
+            (Vercel → Settings → Environment Variables): <code>TWILIO_ACCOUNT_SID</code>, <code>TWILIO_AUTH_TOKEN</code> and <code>TWILIO_FROM</code> (your Twilio number,
+            or a sender name of up to 11 letters such as <code>DesirableGlf</code>), then redeploy. Until then, texts are only recorded, not sent.
+          </div>
+        )}
+        <SmsSettingsForm action={smsReadyAction} enabled={org.smsReady} disabled={!admin} />
+        {admin ? (
+          <div style={{ marginTop: 16 }}>
+            <TestSmsForm action={testSmsAction} />
+          </div>
+        ) : null}
+      </section>
 
       <section className="panel" id="report" style={{ scrollMarginTop: 20 }}>
         <h2>Monthly performance report</h2>

@@ -1040,3 +1040,29 @@ html:has(.tv), html:has(.tv) body { overflow: hidden; height: 100%; }
 .tv .dash-donut svg { width: 220px; }
 .tv-spark { height: 200px; }
 .tv .dash-brands { grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); }
+
+/* ---------- Supplier order sheets ---------- */
+.sheet-intro { margin: 4px 0 14px; }
+.sheet { margin-bottom: 16px; }
+.sheet-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 14px; flex-wrap: wrap; margin-bottom: 10px; }
+.sheet-head h2 { margin: 0 0 2px; }
+.sheet-acct { font-size: 13px; }
+.sheet-buttons { display: flex; gap: 8px; flex-wrap: wrap; }
+.sheet-lines td { vertical-align: top; }
+.sheet-details { font-size: 12.5px; }
+.sheet-print-title { display: none; }
+.markplaced { margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--line); }
+@media print {
+  html.print-one body * { visibility: hidden; }
+  html.print-one .sheet.printing, html.print-one .sheet.printing * { visibility: visible; }
+  html.print-one .sheet.printing { position: absolute; inset: 0 auto auto 0; width: 100%; border: 0; box-shadow: none; padding: 0; }
+  html.print-one .sheet.printing :is(.sheet-buttons, .markplaced) { display: none; }
+  html.print-one .sheet.printing .sheet-print-title { display: block; font-size: 13px; color: #555; margin: 0 0 10px; }
+  html.print-one .sheet.printing a { color: inherit; text-decoration: none; }
+}
+.request-h { font-size: 17px; margin: 22px 0 10px; }
+.request-small { font-size: 13px; margin: 14px 0 6px; }
+.request-done { padding: 18px 20px; }
+.request-done p { margin: 6px 0 0; }
+.requests-panel { margin-bottom: 18px; }
+.sheet-lead { margin-left: 10px; font-size: 12px; font-weight: 500; color: var(--muted); background: var(--bg, #f3f2ee); border: 1px solid var(--line); border-radius: 99px; padding: 3px 9px; vertical-align: middle; }

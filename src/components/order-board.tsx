@@ -43,7 +43,24 @@ export function OrderBoard({ rows, today, paymentTracking }: { rows: WorkRow[]; 
             </Link>
             <b>{c.rows.length}</b>
           </header>
-          <p className="muted">{c.hint}</p>
+          <p className="muted">
+            {c.hint}
+            {c.key === 'place' && c.rows.length ? (
+              <>
+                {' · '}
+                <Link href="/orders/suppliers" className="bc-sheets">
+                  Supplier sheets →
+                </Link>
+              </>
+            ) : c.key === 'placed' && c.rows.length ? (
+              <>
+                {' · '}
+                <Link href="/orders/suppliers?tab=chase" className="bc-sheets">
+                  What to chase →
+                </Link>
+              </>
+            ) : null}
+          </p>
           {c.rows.length ? (
             <ul>
               {c.rows.slice(0, 8).map((r) => {

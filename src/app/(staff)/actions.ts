@@ -49,8 +49,13 @@ import {
   updateStoreSettings,
   updateThresholds,
   updateUser,
+  updateSmsReady,
+  sendTestSms,
+  updateSupplierChaseDays,
+  updateOrderRequestLink,
 } from '@/lib/services/admin';
 import { runBackup } from '@/lib/services/backups';
+import { markSupplierPlaced } from '@/lib/services/supplier-sheets';
 import { sendTestEmail } from '@/lib/services/test-email';
 import { addBrand, addComponent, addModel, createFittingQuote, setCatalogActive, setCatalogRemoved, updateComponentUpcharge, updateModelPrice } from '@/lib/services/fitting';
 import {
@@ -417,6 +422,53 @@ export async function paymentTrackingAction(_: FormState, fd: FormData) {
     const on = fd.get('paymentTracking') === 'on';
     await updatePaymentTracking(ctx, on);
     return on ? 'Payments section switched on.' : 'Payments section switched off — payments are taken at your till.';
+  });
+}
+
+export async function markSupplierPlacedAction(key: string, _: FormState, fd: FormData) {
+  return act(
+    'staff',
+    async (ctx, staff) => {
+      const r = await markSupplierPlaced(ctx, staff.org, key, {
+        supplierReference: String(fd.get('supplierReference') ?? '').trim().slice(0, 120),
+        etaDate: String(fd.get('etaDate') ?? '').trim(),
+      });
+      return `${r.lines} ${r.lines === 1 ? 'line' : 'lines'} from ${r.supplier} marked as placed.`;
+    },
+    fd,
+  );
+}
+
+export async function smsReadyAction(_: FormState, fd: FormData) {
+  return act('admin', async (ctx) => {
+    const on = fd.get('smsReady') === 'on';
+    await updateSmsReady(ctx, on);
+    return on ? 'Customers will now get a text when their order or workshop job is ready.' : 'Ready-to-collect texts switched off.';
+  });
+}
+
+export async function testSmsAction(_: FormState, fd: FormData) {
+  return act(
+    'admin',
+    async (ctx) => {
+      const simulated = await sendTestSms(ctx, String(fd.get('phone') ?? ''));
+      return simulated ? 'Test recorded, but no text was sent: connect a Twilio account first (see below).' : 'Test text sent. It should arrive within a minute.';
+    },
+    fd,
+  );
+}
+
+export async function supplierChaseDaysAction(_: FormState, fd: FormData) {
+  return act('manager', async (ctx) => {
+    await updateSupplierChaseDays(ctx, String(fd.get('supplierChaseDays') ?? ''));
+    return 'Saved.';
+  }, fd);
+}
+
+export async function orderRequestLinkAction(enabled: boolean) {
+  return act('manager', async (ctx) => {
+    await updateOrderRequestLink(ctx, enabled);
+    return enabled ? 'Request page switched on.' : 'Request page switched off.';
   });
 }
 

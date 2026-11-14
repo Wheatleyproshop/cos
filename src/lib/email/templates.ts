@@ -64,6 +64,7 @@ export const TEMPLATE_KEYS: EmailAutomationKey[] = [
   'ball_design_received',
   'item_arrived',
   'workshop_item_ready',
+  'order_request_received',
 ];
 
 const esc = (s: unknown) =>
@@ -328,6 +329,19 @@ export function renderEmail(type: EmailAutomationKey, ctx: EmailContext): Render
         rows: [{ label: W.designPriceLabel, value: money(ctx.totalPence) }],
       });
       return { subject: `We’ve received your ${W.designWord} design (${ctx.reference})`, ...r };
+    }
+    case 'order_request_received': {
+      const rows: Block[] = [{ label: 'You asked about', value: [ctx.brand, ctx.product].filter(Boolean).join(' ') }];
+      const r = layout(ctx, {
+        preheader: 'We’ve received your special order request.',
+        heading: 'Thanks — we’ve got your request',
+        intro: [
+          'We’ll check price and availability with the manufacturer and get back to you with a quote, usually within one working day.',
+          'Nothing is ordered until you’ve approved the quote. If you’d like to add anything, just reply to this email.',
+        ],
+        rows,
+      });
+      return { subject: `We’ve received your request (${ctx.reference})`, ...r };
     }
     case 'workshop_checked_in': {
       const rows: Block[] = [{ label: 'Estimated ready', value: ctx.etaDate ? longDate(ctx.etaDate) : 'We’ll confirm shortly' }];

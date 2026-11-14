@@ -2,7 +2,8 @@ import { and, desc, eq, inArray, isNotNull, isNull, sql } from 'drizzle-orm';
 import { withTenant, type DB } from '@/db';
 import { attachments, auditEvents, customers, orders, payments, type Customer, type Order } from '@/db/schema';
 import { recordEvent } from '../audit';
-import { dispatchMessages, enqueueEmail } from '../email/outbox';
+import { dispatchMessages, enqueueEmail, enqueueSms } from '../email/outbox';
+import { readyText } from '../sms';
 import type { EmailContext } from '../email/templates';
 import { ALLOWED_UPLOAD_TYPES, MAX_UPLOAD_BYTES, storage } from '../storage';
 import { fitSpec } from '../fit-spec';
@@ -323,6 +324,15 @@ export async function updateOrderProgress(ctx: Ctx, orderId: string, raw: unknow
           await enqueueEmail(tx, {
             org: ctx.org, template: 'ready_for_collection', recipient: customer.email, customerId: customer.id,
             orderId, context: ctxEmail, actor: ctx.actor, suppressedBy,
+          }),
+        );
+        ids.push(
+          await enqueueSms(tx, {
+            org: ctx.org, template: 'ready_for_collection', phone: customer.phone, customerId: customer.id, orderId, actor: ctx.actor, suppressedBy,
+            text: readyText({
+              storeName: ctx.org.storeName, customerName: customer.name, reference: updated.orderNumber, what: updated.product,
+              balancePence: ctx.org.paymentTracking ? ctxEmail.balancePence : 0, openingHours: ctx.org.openingHours,
+            }),
           }),
         );
       } else {

@@ -170,6 +170,7 @@ const AUTOMATIONS: { key: string; label: string; detail: string }[] = [
   { key: 'workshop_delayed', label: 'Workshop: waiting for parts', detail: 'When a workshop job is waiting for parts (date changes alone aren’t emailed)' },
   { key: 'workshop_ready', label: 'Workshop: ready to collect', detail: 'When a workshop job is marked ready' },
   { key: 'workshop_item_ready', label: 'Workshop: one club ready', detail: 'When one club on a multi-club job is done and you tick “Email the customer”' },
+  { key: 'order_request_received', label: 'Website request received', detail: 'When a customer sends a special order request from your website' },
   { key: 'workshop_reminder', label: 'Workshop: collection reminder', detail: 'Daily check for workshop jobs ready but not collected' },
   { key: 'ball_design_received', label: 'Online design received', detail: 'When a customer sends in their own golf ball or cresting design online' },
 ];
@@ -394,6 +395,75 @@ export function PerformanceReportForm({
             </div>
           )}
         </>
+      )}
+    </ActionForm>
+  );
+}
+
+/* ── Text messages ───────────────────────────────────────────────────── */
+
+export function SmsSettingsForm({ action, enabled, disabled }: { action: BoundAction; enabled: boolean; disabled: boolean }) {
+  return (
+    <ActionForm action={action}>
+      {(s) => (
+        <fieldset disabled={disabled} style={{ border: 0, padding: 0, margin: 0 }}>
+          <label className="check">
+            <input type="checkbox" name="smsReady" defaultChecked={enabled} />
+            <span>
+              <b>Text customers when it’s ready to collect</b>
+              <div className="muted">
+                Sent with the “Ready for collection” and “Workshop: ready to collect” emails, to customers with a UK mobile number on their record.
+                Unticking “Email the customer” on an order skips the text too.
+              </div>
+            </span>
+          </label>
+          <FormMessage state={s} />
+          {!disabled ? (
+            <div className="actions" style={{ marginTop: 10 }}>
+              <Submit>Save</Submit>
+            </div>
+          ) : null}
+        </fieldset>
+      )}
+    </ActionForm>
+  );
+}
+
+export function TestSmsForm({ action }: { action: BoundAction }) {
+  return (
+    <ActionForm action={action}>
+      {(s) => (
+        <>
+          <div className="fields" style={{ alignItems: 'end' }}>
+            <Field state={s} name="phone" label="Send a test text to" type="tel" inputMode="tel" placeholder="07700 900123" autoComplete="off" />
+            <div className="actions" style={{ margin: 0 }}>
+              <Submit className="btn">Send test</Submit>
+            </div>
+          </div>
+          <FormMessage state={s} />
+        </>
+      )}
+    </ActionForm>
+  );
+}
+
+/* ── Supplier sheets & website requests ──────────────────────────────── */
+
+export function ChaseDaysForm({ action, days, disabled }: { action: BoundAction; days: number; disabled: boolean }) {
+  return (
+    <ActionForm action={action}>
+      {(s) => (
+        <fieldset disabled={disabled} style={{ border: 0, padding: 0, margin: 0 }}>
+          <div className="fields" style={{ alignItems: 'end' }}>
+            <Field state={s} name="supplierChaseDays" label="Chase a supplier after (days)" type="number" min="1" defaultValue={days} hint="For orders placed with no expected date. Orders past their expected date are always listed." />
+            {!disabled ? (
+              <div className="actions" style={{ margin: 0 }}>
+                <Submit className="btn">Save</Submit>
+              </div>
+            ) : null}
+          </div>
+          <FormMessage state={s} />
+        </fieldset>
       )}
     </ActionForm>
   );
