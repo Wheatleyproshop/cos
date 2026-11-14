@@ -138,6 +138,7 @@ const TEMPLATE_NAMES: Record<string, string> = {
   workshop_ready: 'Workshop ready to collect',
   workshop_reminder: 'Workshop collection reminder',
   ball_design_received: 'Online design received',
+  item_arrived: 'Item arrived',
 };
 
 export function templateName(key: string): string {

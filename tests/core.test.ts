@@ -180,7 +180,13 @@ describe('order lifecycle', () => {
     expect(itemsProgress(fresh.specificationJson)).toEqual({ total: 3, arrived: 1, collected: 0, delayed: 1 });
     const it2 = (fresh.specificationJson as { items: { status: string; etaDate: string; supplierReference: string }[] }).items[1];
     expect(it2).toMatchObject({ status: 'delayed', etaDate: '2026-12-20', supplierReference: 'TIT-99' });
-    await updateOrderItem(staff, order.id, 1, { status: 'arrived', etaDate: '', supplierReference: 'TIT-99' });
+    const emailed = await updateOrderItem(staff, order.id, 1, { status: 'arrived', etaDate: '', supplierReference: 'TIT-99' }, { emailArrived: true });
+    expect(emailed.emailed).toBe(true);
+    const sentMail = await withTenant(org.id, (tx) => tx.select().from(messages).where(and(eq(messages.orderId, order.id), eq(messages.templateType, 'item_arrived'))));
+    expect(sentMail).toHaveLength(1);
+    expect(sentMail[0].subject).toBe(`Part of your order has arrived — ${order.orderNumber}`);
+    expect(sentMail[0].bodyHtml).toContain('Titleist Pro V1');
+    expect(sentMail[0].bodyHtml).toContain('FootJoy Premiere Series shoes');
     r = await updateOrderItem(staff, order.id, 2, { status: 'arrived', etaDate: '', supplierReference: '' });
     expect(r.allArrived).toBe(true);
     const ev = await withTenant(org.id, (tx) => tx.select().from(auditEvents).where(and(eq(auditEvents.orderId, order.id), eq(auditEvents.eventType, 'order_item_changed'))));

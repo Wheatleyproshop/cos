@@ -164,6 +164,7 @@ const AUTOMATIONS: { key: string; label: string; detail: string }[] = [
   { key: 'quote_approval', label: 'Quote approval', detail: 'When staff send a quote for approval' },
   { key: 'eta_revised', label: 'Out of stock / delayed', detail: 'When an order is marked out of stock or delayed (date changes alone aren’t emailed)' },
   { key: 'ready_for_collection', label: 'Ready for collection', detail: 'When an order is marked ready' },
+  { key: 'item_arrived', label: 'Item arrived (multi-item orders)', detail: 'When one item on a multi-item order arrives and you tick “Email the customer”' },
   { key: 'collection_reminder', label: 'Collection reminder', detail: 'Daily check for orders ready but not collected' },
   { key: 'workshop_checked_in', label: 'Workshop: clubs checked in', detail: 'When clubs are checked in for repair or regripping' },
   { key: 'workshop_delayed', label: 'Workshop: waiting for parts', detail: 'When a workshop job is waiting for parts (date changes alone aren’t emailed)' },

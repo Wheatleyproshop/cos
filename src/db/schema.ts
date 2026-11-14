@@ -41,7 +41,8 @@ export type EmailAutomationKey =
   | 'workshop_delayed'
   | 'workshop_ready'
   | 'workshop_reminder'
-  | 'ball_design_received';
+  | 'ball_design_received'
+  | 'item_arrived';
 
 export type EmailAutomations = Record<EmailAutomationKey, boolean>;
 
@@ -81,6 +82,7 @@ export const organisations = pgTable('organisations', {
     workshop_ready: true,
     workshop_reminder: true,
     ball_design_received: true,
+    item_arrived: true,
   }),
   /** Off = payments are taken at the shop's till: no Payments section, no balance check at collection. */
   paymentTracking: boolean('payment_tracking').notNull().default(true),

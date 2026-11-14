@@ -44,6 +44,9 @@ export type EmailContext = {
   journey?: 'supplier' | 'print' | 'cresting' | 'engraving';
   /** Order placed but the item is out of stock at the manufacturer (back order). */
   outOfStock?: boolean;
+  /** Multi-item orders: the item that has just arrived, and what's still to come. */
+  itemName?: string;
+  itemsToCome?: string[];
 };
 
 export type RenderedEmail = { subject: string; html: string; text: string };
@@ -59,6 +62,7 @@ export const TEMPLATE_KEYS: EmailAutomationKey[] = [
   'workshop_ready',
   'workshop_reminder',
   'ball_design_received',
+  'item_arrived',
 ];
 
 const esc = (s: unknown) =>
@@ -269,6 +273,27 @@ export function renderEmail(type: EmailAutomationKey, ctx: EmailContext): Render
         cta: ctx.actionUrl ? { label: 'Track your order', url: ctx.actionUrl } : undefined,
       });
       return { subject: print ? `A short delay with your order ${ctx.reference}` : `Your order ${ctx.reference} is delayed — ${ctx.brand} ${ctx.product}`, ...r };
+    }
+    case 'item_arrived': {
+      const item = ctx.itemName || `${ctx.brand} ${ctx.product}`;
+      const toCome = ctx.itemsToCome ?? [];
+      const rows: Block[] = [{ label: 'Arrived', value: item }];
+      if (toCome.length) rows.push({ label: 'Still to come', value: toCome.join('\n') });
+      rows.push({ label: 'Collect from', value: ctx.store.collectionLocation || s });
+      if (ctx.store.openingHours) rows.push({ label: 'Opening hours', value: ctx.store.openingHours });
+      const r = layout(ctx, {
+        preheader: `Your ${item} has arrived in store.`,
+        heading: 'Part of your order has arrived',
+        intro: [
+          `Good news. Your ${item} has arrived in store.`,
+          toCome.length
+            ? 'We’re still waiting on the rest of your order. You’re welcome to collect this now, or wait and collect everything together. We’ll let you know when the rest arrives.'
+            : 'You’re welcome to pop in and collect it.',
+        ],
+        rows,
+        cta: ctx.actionUrl ? { label: 'View your order', url: ctx.actionUrl } : undefined,
+      });
+      return { subject: `Part of your order has arrived — ${ctx.reference}`, ...r };
     }
     case 'ball_design_received': {
       const r = layout(ctx, {

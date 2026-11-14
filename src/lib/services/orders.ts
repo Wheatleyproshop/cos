@@ -144,10 +144,10 @@ const itemUpdateSchema = z.object({
 });
 
 /** Moves one item on a multi-item order on its own (status, expected date, supplier reference). */
-export async function updateOrderItem(ctx: Ctx, orderId: string, index: number, raw: unknown) {
+export async function updateOrderItem(ctx: Ctx, orderId: string, index: number, raw: unknown, opts: { emailArrived?: boolean } = {}) {
   const v = parse(itemUpdateSchema, raw);
-  return withTenant(ctx.org.id, async (tx) => {
-    const { order } = await loadOrder(tx, ctx, orderId);
+  const res = await withTenant(ctx.org.id, async (tx) => {
+    const { order, customer } = await loadOrder(tx, ctx, orderId);
     if (order.archivedAt) throw new ServiceError('This order is archived.');
     const spec = asItemsSpec(order.specificationJson);
     const item = spec?.items[index];
@@ -161,12 +161,35 @@ export async function updateOrderItem(ctx: Ctx, orderId: string, index: number, 
       newValue: { index: index + 1, item: `${item.brand} ${item.product}`, status: v.status, statusLabel: ITEM_STATUS_LABELS[v.status], etaDate: v.etaDate, supplierReference: v.supplierReference },
     });
     const st = items.map(itemStatus);
+    let messageId: string | null = null;
+    if (opts.emailArrived && v.status === 'arrived' && before.status !== 'arrived') {
+      const describe = (it: (typeof items)[number]) => [it.colour, it.size].filter(Boolean).join(', ');
+      const name = (it: (typeof items)[number]) => `${it.brand} ${it.product}${describe(it) ? ` (${describe(it)})` : ''}`;
+      const toCome = items
+        .filter((it) => !['arrived', 'collected'].includes(itemStatus(it)))
+        .map((it) => `${name(it)}${itemStatus(it) === 'delayed' ? ' – delayed at the supplier' : it.etaDate ? ` – expected ${it.etaDate.split('-').reverse().join('/')}` : ''}`);
+      const totals = await paymentTotals(tx, order.id);
+      const link = await issueTrackingLink(tx, ctx.org.id, order.id);
+      messageId = await enqueueEmail(tx, {
+        org: ctx.org,
+        template: 'item_arrived',
+        recipient: customer.email,
+        customerId: customer.id,
+        orderId: order.id,
+        context: { ...orderEmailContext(order, customer, totals, link), itemName: name(items[index]), itemsToCome: toCome },
+        actor: ctx.actor,
+        suppressedBy: null,
+      });
+    }
     return {
       orderNumber: order.orderNumber,
       allArrived: st.every((x) => x === 'arrived' || x === 'collected'),
       allCollected: st.every((x) => x === 'collected'),
+      messageId,
     };
   });
+  if (res.messageId) await dispatchMessages(ctx.org, [res.messageId]);
+  return { ...res, emailed: Boolean(res.messageId) };
 }
 
 /** Several items on one order/quote (see order-items). */

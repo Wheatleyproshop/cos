@@ -47,5 +47,6 @@ export async function renderSample(org: Organisation, template: EmailAutomationK
     leadTime: '2–3 weeks',
     validUntil: addDays(today, 14),
     actionUrl,
+    ...(template === 'item_arrived' ? { itemName: 'Nike Victory Polo (Navy, L)', itemsToCome: ['Titleist Pro V1 golf balls (out of stock, expected soon)'] } : {}),
   });
 }

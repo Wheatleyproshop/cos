@@ -124,10 +124,11 @@ export async function createRequestAction(_: FormState, fd: FormData): Promise<F
 
 export async function orderItemAction(orderId: string, index: number, _: FormState, fd: FormData) {
   return act('staff', async (ctx) => {
-    const r = await updateOrderItem(ctx, orderId, index, obj(fd));
+    const r = await updateOrderItem(ctx, orderId, index, obj(fd), { emailArrived: flag(fd, 'emailArrived') });
+    const sent = r.emailed ? ' The customer has been emailed that it’s arrived.' : '';
     if (r.allCollected) return 'Saved. Every item has been collected: set the order to Collected below to close it.';
-    if (r.allArrived) return 'Saved. Every item has arrived: mark the order Ready for collection below to email the customer.';
-    return 'Item updated.';
+    if (r.allArrived) return `Saved.${sent} Every item has arrived: mark the order Ready for collection below to email the customer.`;
+    return sent ? `Saved.${sent}` : 'Item updated.';
   }, fd);
 }
 

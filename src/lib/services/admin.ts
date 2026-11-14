@@ -164,6 +164,7 @@ export async function updateAutomations(ctx: Ctx, enabled: Partial<Record<EmailA
     workshop_ready: Boolean(enabled.workshop_ready),
     workshop_reminder: Boolean(enabled.workshop_reminder),
     ball_design_received: Boolean(enabled.ball_design_received),
+    item_arrived: Boolean(enabled.item_arrived),
   };
   await updateOrg(ctx, 'automations', { emailAutomations: next });
 }
