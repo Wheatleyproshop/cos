@@ -94,7 +94,26 @@ export type EventType =
   | 'ball_design_submitted'
   | 'crest_design_submitted'
   | 'mat_design_submitted'
-  | 'order_request_submitted';
+  | 'order_request_submitted'
+  | 'business_unlocked'
+  | 'business_unlock_failed'
+  | 'staff_profile_saved'
+  | 'staff_sensitive_viewed'
+  | 'clock_pin_set'
+  | 'clock_pin_failed'
+  | 'clocked_in'
+  | 'clocked_out'
+  | 'time_entry_added'
+  | 'time_entry_changed'
+  | 'time_entry_removed'
+  | 'rota_changed'
+  | 'pay_run_created'
+  | 'payslip_saved'
+  | 'payslip_file_added'
+  | 'pay_run_finalised'
+  | 'bank_statement_uploaded'
+  | 'bank_statement_removed'
+  | 'bank_category_changed';
 
 export type EventInput = {
   organisationId: string;

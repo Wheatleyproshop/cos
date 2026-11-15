@@ -173,6 +173,7 @@ export async function logout() {
   if (token) await systemDb().delete(sessions).where(eq(sessions.tokenHash, hashToken(token)));
   jar.delete(SESSION_COOKIE);
   jar.delete(ACTING_COOKIE);
+  jar.delete('cos_business'); // the Business area locks on sign-out
 }
 
 export { revokeUserSessions } from './sessions';

@@ -760,3 +760,169 @@ export type Prebook = typeof prebooks.$inferSelect;
 export type PrebookLine = typeof prebookLines.$inferSelect;
 export type ProductModel = typeof productModels.$inferSelect;
 export type Component = typeof components.$inferSelect;
+
+/* ───────────────────────── Business (owner only) ────────────────────────── */
+
+/**
+ * HR record for a team member (one per user). Everyday fields are plain; identity and bank details
+ * live in `sensitiveEncrypted` (AES-256-GCM, see lib/tokens) and are only decrypted in the Business area.
+ */
+export type StaffSensitive = {
+  niNumber?: string; dateOfBirth?: string; address?: string; postcode?: string; taxCode?: string;
+  bankName?: string; sortCode?: string; accountNumber?: string; accountName?: string;
+};
+export const PAY_TYPES = ['hourly', 'salary'] as const;
+
+export const staffProfiles = pgTable(
+  'staff_profiles',
+  {
+    id: id(),
+    organisationId: orgId(),
+    userId: uuid('user_id').notNull().references(() => users.id),
+    jobTitle: text('job_title').notNull().default(''),
+    phone: text('phone').notNull().default(''),
+    personalEmail: text('personal_email').notNull().default(''),
+    startDate: date('start_date', { mode: 'string' }),
+    endDate: date('end_date', { mode: 'string' }),
+    payType: text('pay_type', { enum: PAY_TYPES }).notNull().default('hourly'),
+    hourlyRatePence: integer('hourly_rate_pence').notNull().default(0),
+    annualSalaryPence: integer('annual_salary_pence').notNull().default(0),
+    /** Contracted hours per week, in minutes (0 = zero-hours / casual). */
+    contractedMinutesPerWeek: integer('contracted_minutes_per_week').notNull().default(0),
+    /** Holiday allowance per year, in tenths of a day (e.g. 280 = 28 days). */
+    holidayTenthsPerYear: integer('holiday_tenths_per_year').notNull().default(280),
+    emergencyName: text('emergency_name').notNull().default(''),
+    emergencyPhone: text('emergency_phone').notNull().default(''),
+    emergencyRelation: text('emergency_relation').notNull().default(''),
+    notes: text('notes').notNull().default(''),
+    sensitiveEncrypted: text('sensitive_encrypted'),
+    /** bcrypt of the 4–6 digit clock-in PIN. */
+    clockPinHash: text('clock_pin_hash'),
+    createdAt: createdAt(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex('staff_profiles_user_unique').on(t.userId)],
+);
+
+/** Hours worked: from the clock-in screen, or added/corrected by the owner (corrections are audited). */
+export const timeEntries = pgTable(
+  'time_entries',
+  {
+    id: id(),
+    organisationId: orgId(),
+    userId: uuid('user_id').notNull().references(() => users.id),
+    clockIn: timestamp('clock_in', { withTimezone: true }).notNull(),
+    clockOut: timestamp('clock_out', { withTimezone: true }),
+    breakMinutes: integer('break_minutes').notNull().default(0),
+    source: text('source', { enum: ['clock', 'manual'] }).notNull().default('clock'),
+    note: text('note').notNull().default(''),
+    createdAt: createdAt(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+    removedAt: timestamp('removed_at', { withTimezone: true }),
+  },
+  (t) => [index('time_entries_user_in_idx').on(t.userId, t.clockIn), index('time_entries_org_in_idx').on(t.organisationId, t.clockIn)],
+);
+
+/** The rota: planned shifts. */
+export const rotaShifts = pgTable(
+  'rota_shifts',
+  {
+    id: id(),
+    organisationId: orgId(),
+    userId: uuid('user_id').notNull().references(() => users.id),
+    date: date('date', { mode: 'string' }).notNull(),
+    startTime: text('start_time').notNull(),
+    endTime: text('end_time').notNull(),
+    note: text('note').notNull().default(''),
+    createdAt: createdAt(),
+    removedAt: timestamp('removed_at', { withTimezone: true }),
+  },
+  (t) => [index('rota_org_date_idx').on(t.organisationId, t.date)],
+);
+
+/** A pay period. Finalised runs are locked. */
+export const payRuns = pgTable(
+  'pay_runs',
+  {
+    id: id(),
+    organisationId: orgId(),
+    periodStart: date('period_start', { mode: 'string' }).notNull(),
+    periodEnd: date('period_end', { mode: 'string' }).notNull(),
+    payDate: date('pay_date', { mode: 'string' }).notNull(),
+    status: text('status', { enum: ['draft', 'finalised'] }).notNull().default('draft'),
+    createdAt: createdAt(),
+    finalisedAt: timestamp('finalised_at', { withTimezone: true }),
+  },
+  (t) => [index('pay_runs_org_idx').on(t.organisationId, t.periodEnd)],
+);
+
+/** One person's pay for a pay run. Deductions are entered by the owner (from HMRC Basic PAYE Tools or their accountant). */
+export const payslips = pgTable(
+  'payslips',
+  {
+    id: id(),
+    organisationId: orgId(),
+    payRunId: uuid('pay_run_id').notNull().references(() => payRuns.id),
+    userId: uuid('user_id').notNull().references(() => users.id),
+    minutesWorked: integer('minutes_worked').notNull().default(0),
+    hourlyRatePence: integer('hourly_rate_pence').notNull().default(0),
+    basicPence: integer('basic_pence').notNull().default(0),
+    holidayPayPence: integer('holiday_pay_pence').notNull().default(0),
+    bonusPence: integer('bonus_pence').notNull().default(0),
+    taxPence: integer('tax_pence').notNull().default(0),
+    employeeNiPence: integer('employee_ni_pence').notNull().default(0),
+    pensionPence: integer('pension_pence').notNull().default(0),
+    otherDeductionsPence: integer('other_deductions_pence').notNull().default(0),
+    employerNiPence: integer('employer_ni_pence').notNull().default(0),
+    employerPensionPence: integer('employer_pension_pence').notNull().default(0),
+    notes: text('notes').notNull().default(''),
+    /** An uploaded payslip PDF (encrypted in private storage), e.g. from Basic PAYE Tools. */
+    fileKey: text('file_key'),
+    fileName: text('file_name'),
+    createdAt: createdAt(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex('payslips_run_user_unique').on(t.payRunId, t.userId)],
+);
+
+export const bankStatements = pgTable('bank_statements', {
+  id: id(),
+  organisationId: orgId(),
+  accountName: text('account_name').notNull().default(''),
+  fileName: text('file_name').notNull(),
+  fromDate: date('from_date', { mode: 'string' }),
+  toDate: date('to_date', { mode: 'string' }),
+  transactionCount: integer('transaction_count').notNull().default(0),
+  duplicatesSkipped: integer('duplicates_skipped').notNull().default(0),
+  uploadedByUserId: uuid('uploaded_by_user_id').notNull().references(() => users.id),
+  createdAt: createdAt(),
+  removedAt: timestamp('removed_at', { withTimezone: true }),
+});
+
+export const bankTransactions = pgTable(
+  'bank_transactions',
+  {
+    id: id(),
+    organisationId: orgId(),
+    statementId: uuid('statement_id').notNull().references(() => bankStatements.id),
+    date: date('date', { mode: 'string' }).notNull(),
+    description: text('description').notNull(),
+    /** Money in is positive, money out negative. */
+    amountPence: integer('amount_pence').notNull(),
+    balancePence: integer('balance_pence'),
+    category: text('category').notNull().default('Uncategorised'),
+    /** Same date + amount + description + running balance = the same transaction uploaded twice. */
+    fingerprint: text('fingerprint').notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [uniqueIndex('bank_tx_org_fp_unique').on(t.organisationId, t.fingerprint), index('bank_tx_org_date_idx').on(t.organisationId, t.date)],
+);
+
+/** "Anything containing X is category Y", learned when the owner re-categorises a transaction. */
+export const bankRules = pgTable('bank_rules', {
+  id: id(),
+  organisationId: orgId(),
+  match: text('match').notNull(),
+  category: text('category').notNull(),
+  createdAt: createdAt(),
+});

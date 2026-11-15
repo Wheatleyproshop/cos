@@ -22,14 +22,19 @@ const NAV = [
   { href: '/emails', icon: 'emails', label: 'Email previews' },
   { href: '/settings', icon: 'settings', label: 'Store settings' },
 ];
+/** Shown to everyone: the shop's clock-in screen. */
+const CLOCK = { href: '/clock', icon: 'clockin', label: 'Clock in / out' };
+/** Owner only, and locked behind their password. */
+const BUSINESS = { href: '/business', icon: 'business', label: 'Business 🔒' };
 
 export function Sidebar({
-  storeName, userName, roleLabel, signOut, sharedLoginName,
-}: { storeName: string; userName: string; roleLabel: string; signOut: () => Promise<void>; sharedLoginName?: string | null }) {
+  storeName, userName, roleLabel, signOut, sharedLoginName, isOwner,
+}: { storeName: string; userName: string; roleLabel: string; signOut: () => Promise<void>; sharedLoginName?: string | null; isOwner?: boolean }) {
   const path = usePathname();
+  const nav = [...NAV.slice(0, -1), CLOCK, ...(isOwner ? [BUSINESS] : []), NAV[NAV.length - 1]];
   // The most specific match wins, so Supplier orders (/orders/suppliers) doesn't also light up All orders.
   const matches = (href: string) => (href === '/' ? path === '/' : path === href || path.startsWith(href + '/'));
-  const best = NAV.filter((n) => matches(n.href)).sort((a, b) => b.href.length - a.href.length)[0]?.href;
+  const best = nav.filter((n) => matches(n.href)).sort((a, b) => b.href.length - a.href.length)[0]?.href;
   const isActive = (href: string) => href === best;
   // Phones and small tablets: the sidebar is a drawer opened from the ☰ button.
   const [open, setOpen] = useState(false);
@@ -105,7 +110,7 @@ export function Sidebar({
           </span>
         </Link>
         <nav>
-          {NAV.map((n) => (
+          {nav.map((n) => (
             <Link key={n.href} href={n.href} className={`nav${isActive(n.href) ? ' active' : ''}`} aria-current={isActive(n.href) ? 'page' : undefined} data-label={n.label}>
               <span className="icon" aria-hidden="true">
                 <Icon name={n.icon} />
