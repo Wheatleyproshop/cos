@@ -5,7 +5,7 @@ import { PageHeader } from '@/components/views';
 import { requireBusiness } from '@/lib/business-lock';
 import { todayInTz } from '@/lib/format';
 import { brandReview, salesLines, type Perf } from '@/lib/services/business/brand-review';
-import { marginStory } from '@/lib/services/business/advice';
+import { marginStory, supplierReturn } from '@/lib/services/business/advice';
 import { shopifyStatus } from '@/lib/services/business/shopify-sync';
 import { setVoucherAction, syncShopifyAction } from '../../actions';
 
@@ -84,11 +84,12 @@ export default async function BrandReviewPage({ searchParams }: { searchParams: 
   const from = new Date(new Date(`${to}T12:00:00Z`).getTime() - days * 86_400_000).toISOString().slice(0, 10);
   const brand = sp.brand?.slice(0, 80);
   const category = brand ? undefined : sp.category?.slice(0, 80);
-  const [r, shopify, lines, story] = await Promise.all([
+  const [r, shopify, lines, story, spend] = await Promise.all([
     brandReview(staff.organisationId, from, to),
     shopifyStatus(staff.organisationId),
     brand || category ? salesLines(staff.organisationId, from, to, { brand, category }) : Promise.resolve(null),
     marginStory(staff.organisationId, from, to),
+    supplierReturn(staff.organisationId, todayInTz(staff.org.timezone)),
   ]);
   const href = (o: Record<string, string>) => `/business/brands?${new URLSearchParams({ days: String(days), ...o })}#items`;
   const t = r.totals;
@@ -232,6 +233,50 @@ export default async function BrandReviewPage({ searchParams }: { searchParams: 
                   </tbody>
                 </table>
               </div>
+            </section>
+          ) : null}
+
+          {spend && spend.rows.length ? (
+            <section className="panel" id="spend" style={{ scrollMarginTop: 20 }}>
+              <div className="panel-head">
+                <h2>Spend with suppliers vs what sold</h2>
+                <span className="muted">
+                  same {spend.weeks} weeks ({spend.from} to {spend.to}) · bank statements and Shopify
+                </span>
+              </div>
+              <div className="tablewrap">
+                <table className="compact review">
+                  <thead>
+                    <tr>
+                      <th>Supplier</th>
+                      <th className="num">Paid (incl. VAT)</th>
+                      <th className="num">Sales of their brands</th>
+                      <th className="num" title="Sales for every £1 paid to the supplier">Sales per £1 paid</th>
+                      <th className="num" title="What the items sold cost you">Cost of what sold</th>
+                      <th className="num">Stock held now</th>
+                      <th>What’s happening</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {spend.rows.map((x) => (
+                      <tr key={x.name}>
+                        <td>
+                          <b>{x.name}</b>
+                        </td>
+                        <td className="num">{pounds(x.paid)}</td>
+                        <td className="num">{pounds(x.sales)}</td>
+                        <td className="num">{x.perPound === null ? '—' : `£${x.perPound.toFixed(2)}`}</td>
+                        <td className="num">{pounds(x.cogs)}</td>
+                        <td className="num">{x.stock ? pounds(x.stock) : '—'}</td>
+                        <td className="small">{x.note}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <p className="muted small" style={{ marginBottom: 0 }}>
+                Payments are matched to suppliers by the name on your statement. The period grows as more Shopify sales come in and you upload more statements.
+              </p>
             </section>
           ) : null}
 

@@ -1,6 +1,7 @@
-import { and, desc, eq, gte, isNull, lt } from 'drizzle-orm';
+import { and, desc, eq, gte, isNull, lt, sql } from 'drizzle-orm';
 import { withTenant } from '@/db';
-import { organisations, shopSales, stockCatalogue, stockItems, stockSnapshots } from '@/db/schema';
+import { bankStatements, bankTransactions, organisations, shopSales, stockCatalogue, stockItems, stockSnapshots } from '@/db/schema';
+import { supplierFor } from './insights';
 
 /**
  * Practical to-do lists from the stock count and sales: what to check in Shopify (missing or
@@ -121,5 +122,79 @@ export async function marginStory(orgId: string, from: string, to: string) {
         return { name: g.name, fullMargin, afterDiscounts, ifVoucherCounted, fullPence: g.full, realPence: g.real, voucherPence: g.voucher, reasons };
       })
       .sort((a, b) => b.fullPence - a.fullPence);
+  });
+}
+
+/**
+ * Spend with each supplier against what its brands sold, over the same weeks (the period both bank
+ * statements and Shopify sales cover). Paid (less VAT) much higher than the cost of what sold = stock
+ * building up; lower = selling down stock. Supplier accounts that cover several brands (e.g. Acushnet:
+ * Titleist & FootJoy) are kept together.
+ */
+export async function supplierReturn(orgId: string, today: string) {
+  return withTenant(orgId, async (tx) => {
+    const [cov] = await tx
+      .select({ salesFirst: sql<string | null>`(select min(sold_on)::text from shop_sales)`, bankFirst: sql<string | null>`min(${bankTransactions.date})::text`, bankLast: sql<string | null>`max(${bankTransactions.date})::text` })
+      .from(bankTransactions)
+      .innerJoin(bankStatements, eq(bankStatements.id, bankTransactions.statementId))
+      .where(isNull(bankStatements.removedAt));
+    if (!cov?.salesFirst || !cov.bankFirst || !cov.bankLast) return null;
+    const from = cov.salesFirst > cov.bankFirst ? cov.salesFirst : cov.bankFirst;
+    const toEx = new Date(new Date(`${(cov.bankLast < today ? cov.bankLast : today)}T12:00:00Z`).getTime() + 86_400_000).toISOString().slice(0, 10);
+    if (from >= toEx) return null;
+    const paid = await tx
+      .select({ description: bankTransactions.description, amount: bankTransactions.amountPence })
+      .from(bankTransactions)
+      .innerJoin(bankStatements, eq(bankStatements.id, bankTransactions.statementId))
+      .where(and(isNull(bankStatements.removedAt), gte(bankTransactions.date, from), lt(bankTransactions.date, toEx), sql`${bankTransactions.amountPence} < 0`));
+    const [org] = await tx.select({ v: organisations.voucherDiscounts }).from(organisations).limit(1);
+    const vouchers = new Set((org?.v ?? []).map((x) => x.toLowerCase()));
+    const sales = await tx.select().from(shopSales).where(and(gte(shopSales.soldOn, from), lt(shopSales.soldOn, toEx)));
+    const cat = await tx.select({ key: stockCatalogue.key, cost: stockCatalogue.costPence }).from(stockCatalogue);
+    const cost = new Map(cat.map((c) => [c.key, c.cost]));
+    const [snap] = await tx.select().from(stockSnapshots).where(isNull(stockSnapshots.removedAt)).orderBy(desc(stockSnapshots.takenOn), desc(stockSnapshots.createdAt)).limit(1);
+    const stock = snap ? await tx.select({ brand: stockItems.brand, qty: stockItems.quantity, cost: stockItems.costPence }).from(stockItems).where(eq(stockItems.snapshotId, snap.id)) : [];
+
+    const groups = new Map<string, { name: string; brands: string[]; paid: number; sales: number; cogs: number; stock: number }>();
+    for (const p of paid) {
+      const s = supplierFor(p.description);
+      if (!s) continue;
+      const g = groups.get(s) ?? { name: s, brands: s.split(' & ').map((b) => b.toLowerCase()), paid: 0, sales: 0, cogs: 0, stock: 0 };
+      g.paid += -p.amount;
+      groups.set(s, g);
+    }
+    const groupOf = (brand: string) => [...groups.values()].find((g) => g.brands.includes(brand.toLowerCase()));
+    for (const s of sales) {
+      if (s.quantity <= 0) continue;
+      const g = groupOf(s.brand);
+      if (!g) continue;
+      const credit = s.discounts.filter((d) => vouchers.has(d.name.toLowerCase())).reduce((n, d) => n + d.pence, 0);
+      g.sales += s.unitPricePence * s.quantity - (s.discountPence - credit);
+      const c = cost.get(s.key);
+      g.cogs += (c ?? 0) * s.quantity;
+    }
+    for (const i of stock) {
+      if (i.qty <= 0) continue;
+      const g = groupOf(i.brand);
+      if (g) g.stock += i.qty * (i.cost ?? 0);
+    }
+    const weeks = Math.max(1, Math.round((new Date(`${toEx}T12:00:00Z`).getTime() - new Date(`${from}T12:00:00Z`).getTime()) / (7 * 86_400_000)));
+    const rows = [...groups.values()]
+      .map((g) => {
+        const paidExVat = Math.round(g.paid / VAT);
+        const building = paidExVat - g.cogs;
+        const perPound = g.paid ? Math.round((g.sales / g.paid) * 100) / 100 : null;
+        const note =
+          g.cogs === 0 && g.paid > 0
+            ? 'paid for stock, nothing sold yet in this period'
+            : building > Math.max(50_000, g.cogs * 0.25)
+              ? `buying faster than selling — about £${Math.round(building / 100).toLocaleString('en-GB')} more stock at cost`
+              : building < -Math.max(50_000, g.cogs * 0.25)
+                ? 'selling down stock — fewer re-orders than sales'
+                : 'buying roughly what you sell';
+        return { name: g.name, paid: g.paid, sales: g.sales, cogs: g.cogs, stock: g.stock, perPound, building, note };
+      })
+      .sort((a, b) => b.paid - a.paid);
+    return { from, to: toEx, weeks, rows };
   });
 }

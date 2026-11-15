@@ -423,3 +423,17 @@ describe('previous years and year at a glance', () => {
     expect(y.months[0].month).toBe('2026-01-01');
   });
 });
+
+describe('spend with suppliers vs what sold', () => {
+  it('lines up supplier payments with the same weeks of sales', async () => {
+    const { supplierReturn } = await import('@/lib/services/business/advice');
+    const { uploadBankStatement } = await import('@/lib/services/business/bank');
+    // £1,200 paid to Acushnet (Titleist & FootJoy) in the same weeks as the GT3 Driver sale.
+    await uploadBankStatement(owner, new File(['Date,Description,Amount\n12/11/2026,ACUSHNET EUROPE LTD,-1200.00\n'], 'acushnet.csv', { type: 'text/csv' }), 'Current');
+    const r = (await supplierReturn(org.id, '2026-11-15'))!;
+    const a = r.rows.find((x) => x.name === 'Titleist & FootJoy')!;
+    expect(a.paid).toBe(120_000);
+    expect(a.sales).toBeGreaterThanOrEqual(54_900);
+    expect(a.note).toMatch(/buying|selling|paid/);
+  });
+});
