@@ -38,7 +38,18 @@ function Bars({ rows, value, label, empty }: { rows: { name: string }[]; value: 
   );
 }
 
-export default async function StockPage() {
+const SHOPIFY_MSG: Record<string, string> = {
+  connected: '✓ Connected to Shopify. Press Sync now to bring in stock and sales.',
+  missing: 'Add the three Shopify settings in Vercel first, then redeploy.',
+  expired: 'That took too long — press Connect to Shopify again.',
+  signature: 'Shopify’s reply couldn’t be verified, so nothing was saved. Try again.',
+  'wrong-store': 'That approval was for a different store. Try again from your Desirable Golf store.',
+  cancelled: 'Connection cancelled — nothing was changed.',
+  exchange: 'Shopify didn’t complete the connection. Try again in a minute.',
+};
+
+export default async function StockPage({ searchParams }: { searchParams: Promise<{ shopify?: string }> }) {
+  const msg = SHOPIFY_MSG[(await searchParams).shopify ?? ''];
   const staff = await requireBusiness();
   const today = todayInTz(staff.org.timezone);
   const [y, m] = today.split('-').map(Number);
@@ -77,8 +88,18 @@ export default async function StockPage() {
     <>
       <PageHeader staff={staff} title="Stock & commitments." sub="What’s on the shelves, what’s on its way, and where the money is tied up — by brand and category." actions={<span />} />
 
+      {msg ? <div className={`notice${msg.startsWith('✓') ? '' : ' warn'}`}>{msg}</div> : null}
       <section className={`panel shopify-link${shopify.connected ? ' on' : ''}`}>
-        {shopify.connected ? (
+        {shopify.connected && !shopify.authorised && !shopify.last ? (
+          <>
+            <span>
+              <b>Almost there:</b> <span className="muted">approve COS’s read-only access in Shopify (one time).</span>
+            </span>
+            <a href="/api/shopify/install" className="btn small primary">
+              Connect to Shopify
+            </a>
+          </>
+        ) : shopify.connected ? (
           <>
             <span>
               <b>✓ Linked to Shopify</b>{' '}

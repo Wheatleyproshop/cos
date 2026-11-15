@@ -1,0 +1,1 @@
+ALTER TABLE "organisations" ADD COLUMN "shopify_token_encrypted" text;

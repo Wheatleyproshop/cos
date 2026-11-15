@@ -3,7 +3,7 @@ import { systemDb, withTenant } from '@/db';
 import { organisations, stockCatalogue, stockItems, stockSnapshots, users } from '@/db/schema';
 import { recordEvent, SYSTEM, type Actor } from '../../audit';
 import { todayInTz } from '../../format';
-import { shopifyConfig, ShopifyError, shopifyGraphql } from '../../shopify';
+import { shopifyAuthorised, shopifyConfig, ShopifyError, shopifyGraphql } from '../../shopify';
 import { categoryFor, cleanBrand, keyFor, variantName } from '../../stock-csv';
 
 /**
@@ -133,5 +133,5 @@ export async function shopifyStatus(orgId: string) {
       .orderBy(sql`${stockSnapshots.createdAt} desc`)
       .limit(1),
   );
-  return { connected: Boolean(cfg), shop: cfg?.shop ?? null, last: last ?? null };
+  return { connected: Boolean(cfg), authorised: await shopifyAuthorised(), shop: cfg?.shop ?? null, last: last ?? null };
 }

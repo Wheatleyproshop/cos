@@ -267,6 +267,13 @@
       "when": 1794769656555,
       "tag": "0037_shop_sales",
       "breakpoints": true
+    },
+    {
+      "idx": 38,
+      "version": "7",
+      "when": 1794770691472,
+      "tag": "0038_shopify_token",
+      "breakpoints": true
     }
   ]
 }

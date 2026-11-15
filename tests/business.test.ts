@@ -310,3 +310,27 @@ describe('brand review from Shopify sales, with credit vouchers', () => {
     expect(polo).toMatchObject({ fullPence: 4500, discountPence: 450, creditPence: 0, soldForPence: 4050, discountNames: ['SAVE10'] });
   });
 });
+
+describe('Connect to Shopify (one-time approval)', () => {
+  it('only accepts a callback signed by Shopify with the app secret', async () => {
+    const { createHmac } = await import('node:crypto');
+    process.env.SHOPIFY_SHOP = 'test-shop';
+    process.env.SHOPIFY_CLIENT_ID = 'id';
+    process.env.SHOPIFY_CLIENT_SECRET = 'secret';
+    try {
+      const { verifyShopifyHmac, shopifyAuthorizeUrl } = await import('@/lib/shopify');
+      const base = 'code=abc&shop=test-shop.myshopify.com&state=xyz&timestamp=1794770000';
+      const good = createHmac('sha256', 'secret').update(base).digest('hex');
+      expect(verifyShopifyHmac(new URLSearchParams(`${base}&hmac=${good}`))).toBe(true);
+      expect(verifyShopifyHmac(new URLSearchParams(`${base.replace('abc', 'abd')}&hmac=${good}`))).toBe(false);
+      expect(verifyShopifyHmac(new URLSearchParams(base))).toBe(false);
+      const u = new URL(shopifyAuthorizeUrl('xyz', 'https://cos.example/api/shopify/callback'));
+      expect(u.host).toBe('test-shop.myshopify.com');
+      expect(u.searchParams.get('scope')).toBe('read_products,read_inventory,read_orders');
+    } finally {
+      delete process.env.SHOPIFY_SHOP;
+      delete process.env.SHOPIFY_CLIENT_ID;
+      delete process.env.SHOPIFY_CLIENT_SECRET;
+    }
+  });
+});

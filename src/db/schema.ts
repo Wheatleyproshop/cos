@@ -113,6 +113,8 @@ export const organisations = pgTable('organisations', {
   /** Shopify discount names (lower-case) that are really trade-in credit vouchers (e.g. CreditYard): counted as payment, not as a price cut. */
   voucherDiscounts: jsonb('voucher_discounts').$type<string[]>().notNull().default([]),
   /** Shopify sales sync progress: orders updated since this time are fetched next; a bulk export in progress. */
+  /** Read-only Shopify access token from the one-time "Connect to Shopify" approval (AES-GCM encrypted). */
+  shopifyTokenEncrypted: text('shopify_token_encrypted'),
   shopifySync: jsonb('shopify_sync').$type<{ ordersSince?: string; bulkId?: string; bulkSince?: string; lastError?: string; lastRunAt?: string }>().notNull().default({}),
   readyUncollectedDays: integer('ready_uncollected_days').notNull().default(7),
   quoteFollowupDays: integer('quote_followup_days').notNull().default(5),
