@@ -75,9 +75,9 @@ export function categoryFor(type: string, shopifyCategory: string, title: string
 }
 export const guessCategory = (title: string) => CATEGORY_GUESS.find(([re]) => re.test(title))?.[1] ?? 'Other';
 
-const keyFor = (handle: string, opts: string[]) =>
+export const keyFor = (handle: string, opts: string[]) =>
   [handle, ...opts.map((o) => (o.toLowerCase() === 'default title' ? '' : o))].map((s) => s.trim().toLowerCase()).join('|').replace(/\|+$/, '');
-const variantName = (opts: string[]) => opts.filter((o) => o && o.toLowerCase() !== 'default title').join(' / ');
+export const variantName = (opts: string[]) => opts.filter((o) => o && o.toLowerCase() !== 'default title').join(' / ');
 const pence = (v: string | undefined) => {
   const s = (v ?? '').trim().replace(/[£,]/g, '');
   if (!s) return null;

@@ -7,9 +7,12 @@ import { requireBusiness } from '@/lib/business-lock';
 import { money, todayInTz } from '@/lib/format';
 import { spendingInsights } from '@/lib/services/business/insights';
 import { commitments, stockReport, type Breakdown } from '@/lib/services/business/stock';
-import { removeStockAction, uploadStockAction } from '../../actions';
+import { shopifyStatus } from '@/lib/services/business/shopify-sync';
+import { removeStockAction, syncShopifyAction, uploadStockAction } from '../../actions';
 
 export const metadata: Metadata = { title: 'Stock & commitments · Business' };
+/** "Sync now" reads every variant from Shopify, which can take a minute or two. */
+export const maxDuration = 300;
 
 const pounds = (p: number) => `£${Math.round(p / 100).toLocaleString('en-GB')}`;
 const monthLabel = (ym: string) => (/^\d{4}-\d{2}$/.test(ym) ? new Date(`${ym}-15T12:00:00Z`).toLocaleDateString('en-GB', { month: 'short', year: 'numeric' }) : ym);
@@ -41,7 +44,14 @@ export default async function StockPage() {
   const [y, m] = today.split('-').map(Number);
   const yearFrom = new Date(Date.UTC(y - 1, m, 1)).toISOString().slice(0, 10);
   const next = new Date(Date.UTC(y, m, 1)).toISOString().slice(0, 10);
-  const [report, committed, spend] = await Promise.all([stockReport(staff.organisationId), commitments(staff.organisationId), spendingInsights(staff.organisationId, yearFrom, next, 12)]);
+  const [report, committed, spend, shopify] = await Promise.all([
+    stockReport(staff.organisationId),
+    commitments(staff.organisationId),
+    spendingInsights(staff.organisationId, yearFrom, next, 12),
+    shopifyStatus(staff.organisationId),
+  ]);
+  const hist = report.history.slice(-30);
+  const histMax = Math.max(1, ...hist.map((h) => h.costPence));
   const s = report.latest;
   const margin = s && s.retailPence ? Math.round(((s.retailPence - s.costPence) / s.retailPence) * 100) : null;
 
@@ -66,6 +76,29 @@ export default async function StockPage() {
   return (
     <>
       <PageHeader staff={staff} title="Stock & commitments." sub="What’s on the shelves, what’s on its way, and where the money is tied up — by brand and category." actions={<span />} />
+
+      <section className={`panel shopify-link${shopify.connected ? ' on' : ''}`}>
+        {shopify.connected ? (
+          <>
+            <span>
+              <b>✓ Linked to Shopify</b>{' '}
+              <span className="muted">
+                {shopify.last
+                  ? `Last synced ${new Date(shopify.last.createdAt).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', timeZone: staff.org.timezone })} · updates automatically every night`
+                  : 'Not synced yet — press Sync now, then it updates automatically every night.'}
+              </span>
+            </span>
+            <ActionButton action={syncShopifyAction} className="btn small primary">
+              ↻ Sync now
+            </ActionButton>
+          </>
+        ) : (
+          <span>
+            <b>Not linked to Shopify yet.</b>{' '}
+            <span className="muted">Once linked, products, cost prices and stock levels update every night automatically — no exports. Until then, upload exports below.</span>
+          </span>
+        )}
+      </section>
 
       <div className="grid biz-kpis">
         <div className="metric">
@@ -110,6 +143,23 @@ export default async function StockPage() {
           ) : null}
           {s.negative ? <b>{s.negative} lines show negative stock — usually items sold before they were booked in.</b> : null}
         </div>
+      ) : null}
+
+      {hist.length >= 2 ? (
+        <section className="panel">
+          <div className="panel-head">
+            <h2>Stock value over time</h2>
+            <span className="muted">at cost, each count</span>
+          </div>
+          <div className="dash-spark" role="img" aria-label="Stock value at each count">
+            {hist.map((h, i) => (
+              <div key={h.takenOn + i} className="dash-spark-col" title={`${h.takenOn}: ${pounds(h.costPence)} · ${h.units.toLocaleString('en-GB')} items`}>
+                <div className="dash-spark-bar" style={{ height: `${Math.max(2, (h.costPence / histMax) * 100)}%` }} />
+                <small>{i % Math.ceil(hist.length / 6) === 0 ? new Date(`${h.takenOn}T12:00:00Z`).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }) : ''}</small>
+              </div>
+            ))}
+          </div>
+        </section>
       ) : null}
 
       <section className="panel tablewrap">

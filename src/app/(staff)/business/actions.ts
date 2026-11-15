@@ -12,6 +12,10 @@ import { addRotaShift, addTimeEntry, copyRotaWeek, removeRotaShift, removeTimeEn
 import { attachPayslipFile, createPayRun, finalisePayRun, updatePayslip } from '@/lib/services/business/payroll';
 import { removeStatement, setCategory, uploadBankStatement } from '@/lib/services/business/bank';
 import { importStockFile, removeStockSnapshot } from '@/lib/services/business/stock';
+import { syncShopifyStock } from '@/lib/services/business/shopify-sync';
+import { syncShopifySales } from '@/lib/services/business/shopify-sales';
+import { setVoucherDiscount } from '@/lib/services/business/brand-review';
+import { ShopifyError } from '@/lib/shopify';
 
 /** Every Business action: owner, unlocked, and renews the 15-minute lock. */
 async function biz(fn: (ctx: Ctx, staff: Staff) => Promise<string | { message?: string; url?: string } | void>, fd?: FormData): Promise<FormState> {
@@ -164,5 +168,33 @@ export async function removeStockAction(id: string) {
   return biz(async (ctx) => {
     await removeStockSnapshot(ctx, id);
     return 'Stock count removed.';
+  });
+}
+
+export async function syncShopifyAction() {
+  return biz(async (ctx) => {
+    try {
+      const started = Date.now();
+      const r = await syncShopifyStock({ actor: ctx.actor, userId: ctx.userId ?? undefined });
+      const stock = `${r.variants.toLocaleString('en-GB')} variants, ${r.units.toLocaleString('en-GB')} items in stock${r.noCost ? ` (${r.noCost} lines have no cost price in Shopify)` : ''}`;
+      let sales = '';
+      try {
+        const s = await syncShopifySales({ actor: ctx.actor, waitMs: Math.max(15_000, 240_000 - (Date.now() - started)) });
+        sales = s.status === 'done' ? ` Sales: ${s.lines.toLocaleString('en-GB')} order lines updated.` : ` ${s.message}`;
+      } catch (e) {
+        sales = ` Sales not synced: ${e instanceof Error ? e.message : String(e)}`;
+      }
+      return `Synced from Shopify: ${stock}.${sales}`;
+    } catch (e) {
+      if (e instanceof ShopifyError) throw new ServiceError(e.message);
+      throw e;
+    }
+  });
+}
+
+export async function setVoucherAction(name: string, isVoucher: boolean) {
+  return biz(async (ctx) => {
+    await setVoucherDiscount(ctx, name, isVoucher);
+    return isVoucher ? `“${name}” now counts as a credit voucher (money received), not a discount.` : `“${name}” counts as a discount again.`;
   });
 }

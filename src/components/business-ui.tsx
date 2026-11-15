@@ -30,6 +30,7 @@ const TABS = [
   { href: '/business/payroll', label: 'Payroll' },
   { href: '/business/bank', label: 'Bank & spending' },
   { href: '/business/stock', label: 'Stock & commitments' },
+  { href: '/business/brands', label: 'Brand review' },
 ];
 
 /**

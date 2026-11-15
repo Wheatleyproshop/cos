@@ -218,3 +218,95 @@ describe('stock and commitments', () => {
     expect(r.insights[0].title).toMatch(/more came in than went out/);
   });
 });
+
+describe('Shopify stock sync', () => {
+  it('pulls variants page by page, refreshes the product list and records one count a day', async () => {
+    const { vi } = await import('vitest');
+    process.env.SHOPIFY_SHOP = 'test-shop';
+    process.env.SHOPIFY_CLIENT_ID = 'id';
+    process.env.SHOPIFY_CLIENT_SECRET = 'secret';
+    const v = (handle: string, title: string, vendor: string, type: string, opts: string[], qty: number, cost: string | null, price: string) => ({
+      sku: `${handle}-${opts.join('-')}`, price, inventoryQuantity: qty, selectedOptions: opts.map((value) => ({ value })),
+      inventoryItem: { tracked: true, unitCost: cost ? { amount: cost } : null }, product: { handle, title, vendor, productType: type, category: null },
+    });
+    const pages = [
+      { nodes: [v('gt3-driver', 'GT3 Driver', 'Titleist', 'Drivers', ['9'], 2, '340.00', '549.00'), v('tour-polo', 'Tour Polo', 'NIKE', 'Polo', ['M', 'Navy'], 6, '20.00', '45.00')], next: 'c1' },
+      { nodes: [v('tour-polo', 'Tour Polo', 'NIKE', 'Polo', ['L', 'Navy'], 0, '20.00', '45.00'), v('mystery-hat', 'Mystery Hat', 'Desirable Golf', '', ['Default Title'], 3, null, '20.00')], next: null },
+    ];
+    const calls: string[] = [];
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation(async (url, init) => {
+      const u = String(url);
+      calls.push(u);
+      if (u.endsWith('/admin/oauth/access_token')) {
+        expect(String(init?.body)).toContain('grant_type=client_credentials');
+        return new Response(JSON.stringify({ access_token: 'tok', expires_in: 86399, scope: 'read_products,read_inventory' }));
+      }
+      expect((init?.headers as Record<string, string>)['X-Shopify-Access-Token']).toBe('tok');
+      const cursor = JSON.parse(String(init?.body)).variables.cursor;
+      const p = pages[cursor ? 1 : 0];
+      return new Response(JSON.stringify({ data: { productVariants: { pageInfo: { hasNextPage: Boolean(p.next), endCursor: p.next }, nodes: p.nodes } } }));
+    });
+    try {
+      const { syncShopifyStock, shopifyStatus } = await import('@/lib/services/business/shopify-sync');
+      const r = await syncShopifyStock();
+      expect(r).toEqual({ variants: 4, lines: 3, units: 11, noCost: 1 });
+      expect(calls.filter((c) => c.includes('graphql.json'))).toHaveLength(2);
+      // Running again the same day replaces today's count rather than adding another.
+      await syncShopifyStock();
+      const { stockReport } = await import('@/lib/services/business/stock');
+      const rep = await stockReport(org.id);
+      expect(rep.snaps.filter((s) => s.fileName === 'Shopify (automatic)')).toHaveLength(1);
+      expect(rep.latest).toMatchObject({ units: 11, costPence: 2 * 34000 + 6 * 2000 });
+      expect(rep.latest!.byBrand.map((b) => b.name)).toEqual(['Titleist', 'Nike', 'Desirable Golf']);
+      expect(rep.latest!.byCategory.map((c) => c.name)).toEqual(expect.arrayContaining(['Drivers', 'Clothing', 'Headwear']));
+      expect((await shopifyStatus(org.id)).connected).toBe(true);
+    } finally {
+      fetchMock.mockRestore();
+      delete process.env.SHOPIFY_SHOP;
+      delete process.env.SHOPIFY_CLIENT_ID;
+      delete process.env.SHOPIFY_CLIENT_SECRET;
+    }
+  });
+});
+
+describe('brand review from Shopify sales, with credit vouchers', () => {
+  it('imports sales lines, and counts credit vouchers as money received rather than a discount', async () => {
+    const { importBulkFile } = await import('@/lib/services/business/shopify-sales');
+    const { brandReview, setVoucherDiscount } = await import('@/lib/services/business/brand-review');
+    const order = (id: string, name: string, src: string) => JSON.stringify({ id: `gid://shopify/Order/${id}`, name, processedAt: '2026-11-10T11:00:00Z', sourceName: src, cancelledAt: null, test: false });
+    const line = (id: string, parent: string, o: Record<string, unknown>) => JSON.stringify({ id: `gid://shopify/LineItem/${id}`, __parentId: `gid://shopify/Order/${parent}`, ...o });
+    const disc = (name: string, amount: string) => ({ allocatedAmountSet: { shopMoney: { amount } }, discountApplication: { __typename: 'DiscountCodeApplication', code: name } });
+    const jsonl = [
+      order('1', '#1001', 'pos'),
+      // GT3 Driver £549 (cost £340): £100 of CreditYard credit taken at the till.
+      line('11', '1', { sku: 'gt3-driver-9', vendor: 'Titleist', quantity: 1, currentQuantity: 1, originalUnitPriceSet: { shopMoney: { amount: '549.00' } }, variant: { selectedOptions: [{ value: '9' }] }, product: { handle: 'gt3-driver', productType: 'Drivers', title: 'GT3 Driver', category: null }, discountAllocations: [disc('CREDITYARD', '100.00')] }),
+      order('2', '#1002', 'web'),
+      // Two polos at £45 (cost £20), one refunded, with a real 10% discount.
+      line('21', '2', { sku: 'tour-polo-M-Navy', vendor: 'NIKE', quantity: 2, currentQuantity: 1, originalUnitPriceSet: { shopMoney: { amount: '45.00' } }, variant: { selectedOptions: [{ value: 'M' }, { value: 'Navy' }] }, product: { handle: 'tour-polo', productType: 'Polo', title: 'Tour Polo', category: null }, discountAllocations: [disc('SAVE10', '9.00')] }),
+    ].join('\n');
+    expect(await importBulkFile(org, jsonl, 'Europe/London')).toEqual({ orders: 2, lines: 2 });
+
+    const before = await brandReview(org.id, '2026-11-01', '2026-11-16');
+    const tit = before.brands.find((b) => b.name === 'Titleist')!;
+    expect(tit.units).toBe(1);
+    expect(tit.salesPence).toBe(44900); // the voucher still counts as a discount until it's marked
+    expect(before.discounts.map((d) => d.name)).toEqual(['CREDITYARD', 'SAVE10']);
+
+    await setVoucherDiscount(owner, 'CREDITYARD', true);
+    const after = await brandReview(org.id, '2026-11-01', '2026-11-16');
+    const t2 = after.brands.find((b) => b.name === 'Titleist')!;
+    expect(t2.salesPence).toBe(54900);
+    expect(t2.voucherPence).toBe(10000);
+    // Margin on price less VAT: 549/1.2 = 457.50 vs cost 340 → 26%; it would look like 449/1.2 = 374.17 → 9%.
+    expect(t2.marginPct).toBe(26);
+    expect(t2.reportedMarginPct).toBe(9);
+    const nike = after.brands.find((b) => b.name === 'Nike')!;
+    expect(nike).toMatchObject({ units: 1, salesPence: 4500 - 450, discountPence: 450 });
+    expect(after.discounts.find((d) => d.name === 'CREDITYARD')!.voucher).toBe(true);
+    const { salesLines } = await import('@/lib/services/business/brand-review');
+    const [driver] = await salesLines(org.id, '2026-11-01', '2026-11-16', { brand: 'Titleist' });
+    expect(driver).toMatchObject({ fullPence: 54900, discountPence: 0, creditPence: 10000, soldForPence: 54900, paidOtherwisePence: 44900, marginPct: 26 });
+    const [polo] = await salesLines(org.id, '2026-11-01', '2026-11-16', { brand: 'Nike' });
+    expect(polo).toMatchObject({ fullPence: 4500, discountPence: 450, creditPence: 0, soldForPence: 4050, discountNames: ['SAVE10'] });
+  });
+});

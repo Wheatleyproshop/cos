@@ -110,6 +110,10 @@ export const organisations = pgTable('organisations', {
   smsReady: boolean('sms_ready').notNull().default(false),
   /** Supplier sheets: chase an order placed this many days ago that hasn't arrived and has no expected date. */
   supplierChaseDays: integer('supplier_chase_days').notNull().default(14),
+  /** Shopify discount names (lower-case) that are really trade-in credit vouchers (e.g. CreditYard): counted as payment, not as a price cut. */
+  voucherDiscounts: jsonb('voucher_discounts').$type<string[]>().notNull().default([]),
+  /** Shopify sales sync progress: orders updated since this time are fetched next; a bulk export in progress. */
+  shopifySync: jsonb('shopify_sync').$type<{ ordersSince?: string; bulkId?: string; bulkSince?: string; lastError?: string; lastRunAt?: string }>().notNull().default({}),
   readyUncollectedDays: integer('ready_uncollected_days').notNull().default(7),
   quoteFollowupDays: integer('quote_followup_days').notNull().default(5),
   missingSupplierRefDays: integer('missing_supplier_ref_days').notNull().default(2),
@@ -980,4 +984,34 @@ export const stockItems = pgTable(
     pricePence: integer('price_pence'),
   },
   (t) => [index('stock_items_snapshot_idx').on(t.snapshotId)],
+);
+
+/**
+ * Shopify sales, one row per order line (online and POS), refreshed as orders change (refunds reduce
+ * the quantity). Discounts are kept by name so the owner can mark which are really credit vouchers.
+ */
+export const shopSales = pgTable(
+  'shop_sales',
+  {
+    id: id(),
+    organisationId: orgId(),
+    lineId: text('line_id').notNull(),
+    orderId: text('order_id').notNull(),
+    orderName: text('order_name').notNull().default(''),
+    soldOn: date('sold_on', { mode: 'string' }).notNull(),
+    channel: text('channel').notNull().default(''),
+    key: text('key').notNull().default(''),
+    sku: text('sku').notNull().default(''),
+    title: text('title').notNull(),
+    brand: text('brand').notNull().default(''),
+    category: text('category').notNull().default(''),
+    /** After refunds. */
+    quantity: integer('quantity').notNull(),
+    unitPricePence: integer('unit_price_pence').notNull(),
+    /** Every discount on the line, by name: [{ name, pence }]. */
+    discounts: jsonb('discounts').$type<{ name: string; pence: number }[]>().notNull().default([]),
+    discountPence: integer('discount_pence').notNull().default(0),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex('shop_sales_org_line').on(t.organisationId, t.lineId), index('shop_sales_org_date').on(t.organisationId, t.soldOn)],
 );

@@ -118,7 +118,19 @@ export async function stockReport(orgId: string) {
   return withTenant(orgId, async (tx) => {
     const snaps = await tx.select().from(stockSnapshots).where(isNull(stockSnapshots.removedAt)).orderBy(desc(stockSnapshots.takenOn), desc(stockSnapshots.createdAt)).limit(24);
     const catalogue = await tx.select({ n: sql<number>`count(*)::int`, updated: sql<Date | null>`max(${stockCatalogue.updatedAt})` }).from(stockCatalogue);
-    if (!snaps.length) return { snaps, catalogue: catalogue[0], latest: null };
+    // Stock value at each count, oldest first, for the trend chart.
+    const history = snaps.length
+      ? (
+          await tx
+            .select({ id: stockItems.snapshotId, cost: sql<number>`coalesce(sum(case when ${stockItems.quantity} > 0 then ${stockItems.quantity} * coalesce(${stockItems.costPence}, 0) else 0 end), 0)::bigint`, units: sql<number>`coalesce(sum(greatest(${stockItems.quantity}, 0)), 0)::int` })
+            .from(stockItems)
+            .where(inArray(stockItems.snapshotId, snaps.map((s) => s.id)))
+            .groupBy(stockItems.snapshotId)
+        )
+          .map((h) => ({ takenOn: snaps.find((s) => s.id === h.id)!.takenOn, costPence: Number(h.cost), units: h.units }))
+          .sort((a, b) => a.takenOn.localeCompare(b.takenOn))
+      : [];
+    if (!snaps.length) return { snaps, catalogue: catalogue[0], latest: null, history };
     const items = await tx.select().from(stockItems).where(eq(stockItems.snapshotId, snaps[0].id));
     const held = items.filter((i) => i.quantity > 0);
     const cost = (i: (typeof items)[number]) => i.quantity * (i.costPence ?? 0);
@@ -128,6 +140,7 @@ export async function stockReport(orgId: string) {
     return {
       snaps,
       catalogue: catalogue[0],
+      history,
       latest: {
         snap: snaps[0],
         prev: snaps[1] ?? null,
