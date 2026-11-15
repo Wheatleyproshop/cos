@@ -1271,3 +1271,11 @@ html:has(.clock) body { background: #0f1115; }
 :root[data-theme='dark']:has(#sidenav) .yoy.up { color: #7fe0ae; }
 :root[data-theme='dark']:has(#sidenav) .yoy.down { color: #ff9a92; }
 :root[data-theme='dark']:has(#sidenav) .bar-prev, :root[data-theme='dark']:has(#sidenav) .key-prev { background: #4a4d55; }
+.tx-panel { margin-top: 18px; }
+.tx-panel > summary { display: flex; justify-content: space-between; align-items: center; gap: 12px; cursor: pointer; list-style: none; }
+.tx-panel > summary::-webkit-details-marker { display: none; }
+.tx-panel > summary h2 { margin: 0; }
+.tx-count { font-size: 13px; font-weight: 500; margin-left: 10px; }
+.tx-toggle::after { content: 'Show ▾'; font-size: 13px; }
+.tx-panel[open] .tx-toggle::after { content: 'Hide ▴'; }
+.tx-tools { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; margin: 14px 0 10px; }

@@ -35,6 +35,7 @@ export default async function BankPage({ searchParams }: { searchParams: Promise
     listTransactions(staff.organisationId, { from, to, category, q: sp.q?.slice(0, 60) }),
     spendingInsights(staff.organisationId, from, to, months),
   ]);
+  const uncategorised = txs.filter(({ t }) => t.category === 'Other spending' || t.category === 'Uncategorised' || t.category === 'Other income').length;
   const totalIn = summary.months.reduce((n, x) => n + x.inPence, 0);
   const totalOut = summary.months.reduce((n, x) => n + x.outPence, 0);
   const maxMonth = Math.max(1, ...summary.months.flatMap((x) => [x.inPence, x.outPence]));
@@ -127,7 +128,7 @@ export default async function BankPage({ searchParams }: { searchParams: Promise
                   {spending.slice(0, 10).map((c) => (
                     <li key={c.category}>
                       <div className="rb-top">
-                        <Link href={qs({ category: c.category })}>{c.category}</Link>
+                        <Link href={`${qs({ category: c.category })}#transactions`}>{c.category}</Link>
                         <b>{money(c.outPence)}</b>
                       </div>
                       <div className="rb-track">
@@ -196,22 +197,33 @@ export default async function BankPage({ searchParams }: { searchParams: Promise
             </section>
           </div>
 
-          <section className="panel tablewrap">
-            <div className="panel-head">
+          <details className="panel tx-panel" id="transactions" open={Boolean(category || sp.q)}>
+            <summary>
               <h2>
                 Transactions{category ? ` · ${category}` : ''}
-                {category ? (
-                  <Link href={qs({ category: '' })} className="muted" style={{ marginLeft: 8, fontSize: 13 }}>
-                    show all
-                  </Link>
-                ) : null}
+                <span className="muted tx-count">
+                  {txs.length >= 500 ? '500+' : txs.length.toLocaleString('en-GB')} · {uncategorised} to sort
+                </span>
               </h2>
-              <form action="/business/bank" className="txsearch">
+              <span className="tx-toggle muted" aria-hidden="true" />
+            </summary>
+            <div className="tx-tools">
+              <form action="/business/bank#transactions" className="txsearch">
                 <input type="hidden" name="months" value={months} />
                 {category ? <input type="hidden" name="category" value={category} /> : null}
                 <input name="q" defaultValue={sp.q} placeholder="Search descriptions…" className="search" />
               </form>
+              {category || sp.q ? (
+                <Link href={qs({ category: '', q: '' })} className="muted">
+                  Show all transactions
+                </Link>
+              ) : (
+                <Link href={`${qs({ category: 'Other spending' })}#transactions`} className="muted">
+                  Show only “Other spending” to sort
+                </Link>
+              )}
             </div>
+            <div className="tablewrap">
             <table className="compact txs">
               <thead>
                 <tr>
@@ -236,9 +248,10 @@ export default async function BankPage({ searchParams }: { searchParams: Promise
                 ))}
               </tbody>
             </table>
+            </div>
             {txs.length >= 500 ? <p className="muted">Showing the latest 500 — narrow the period or search to see more.</p> : null}
             {!txs.length ? <p className="muted">No transactions match.</p> : null}
-          </section>
+          </details>
         </>
       ) : null}
 
