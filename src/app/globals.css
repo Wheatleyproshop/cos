@@ -1279,3 +1279,7 @@ html:has(.clock) body { background: #0f1115; }
 .tx-toggle::after { content: 'Show ▾'; font-size: 13px; }
 .tx-panel[open] .tx-toggle::after { content: 'Hide ▴'; }
 .tx-tools { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; margin: 14px 0 10px; }
+.compare-panel { margin-bottom: 18px; }
+.compare-form { display: flex; gap: 12px; align-items: end; flex-wrap: wrap; margin-bottom: 14px; }
+.compare-form .field { min-width: 220px; margin: 0; }
+.compare-form select { padding: 10px 12px; border-radius: 9px; border: 1px solid var(--line); background: transparent; color: inherit; font: inherit; }

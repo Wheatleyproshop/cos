@@ -6,7 +6,7 @@ import { PageHeader } from '@/components/views';
 import { BANK_CATEGORIES } from '@/lib/bank-csv';
 import { requireBusiness } from '@/lib/business-lock';
 import { money, todayInTz } from '@/lib/format';
-import { bankSummary, listStatements, listTransactions } from '@/lib/services/business/bank';
+import { bankPeriods, bankSummary, compareBank, listStatements, listTransactions } from '@/lib/services/business/bank';
 import { spendingInsights } from '@/lib/services/business/insights';
 import { removeStatementAction, setCategoryAction, uploadStatementAction } from '../../actions';
 
@@ -20,7 +20,90 @@ const RANGES = [
 ];
 const monthLabel = (ym: string) => new Date(`${ym}-15T12:00:00Z`).toLocaleDateString('en-GB', { month: 'short', year: '2-digit' });
 
-export default async function BankPage({ searchParams }: { searchParams: Promise<{ months?: string; category?: string; q?: string }> }) {
+const nextMonth = (ym: string) => {
+  const [y, m] = ym.split('-').map(Number);
+  return new Date(Date.UTC(y, m, 1)).toISOString().slice(0, 10);
+};
+const prevMonth = (ym: string) => {
+  const [y, m] = ym.split('-').map(Number);
+  return new Date(Date.UTC(y, m - 2, 1)).toISOString().slice(0, 7);
+};
+const monthName = (ym: string) => new Date(`${ym}-15T12:00:00Z`).toLocaleDateString('en-GB', { month: 'long', year: 'numeric' });
+
+/** "2026-10" (a month) or "2026" (a year) → [from, to) and a label. */
+function periodOf(p: string) {
+  if (/^\d{4}$/.test(p)) return { from: `${p}-01-01`, to: `${Number(p) + 1}-01-01`, label: p };
+  return { from: `${p}-01`, to: nextMonth(p), label: monthName(p) };
+}
+
+function Compare({ c, aLabel, bLabel }: { c: Awaited<ReturnType<typeof compareBank>>; aLabel: string; bLabel: string }) {
+  const ch = (a: number, b: number) => (b ? Math.round(((a - b) / b) * 100) : null);
+  const Chg = ({ a, b, invert }: { a: number; b: number; invert?: boolean }) => {
+    const v = ch(a, b);
+    if (v === null) return <span className="muted">—</span>;
+    const good = invert ? v < 0 : v > 0;
+    return <span className={`yoy ${v === 0 ? '' : good ? 'up' : 'down'}`}>{v > 0 ? '▲' : v < 0 ? '▼' : '•'} {Math.abs(v)}%</span>;
+  };
+  return (
+    <>
+      <div className="grid biz-kpis">
+        <div className="metric">
+          <small>Money in · {aLabel}</small>
+          <strong className="metric-money">{money(c.a.in)}</strong>
+          <em>
+            {money(c.b.in)} in {bLabel} <Chg a={c.a.in} b={c.b.in} />
+          </em>
+        </div>
+        <div className="metric">
+          <small>Money out · {aLabel}</small>
+          <strong className="metric-money">{money(c.a.out)}</strong>
+          <em>
+            {money(c.b.out)} in {bLabel} <Chg a={c.a.out} b={c.b.out} invert />
+          </em>
+        </div>
+        <div className="metric">
+          <small>Difference · {aLabel}</small>
+          <strong className="metric-money">{money(c.a.in - c.a.out)}</strong>
+          <em>{money(c.b.in - c.b.out)} in {bLabel}</em>
+        </div>
+      </div>
+      {!c.bHasData ? <p className="muted small">No bank statements cover {bLabel} yet — upload them below to compare.</p> : null}
+      <div className="tablewrap">
+        <table className="compact yoy-table">
+          <thead>
+            <tr>
+              <th>Category</th>
+              <th className="num">{aLabel}</th>
+              <th className="num">{bLabel}</th>
+              <th className="num">Change</th>
+            </tr>
+          </thead>
+          <tbody>
+            {c.rows.map((r) => {
+              const income = r.aIn + r.bIn > r.aOut + r.bOut;
+              const a = income ? r.aIn : r.aOut;
+              const b = income ? r.bIn : r.bOut;
+              return (
+                <tr key={r.category}>
+                  <td>
+                    <b>{r.category}</b> <span className="muted small">{income ? 'in' : 'out'}</span>
+                  </td>
+                  <td className="num">{money(a)}</td>
+                  <td className="num">{money(b)}</td>
+                  <td className="num">
+                    <Chg a={a} b={b} invert={!income} />
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </>
+  );
+}
+
+export default async function BankPage({ searchParams }: { searchParams: Promise<{ months?: string; category?: string; q?: string; period?: string; vs?: string }> }) {
   const staff = await requireBusiness();
   const sp = await searchParams;
   const months = RANGES.some((r) => r.key === sp.months) ? Number(sp.months) : 6;
@@ -29,11 +112,18 @@ export default async function BankPage({ searchParams }: { searchParams: Promise
   const from = new Date(Date.UTC(y, m - months, 1)).toISOString().slice(0, 10);
   const to = new Date(Date.UTC(y, m, 1)).toISOString().slice(0, 10);
   const category = sp.category && (BANK_CATEGORIES as readonly string[]).includes(sp.category) ? sp.category : undefined;
-  const [summary, statements, txs, insight] = await Promise.all([
+  const periods = await bankPeriods(staff.organisationId);
+  const period = sp.period && (periods.months.includes(sp.period) || periods.years.includes(sp.period)) ? sp.period : null;
+  const isYear = period ? /^\d{4}$/.test(period) : false;
+  const vs = sp.vs === 'prev' && !isYear ? 'prev' : 'lastyear';
+  const aP = period ? periodOf(period) : null;
+  const bP = period ? periodOf(isYear ? String(Number(period) - 1) : vs === 'prev' ? prevMonth(period) : `${Number(period.slice(0, 4)) - 1}${period.slice(4)}`) : null;
+  const [summary, statements, txs, insight, comparison] = await Promise.all([
     bankSummary(staff.organisationId, from, to),
     listStatements(staff.organisationId),
     listTransactions(staff.organisationId, { from, to, category, q: sp.q?.slice(0, 60) }),
     spendingInsights(staff.organisationId, from, to, months),
+    aP && bP ? compareBank(staff.organisationId, aP, bP) : Promise.resolve(null),
   ]);
   const uncategorised = txs.filter(({ t }) => t.category === 'Other spending' || t.category === 'Uncategorised' || t.category === 'Other income').length;
   const totalIn = summary.months.reduce((n, x) => n + x.inPence, 0);
@@ -59,6 +149,48 @@ export default async function BankPage({ searchParams }: { searchParams: Promise
           ))}
         </div>
       </div>
+
+      {periods.months.length ? (
+        <section className="panel compare-panel" id="compare">
+          <div className="panel-head">
+            <h2>Compare</h2>
+            <span className="muted small">any month or year against the month before, or the same time last year</span>
+          </div>
+          <form action="/business/bank#compare" className="compare-form">
+            <label className="field">
+              <span>Period</span>
+              <select name="period" defaultValue={period ?? ''}>
+                <option value="">Choose…</option>
+                <optgroup label="Years">
+                  {periods.years.map((y) => (
+                    <option key={y} value={y}>
+                      {y}
+                    </option>
+                  ))}
+                </optgroup>
+                <optgroup label="Months">
+                  {periods.months.map((m) => (
+                    <option key={m} value={m}>
+                      {monthName(m)}
+                    </option>
+                  ))}
+                </optgroup>
+              </select>
+            </label>
+            <label className="field">
+              <span>Compared with</span>
+              <select name="vs" defaultValue={vs}>
+                <option value="lastyear">Same time last year</option>
+                <option value="prev">The month before (months only)</option>
+              </select>
+            </label>
+            <button type="submit" className="btn">
+              Compare
+            </button>
+          </form>
+          {comparison && aP && bP ? <Compare c={comparison} aLabel={aP.label} bLabel={bP.label} /> : null}
+        </section>
+      ) : null}
 
       {statements.length ? (
         <>

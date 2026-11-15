@@ -141,3 +141,42 @@ export async function setCategory(ctx: Ctx, txId: string, category: string, reme
     return changed;
   });
 }
+
+/** Months and years that have bank transactions, newest first (for the compare pickers). */
+export async function bankPeriods(orgId: string) {
+  const rows = await withTenant(orgId, (tx) =>
+    tx
+      .select({ m: sql<string>`to_char(${bankTransactions.date}, 'YYYY-MM')` })
+      .from(bankTransactions)
+      .innerJoin(bankStatements, eq(bankStatements.id, bankTransactions.statementId))
+      .where(isNull(bankStatements.removedAt))
+      .groupBy(sql`1`)
+      .orderBy(sql`1 desc`),
+  );
+  const months = rows.map((r) => r.m);
+  return { months, years: [...new Set(months.map((m) => m.slice(0, 4)))] };
+}
+
+/** One period's money in/out by category against another's. Periods are [from, to). */
+export async function compareBank(orgId: string, a: { from: string; to: string }, b: { from: string; to: string }) {
+  const [x, y] = await Promise.all([bankSummary(orgId, a.from, a.to), bankSummary(orgId, b.from, b.to)]);
+  const cats = new Map<string, { category: string; aIn: number; aOut: number; bIn: number; bOut: number }>();
+  for (const [side, s] of [['a', x], ['b', y]] as const) {
+    for (const c of s.categories) {
+      const g = cats.get(c.category) ?? { category: c.category, aIn: 0, aOut: 0, bIn: 0, bOut: 0 };
+      if (side === 'a') {
+        g.aIn += c.inPence;
+        g.aOut += c.outPence;
+      } else {
+        g.bIn += c.inPence;
+        g.bOut += c.outPence;
+      }
+      cats.set(c.category, g);
+    }
+  }
+  const tot = (s: typeof x) => ({ in: s.months.reduce((n, m) => n + m.inPence, 0), out: s.months.reduce((n, m) => n + m.outPence, 0) });
+  return {
+    a: tot(x), b: tot(y), bHasData: y.categories.length > 0,
+    rows: [...cats.values()].filter((c) => c.category !== 'Transfers between accounts').sort((p, q) => q.aOut + q.aIn - (p.aOut + p.aIn)),
+  };
+}

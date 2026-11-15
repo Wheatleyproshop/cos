@@ -437,3 +437,16 @@ describe('spend with suppliers vs what sold', () => {
     expect(a.note).toMatch(/buying|selling|paid/);
   });
 });
+
+describe('compare bank periods', () => {
+  it('lists the months and years with statements, and compares two periods by category', async () => {
+    const { bankPeriods, compareBank } = await import('@/lib/services/business/bank');
+    const p = await bankPeriods(org.id);
+    expect(p.months[0]).toBe('2026-11');
+    expect(p.years).toContain('2026');
+    const c = await compareBank(org.id, { from: '2026-11-01', to: '2026-12-01' }, { from: '2026-10-01', to: '2026-11-01' });
+    expect(c.a.in).toBeGreaterThan(0);
+    expect(c.bHasData).toBe(false);
+    expect(c.rows.some((r) => r.category === 'Card & online takings' && r.aIn > 0)).toBe(true);
+  });
+});
