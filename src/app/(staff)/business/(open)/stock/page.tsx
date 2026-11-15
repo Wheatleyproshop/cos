@@ -8,6 +8,7 @@ import { money, todayInTz } from '@/lib/format';
 import { spendingInsights } from '@/lib/services/business/insights';
 import { commitments, stockReport, type Breakdown } from '@/lib/services/business/stock';
 import { shopifyStatus } from '@/lib/services/business/shopify-sync';
+import { CHECKS, stockChecks, type CheckKey } from '@/lib/services/business/advice';
 import { removeStockAction, syncShopifyAction, uploadStockAction } from '../../actions';
 
 export const metadata: Metadata = { title: 'Stock & commitments · Business' };
@@ -55,12 +56,16 @@ export default async function StockPage({ searchParams }: { searchParams: Promis
   const [y, m] = today.split('-').map(Number);
   const yearFrom = new Date(Date.UTC(y - 1, m, 1)).toISOString().slice(0, 10);
   const next = new Date(Date.UTC(y, m, 1)).toISOString().slice(0, 10);
-  const [report, committed, spend, shopify] = await Promise.all([
+  const salesFrom = new Date(new Date(`${today}T12:00:00Z`).getTime() - 90 * 86_400_000).toISOString().slice(0, 10);
+  const salesTo = new Date(new Date(`${today}T12:00:00Z`).getTime() + 86_400_000).toISOString().slice(0, 10);
+  const [report, committed, spend, shopify, checks] = await Promise.all([
     stockReport(staff.organisationId),
     commitments(staff.organisationId),
     spendingInsights(staff.organisationId, yearFrom, next, 12),
     shopifyStatus(staff.organisationId),
+    stockChecks(staff.organisationId, salesFrom, salesTo),
   ]);
+  const checkKeys = (Object.keys(CHECKS) as CheckKey[]).filter((k) => checks && checks[k].length);
   const hist = report.history.slice(-30);
   const histMax = Math.max(1, ...hist.map((h) => h.costPence));
   const s = report.latest;
@@ -155,7 +160,70 @@ export default async function StockPage({ searchParams }: { searchParams: Promis
         </div>
       </div>
 
-      {s && (s.noCost || s.negative) ? (
+      {checks && checkKeys.length ? (
+        <section className="panel checks" aria-labelledby="to-check">
+          <div className="panel-head">
+            <h2 id="to-check">Things to check</h2>
+            <span className="muted">from the stock count on {checks.snapTakenOn} and the last 90 days of sales</span>
+          </div>
+          <div className="check-list">
+            {checkKeys.map((k) => {
+              const rows = checks[k];
+              return (
+                <details key={k} className="check">
+                  <summary>
+                    <span className="check-count">{rows.length.toLocaleString('en-GB')}</span>
+                    <span>
+                      <b>{CHECKS[k].title}</b>
+                      <small>{CHECKS[k].why}</small>
+                    </span>
+                  </summary>
+                  <div className="tablewrap">
+                    <table className="compact">
+                      <thead>
+                        <tr>
+                          <th>Product</th>
+                          <th>Brand</th>
+                          <th>SKU</th>
+                          <th className="num">Qty</th>
+                          <th className="num">Cost</th>
+                          <th className="num">Price</th>
+                          <th>Why</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {rows.slice(0, 25).map((r) => (
+                          <tr key={r.key + r.note}>
+                            <td>
+                              <b>{r.title}</b>
+                              {r.variant ? <div className="muted small">{r.variant}</div> : null}
+                            </td>
+                            <td>{r.brand}</td>
+                            <td className="muted">{r.sku}</td>
+                            <td className="num">{r.quantity}</td>
+                            <td className="num">{r.costPence == null ? '—' : `£${(r.costPence / 100).toFixed(2)}`}</td>
+                            <td className="num">{r.pricePence == null ? '—' : `£${(r.pricePence / 100).toFixed(2)}`}</td>
+                            <td className="muted small">{r.note}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  <p className="muted small" style={{ marginBottom: 0 }}>
+                    {rows.length > 25 ? `Showing the 25 biggest of ${rows.length.toLocaleString('en-GB')}. ` : ''}
+                    <a href={`/api/business/stock-checks?check=${k}`} download>
+                      ⤓ Download the full list
+                    </a>{' '}
+                    to work through in Shopify. Fixes show here after the next sync.
+                  </p>
+                </details>
+              );
+            })}
+          </div>
+        </section>
+      ) : null}
+
+      {s && (s.noCost || s.negative) && !checks ? (
         <div className="notice warn">
           {s.noCost ? (
             <>

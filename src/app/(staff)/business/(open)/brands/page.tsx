@@ -5,6 +5,7 @@ import { PageHeader } from '@/components/views';
 import { requireBusiness } from '@/lib/business-lock';
 import { todayInTz } from '@/lib/format';
 import { brandReview, salesLines, type Perf } from '@/lib/services/business/brand-review';
+import { marginStory } from '@/lib/services/business/advice';
 import { shopifyStatus } from '@/lib/services/business/shopify-sync';
 import { setVoucherAction, syncShopifyAction } from '../../actions';
 
@@ -83,10 +84,11 @@ export default async function BrandReviewPage({ searchParams }: { searchParams: 
   const from = new Date(new Date(`${to}T12:00:00Z`).getTime() - days * 86_400_000).toISOString().slice(0, 10);
   const brand = sp.brand?.slice(0, 80);
   const category = brand ? undefined : sp.category?.slice(0, 80);
-  const [r, shopify, lines] = await Promise.all([
+  const [r, shopify, lines, story] = await Promise.all([
     brandReview(staff.organisationId, from, to),
     shopifyStatus(staff.organisationId),
     brand || category ? salesLines(staff.organisationId, from, to, { brand, category }) : Promise.resolve(null),
+    marginStory(staff.organisationId, from, to),
   ]);
   const href = (o: Record<string, string>) => `/business/brands?${new URLSearchParams({ days: String(days), ...o })}#items`;
   const t = r.totals;
@@ -195,6 +197,43 @@ export default async function BrandReviewPage({ searchParams }: { searchParams: 
               )}
             </section>
           </div>
+
+          {story.length ? (
+            <section className="panel">
+              <div className="panel-head">
+                <h2>Why the margins are what they are</h2>
+                <span className="muted">items with a cost price · prices less VAT</span>
+              </div>
+              <div className="tablewrap">
+                <table className="compact review">
+                  <thead>
+                    <tr>
+                      <th>Brand</th>
+                      <th className="num" title="If everything had sold at full price">At full price</th>
+                      <th className="num" title="After real discounts (credit vouchers count as money)">After discounts</th>
+                      <th className="num" title="How it would look if credit vouchers were treated as discounts">If vouchers were discounts</th>
+                      <th>What’s happening</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {story.slice(0, 25).map((m) => (
+                      <tr key={m.name}>
+                        <td>
+                          <b>{m.name}</b>
+                        </td>
+                        <td className="num">{m.fullMargin === null ? '—' : `${m.fullMargin}%`}</td>
+                        <td className="num">
+                          <b>{m.afterDiscounts === null ? '—' : `${m.afterDiscounts}%`}</b>
+                        </td>
+                        <td className="num muted">{m.voucherPence && m.ifVoucherCounted !== null ? `${m.ifVoucherCounted}%` : '—'}</td>
+                        <td className="small">{m.reasons.length ? m.reasons.join('; ') : <span className="muted">healthy — nothing unusual</span>}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </section>
+          ) : null}
 
           <section className="panel">
             <div className="panel-head">

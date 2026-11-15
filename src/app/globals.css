@@ -1199,3 +1199,13 @@ html:has(.clock) body { background: #0f1115; }
 .voucher-toggle { display: flex; gap: 10px; align-items: center; }
 :root[data-theme='dark']:has(#sidenav) .verdict.star { background: #173524; color: #7fe0ae; }
 :root[data-theme='dark']:has(#sidenav) .verdict.review { background: #3b1c1b; color: #ff9a92; }
+.checks { margin-bottom: 18px; }
+.check-list { display: grid; gap: 8px; }
+.check { border: 1px solid var(--line); border-radius: 12px; padding: 0 14px; }
+.check summary { display: grid; grid-template-columns: 56px 1fr; gap: 12px; align-items: center; padding: 12px 0; cursor: pointer; list-style: none; }
+.check summary::-webkit-details-marker { display: none; }
+.check summary b { display: block; }
+.check summary small { color: var(--muted); font-size: 12.5px; }
+.check-count { font-size: 20px; font-weight: 800; text-align: center; background: var(--warn-bg, #fdf1dc); color: #a66c1e; border-radius: 10px; padding: 6px 0; }
+.check[open] { padding-bottom: 12px; }
+.small { font-size: 12px; }

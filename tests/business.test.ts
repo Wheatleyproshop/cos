@@ -339,3 +339,18 @@ describe('Connect to Shopify (one-time approval)', () => {
     }
   });
 });
+
+describe('advice: stock checks and why margins are what they are', () => {
+  it('lists stock to check, and explains margins with vouchers kept out of discounts', async () => {
+    const { stockChecks, marginStory } = await import('@/lib/services/business/advice');
+    const c = (await stockChecks(org.id, '2026-11-01', '2026-11-16'))!;
+    expect(c.noCost.map((i) => i.title)).toContain('Mystery Hat');
+    expect(c.negative).toEqual([]);
+    const story = await marginStory(org.id, '2026-11-01', '2026-11-16');
+    const tit = story.find((m) => m.name === 'Titleist')!;
+    // GT3 Driver: £549 (£457.50 less VAT), cost £340 → 26% at full price; the £100 CreditYard credit is money, not a discount.
+    expect(tit).toMatchObject({ fullMargin: 26, afterDiscounts: 26, ifVoucherCounted: 9, voucherPence: 10000, realPence: 0 });
+    expect(tit.reasons.join(' ')).toMatch(/credit vouchers/);
+    expect(tit.reasons.join(' ')).toMatch(/only makes 26%/);
+  });
+});
