@@ -118,18 +118,20 @@ export function shopifyAuthorizeUrl(state: string, redirectUri: string) {
   return `https://${cfg.shop}.myshopify.com/admin/oauth/authorize?${q}`;
 }
 
-/** Shopify signs the callback: HMAC-SHA256 of the other query parameters, sorted, with the client secret. */
+/**
+ * Shopify signs the callback: HMAC-SHA256 (hex) of the other query parameters, sorted by name and
+ * re-encoded as a query string — the same way Shopify's own library checks it. The plain (decoded)
+ * form is accepted too, as both appear in Shopify's documentation.
+ */
 export function verifyShopifyHmac(params: URLSearchParams) {
   const cfg = shopifyConfig();
   const hmac = params.get('hmac');
   if (!cfg || !hmac) return false;
-  const message = [...params.entries()]
-    .filter(([k]) => k !== 'hmac' && k !== 'signature')
-    .sort(([a], [b]) => a.localeCompare(b))
-    .map(([k, v]) => `${k}=${v}`)
-    .join('&');
-  const digest = createHmac('sha256', cfg.clientSecret).update(message).digest('hex');
-  return safeEqual(digest, hmac);
+  const rest = [...params.entries()].filter(([k]) => k !== 'hmac' && k !== 'signature').sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
+  const sign = (msg: string) => createHmac('sha256', cfg.clientSecret).update(msg).digest('hex');
+  const encoded = new URLSearchParams(rest).toString();
+  const plain = rest.map(([k, v]) => `${k}=${v}`).join('&');
+  return safeEqual(sign(encoded), hmac) || safeEqual(sign(plain), hmac);
 }
 
 /** Swaps the approval code for a permanent read-only token and saves it (encrypted). */

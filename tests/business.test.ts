@@ -324,6 +324,11 @@ describe('Connect to Shopify (one-time approval)', () => {
       expect(verifyShopifyHmac(new URLSearchParams(`${base}&hmac=${good}`))).toBe(true);
       expect(verifyShopifyHmac(new URLSearchParams(`${base.replace('abc', 'abd')}&hmac=${good}`))).toBe(false);
       expect(verifyShopifyHmac(new URLSearchParams(base))).toBe(false);
+      // Real callbacks include a base64 "host" with '=' padding: Shopify signs the re-encoded query string.
+      const withHost = new URLSearchParams([['code', 'abc'], ['host', 'YWRtaW4uc2hvcGlmeS5jb20vc3RvcmUvdGVzdA=='], ['shop', 'test-shop.myshopify.com'], ['state', 'x-y_z'], ['timestamp', '1794770000']]);
+      const signed = createHmac('sha256', 'secret').update(withHost.toString()).digest('hex');
+      withHost.append('hmac', signed);
+      expect(verifyShopifyHmac(new URLSearchParams(withHost.toString()))).toBe(true);
       const u = new URL(shopifyAuthorizeUrl('xyz', 'https://cos.example/api/shopify/callback'));
       expect(u.host).toBe('test-shop.myshopify.com');
       expect(u.searchParams.get('scope')).toBe('read_products,read_inventory,read_orders');
