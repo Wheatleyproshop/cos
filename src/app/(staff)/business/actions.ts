@@ -11,6 +11,7 @@ import { saveStaffRecord, setClockPin } from '@/lib/services/business/staff';
 import { addRotaShift, addTimeEntry, copyRotaWeek, removeRotaShift, removeTimeEntry, updateTimeEntry } from '@/lib/services/business/time';
 import { attachPayslipFile, createPayRun, finalisePayRun, updatePayslip } from '@/lib/services/business/payroll';
 import { removeStatement, setCategory, uploadBankStatement } from '@/lib/services/business/bank';
+import { importStockFile, removeStockSnapshot } from '@/lib/services/business/stock';
 
 /** Every Business action: owner, unlocked, and renews the 15-minute lock. */
 async function biz(fn: (ctx: Ctx, staff: Staff) => Promise<string | { message?: string; url?: string } | void>, fd?: FormData): Promise<FormState> {
@@ -146,5 +147,22 @@ export async function setCategoryAction(txId: string, category: string, remember
   return biz(async (ctx) => {
     const n = await setCategory(ctx, txId, category, remember);
     return remember && n > 1 ? `Updated ${n} similar transactions — new ones will be sorted the same way.` : 'Updated.';
+  });
+}
+
+/* Stock */
+export async function uploadStockAction(_: FormState, fd: FormData) {
+  return biz(async (ctx) => {
+    const file = fd.get('file');
+    if (!(file instanceof File) || !file.size) throw new ServiceError('Choose the CSV file.', { file: 'Choose a file' });
+    const r = await importStockFile(ctx, file, str(fd, 'takenOn'));
+    if (r.kind === 'catalogue') return `Product list updated: ${r.rows.toLocaleString('en-GB')} variants (${r.withCost.toLocaleString('en-GB')} with a cost price). Now upload an inventory export for quantities.`;
+    return `Stock count added: ${r.units.toLocaleString('en-GB')} items across ${r.lines.toLocaleString('en-GB')} lines${r.unmatched ? ` — ${r.unmatched} couldn’t be matched to a cost price (upload a fresh product export to fix)` : ''}.`;
+  }, fd);
+}
+export async function removeStockAction(id: string) {
+  return biz(async (ctx) => {
+    await removeStockSnapshot(ctx, id);
+    return 'Stock count removed.';
   });
 }

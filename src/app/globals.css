@@ -1173,3 +1173,16 @@ html:has(.clock) body { background: #0f1115; }
 .biz { display: flex; flex-direction: column; }
 .biz > .top { order: -1; }
 .biz > :not(.top):not(.biz-bar) { order: 1; }
+.insights ul { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 12px; }
+.ins { display: grid; grid-template-columns: 26px 1fr; gap: 10px; align-items: start; padding: 12px; border: 1px solid var(--line); border-radius: 12px; }
+.ins b { display: block; font-size: 14px; }
+.ins small { display: block; color: var(--muted); font-size: 12.5px; margin-top: 2px; line-height: 1.45; }
+.ins-dot { width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; font-weight: 800; font-size: 13px; }
+.ins-good .ins-dot { background: #e2f0e5; color: #28673e; }
+.ins-warn .ins-dot { background: var(--warn-bg, #fdf1dc); color: #a66c1e; }
+.ins-info .ins-dot { background: #e8eef9; color: #24508f; }
+.ins-note { font-size: 12px; margin: 12px 0 0; }
+.biz .insights { margin-bottom: 18px; }
+.steps-list { margin: 0 0 12px; padding-left: 20px; display: grid; gap: 6px; font-size: 14px; }
+:root[data-theme='dark']:has(#sidenav) .ins-good .ins-dot { background: #173524; color: #7fe0ae; }
+:root[data-theme='dark']:has(#sidenav) .ins-info .ins-dot { background: #1c2a44; color: #9ec0ff; }

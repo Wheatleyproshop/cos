@@ -6,6 +6,7 @@ import { organisations, payslips, staffProfiles, timeEntries, users, type Organi
 import { seedDemo } from '@/db/seed';
 import { staffActor } from '@/lib/audit';
 import { categorise, parseBankAmount, parseBankCsv, parseBankDate, ruleMatchFor } from '@/lib/bank-csv';
+import { parseStockCsv } from '@/lib/stock-csv';
 import type { Ctx } from '@/lib/services/common';
 
 let close: () => Promise<void>;
@@ -160,5 +161,60 @@ describe('time clock and payroll', () => {
     expect(types).toEqual(expect.arrayContaining(['time_entry_added', 'time_entry_changed', 'time_entry_removed', 'clocked_in', 'clocked_out', 'staff_sensitive_viewed']));
     const change = evs.find((x) => x.eventType === 'time_entry_changed')!;
     expect((change.oldValueJson as { clockIn: string }).clockIn).not.toBe((change.newValueJson as { clockIn: string }).clockIn);
+  });
+});
+
+describe('stock and commitments', () => {
+  const productExport =
+    'Handle,Title,Vendor,Product Category,Type,Option1 Name,Option1 Value,Option2 Name,Option2 Value,Option3 Name,Option3 Value,Variant SKU,Variant Price,Cost per item,Status\n' +
+    'victory-polo,Victory Polo,NIKE,Apparel > Shirts,Nike,Size,M,Colour,Navy,,,NK-VP-M-NV,45.00,22.50,active\n' +
+    'victory-polo,,,,,,L,,Navy,,,NK-VP-L-NV,45.00,22.50,\n' +
+    'pro-v1,Pro V1 Golf Balls,Titleist,,Golf Balls,Title,Default Title,,,,,TIT-PV1,54.99,32.00,active\n';
+  const inventoryOld =
+    'Handle,Title,Option1 Name,Option1 Value,Option2 Name,Option2 Value,Option3 Name,Option3 Value,SKU,HS Code,COO,Desirable Golf,Orders\n' +
+    'victory-polo,Victory Polo,Size,M,Colour,Navy,,,NK-VP-M-NV,,,3,not stocked\n' +
+    'victory-polo,Victory Polo,Size,L,Colour,Navy,,,NK-VP-L-NV,,,2,0\n' +
+    'pro-v1,Pro V1 Golf Balls,Title,Default Title,,,,,TIT-PV1,,,10,0\n' +
+    'mystery,Mystery,Title,Default Title,,,,,ZZZ,,,1,0\n';
+  const inventoryNew =
+    'Handle,Title,Option1 Name,Option1 Value,Option2 Name,Option2 Value,Option3 Name,Option3 Value,SKU,Location,Incoming (not editable),Committed (not editable),Available (not editable),On hand (current),On hand (new)\n' +
+    'pro-v1,Pro V1 Golf Balls,Title,Default Title,,,,,TIT-PV1,Desirable Golf,0,0,6,6,\n';
+
+  it('reads Shopify product and inventory exports (old and new layouts)', () => {
+    const p = parseStockCsv(productExport);
+    expect(p.kind).toBe('catalogue');
+    if (p.kind !== 'catalogue') return;
+    expect(p.rows).toHaveLength(3);
+    expect(p.rows[0]).toMatchObject({ key: 'victory-polo|m|navy', brand: 'Nike', category: 'Clothing', costPence: 2250, pricePence: 4500 });
+    expect(p.rows[1]).toMatchObject({ key: 'victory-polo|l|navy', title: 'Victory Polo', brand: 'Nike' });
+    expect(p.rows[2]).toMatchObject({ key: 'pro-v1', category: 'Golf balls' });
+    const q = parseStockCsv(inventoryOld);
+    expect(q.kind === 'quantities' && q.rows.map((r) => [r.key, r.quantity])).toEqual([['victory-polo|m|navy', 3], ['victory-polo|l|navy', 2], ['pro-v1', 10], ['mystery', 1]]);
+    const n = parseStockCsv(inventoryNew);
+    expect(n.kind === 'quantities' && n.rows[0]).toMatchObject({ key: 'pro-v1', quantity: 6 });
+  });
+
+  it('values stock by brand and category, and totals what is committed', async () => {
+    const { importStockFile, stockReport, commitments } = await import('@/lib/services/business/stock');
+    const f = (name: string, body: string) => new File([body], name, { type: 'text/csv' });
+    expect(await importStockFile(owner, f('products.csv', productExport), '2026-11-15')).toMatchObject({ kind: 'catalogue', rows: 3, withCost: 3 });
+    expect(await importStockFile(owner, f('inventory.csv', inventoryOld), '2026-11-15')).toMatchObject({ kind: 'stock', lines: 4, unmatched: 1, units: 16 });
+    const r = await stockReport(org.id);
+    expect(r.latest).toMatchObject({ units: 16, costPence: 5 * 2250 + 10 * 3200, retailPence: 5 * 4500 + 10 * 5499, noCost: 1 });
+    expect(r.latest!.byBrand.map((b) => [b.name, b.costPence])).toEqual([['Titleist', 32000], ['Nike', 11250], ['Unknown', 0]]);
+    expect(r.latest!.byCategory[0]).toMatchObject({ name: 'Golf balls', units: 10 });
+    const c = await commitments(org.id);
+    expect(c.prebookCostPence).toBeGreaterThanOrEqual(0);
+    expect(Array.isArray(c.byMonth)).toBe(true);
+    expect(c.customerOrders.byBrand.length).toBeGreaterThan(0);
+  });
+
+  it('gives plain-English feedback on spending', async () => {
+    const { spendingInsights, supplierFor } = await import('@/lib/services/business/insights');
+    expect(supplierFor('ACUSHNET EUROPE LTD DD')).toBe('Titleist & FootJoy');
+    expect(supplierFor('TESCO')).toBeNull();
+    const r = await spendingInsights(org.id, '2026-11-01', '2026-12-01', 1);
+    expect(r.insights.length).toBeGreaterThan(0);
+    expect(r.insights[0].title).toMatch(/more came in than went out/);
   });
 });

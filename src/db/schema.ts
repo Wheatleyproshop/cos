@@ -926,3 +926,58 @@ export const bankRules = pgTable('bank_rules', {
   category: text('category').notNull(),
   createdAt: createdAt(),
 });
+
+/**
+ * Stock held, from the shop's own exports (e.g. Shopify's inventory export for quantities, joined to
+ * the product export for cost, price, brand and type). Each upload is a dated snapshot.
+ */
+export const stockCatalogue = pgTable(
+  'stock_catalogue',
+  {
+    id: id(),
+    organisationId: orgId(),
+    /** Shopify handle + option values (or SKU), lower-case: how a quantity row finds its product. */
+    key: text('key').notNull(),
+    sku: text('sku').notNull().default(''),
+    title: text('title').notNull(),
+    variant: text('variant').notNull().default(''),
+    brand: text('brand').notNull().default(''),
+    category: text('category').notNull().default(''),
+    costPence: integer('cost_pence'),
+    pricePence: integer('price_pence'),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex('stock_catalogue_org_key').on(t.organisationId, t.key)],
+);
+
+export const stockSnapshots = pgTable('stock_snapshots', {
+  id: id(),
+  organisationId: orgId(),
+  takenOn: date('taken_on', { mode: 'string' }).notNull(),
+  fileName: text('file_name').notNull(),
+  location: text('location').notNull().default(''),
+  lines: integer('lines').notNull().default(0),
+  unmatched: integer('unmatched').notNull().default(0),
+  uploadedByUserId: uuid('uploaded_by_user_id').notNull().references(() => users.id),
+  createdAt: createdAt(),
+  removedAt: timestamp('removed_at', { withTimezone: true }),
+});
+
+export const stockItems = pgTable(
+  'stock_items',
+  {
+    id: id(),
+    organisationId: orgId(),
+    snapshotId: uuid('snapshot_id').notNull().references(() => stockSnapshots.id),
+    key: text('key').notNull(),
+    sku: text('sku').notNull().default(''),
+    title: text('title').notNull(),
+    variant: text('variant').notNull().default(''),
+    brand: text('brand').notNull().default(''),
+    category: text('category').notNull().default(''),
+    quantity: integer('quantity').notNull(),
+    costPence: integer('cost_pence'),
+    pricePence: integer('price_pence'),
+  },
+  (t) => [index('stock_items_snapshot_idx').on(t.snapshotId)],
+);

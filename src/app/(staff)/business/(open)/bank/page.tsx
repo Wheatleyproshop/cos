@@ -7,6 +7,7 @@ import { BANK_CATEGORIES } from '@/lib/bank-csv';
 import { requireBusiness } from '@/lib/business-lock';
 import { money, todayInTz } from '@/lib/format';
 import { bankSummary, listStatements, listTransactions } from '@/lib/services/business/bank';
+import { spendingInsights } from '@/lib/services/business/insights';
 import { removeStatementAction, setCategoryAction, uploadStatementAction } from '../../actions';
 
 export const metadata: Metadata = { title: 'Bank · Business' };
@@ -28,10 +29,11 @@ export default async function BankPage({ searchParams }: { searchParams: Promise
   const from = new Date(Date.UTC(y, m - months, 1)).toISOString().slice(0, 10);
   const to = new Date(Date.UTC(y, m, 1)).toISOString().slice(0, 10);
   const category = sp.category && (BANK_CATEGORIES as readonly string[]).includes(sp.category) ? sp.category : undefined;
-  const [summary, statements, txs] = await Promise.all([
+  const [summary, statements, txs, insight] = await Promise.all([
     bankSummary(staff.organisationId, from, to),
     listStatements(staff.organisationId),
     listTransactions(staff.organisationId, { from, to, category, q: sp.q?.slice(0, 60) }),
+    spendingInsights(staff.organisationId, from, to, months),
   ]);
   const totalIn = summary.months.reduce((n, x) => n + x.inPence, 0);
   const totalOut = summary.months.reduce((n, x) => n + x.outPence, 0);
@@ -75,6 +77,25 @@ export default async function BankPage({ searchParams }: { searchParams: Promise
               <em>{totalIn - totalOut >= 0 ? 'more in than out' : 'more out than in'}</em>
             </div>
           </div>
+          {insight.insights.length ? (
+            <section className="panel insights" aria-labelledby="noticed">
+              <h2 id="noticed">What we noticed</h2>
+              <ul>
+                {insight.insights.map((i) => (
+                  <li key={i.title} className={`ins ins-${i.tone}`}>
+                    <span className="ins-dot" aria-hidden="true">
+                      {i.tone === 'good' ? '✓' : i.tone === 'warn' ? '!' : 'i'}
+                    </span>
+                    <span>
+                      <b>{i.title}</b>
+                      <small>{i.detail}</small>
+                    </span>
+                  </li>
+                ))}
+              </ul>
+              <p className="muted ins-note">Rules of thumb from your own statements — not accounting advice. Your accountant can tell you what’s right for the shop.</p>
+            </section>
+          ) : null}
           <div className="perf-grid">
             <section className="panel">
               <div className="panel-head">
@@ -120,6 +141,57 @@ export default async function BankPage({ searchParams }: { searchParams: Promise
                 </ol>
               ) : (
                 <p className="muted">No spending in this period.</p>
+              )}
+            </section>
+          </div>
+
+          <div className="perf-grid">
+            <section className="panel">
+              <h2>Regular payments</h2>
+              {insight.recurring.length ? (
+                <ul className="attention">
+                  {insight.recurring.slice(0, 15).map((r) => (
+                    <li key={r.name}>
+                      <span>
+                        <b>{r.name}</b>
+                        <div className="muted">
+                          {r.category} · seen in {r.months} of the last 6 months · last {r.last}
+                        </div>
+                      </span>
+                      <span className="num">
+                        <b>{money(r.monthlyPence)}</b>
+                        <div className="muted">≈ {money(r.monthlyPence * 12)} a year</div>
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="muted">None spotted yet — upload at least three months of statements.</p>
+              )}
+            </section>
+            <section className="panel">
+              <div className="panel-head">
+                <h2>Paid to suppliers (12 months)</h2>
+                <Link href="/business/stock" className="muted">
+                  Stock →
+                </Link>
+              </div>
+              {insight.suppliers.length ? (
+                <ol className="rankbars">
+                  {insight.suppliers.slice(0, 12).map((s) => (
+                    <li key={s.name}>
+                      <div className="rb-top">
+                        <span>{s.name}</span>
+                        <b>{money(s.pence)}</b>
+                      </div>
+                      <div className="rb-track">
+                        <div className="rb-fill" style={{ width: `${Math.max(3, (s.pence / insight.suppliers[0].pence) * 100)}%` }} />
+                      </div>
+                    </li>
+                  ))}
+                </ol>
+              ) : (
+                <p className="muted">No payments to known golf suppliers found yet.</p>
               )}
             </section>
           </div>

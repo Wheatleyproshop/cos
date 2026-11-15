@@ -113,7 +113,8 @@ export type EventType =
   | 'pay_run_finalised'
   | 'bank_statement_uploaded'
   | 'bank_statement_removed'
-  | 'bank_category_changed';
+  | 'bank_category_changed'
+  | 'stock_uploaded';
 
 export type EventInput = {
   organisationId: string;

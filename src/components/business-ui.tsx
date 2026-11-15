@@ -28,7 +28,8 @@ const TABS = [
   { href: '/business/staff', label: 'Staff' },
   { href: '/business/time', label: 'Hours & rota' },
   { href: '/business/payroll', label: 'Payroll' },
-  { href: '/business/bank', label: 'Bank' },
+  { href: '/business/bank', label: 'Bank & spending' },
+  { href: '/business/stock', label: 'Stock & commitments' },
 ];
 
 /**
@@ -132,6 +133,29 @@ export function StatementUploadForm({ action }: { action: BoundAction }) {
           <FormMessage state={s} />
           <div className="actions" style={{ marginTop: 8 }}>
             <Submit pendingText="Reading statement…">Upload statement</Submit>
+          </div>
+        </>
+      )}
+    </ActionForm>
+  );
+}
+
+export function StockUploadForm({ action, today }: { action: BoundAction; today: string }) {
+  return (
+    <ActionForm action={action} encType="multipart/form-data" resetOnSuccess>
+      {(s) => (
+        <>
+          <div className="fields" style={{ alignItems: 'end' }}>
+            <label className={`field${s?.fieldErrors?.file ? ' invalid' : ''}`}>
+              <span>Export file (CSV) *</span>
+              <input type="file" name="file" accept=".csv,text/csv" required />
+              {s?.fieldErrors?.file ? <span className="err">{s.fieldErrors.file}</span> : <span className="hint">Product export, inventory export, or any stock list with SKU + quantity</span>}
+            </label>
+            <Field state={s} name="takenOn" label="Stock counted on" type="date" defaultValue={today} hint="For inventory files" />
+          </div>
+          <FormMessage state={s} />
+          <div className="actions" style={{ marginTop: 8 }}>
+            <Submit pendingText="Reading file…">Upload</Submit>
           </div>
         </>
       )}

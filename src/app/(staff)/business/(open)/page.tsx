@@ -6,6 +6,8 @@ import { getPerformance, PERIODS, parsePeriod } from '@/lib/analytics';
 import { requireBusiness } from '@/lib/business-lock';
 import { money, todayInTz } from '@/lib/format';
 import { bankSummary } from '@/lib/services/business/bank';
+import { spendingInsights } from '@/lib/services/business/insights';
+import { commitments, stockReport } from '@/lib/services/business/stock';
 import { listPayRuns } from '@/lib/services/business/payroll';
 import { listStaff } from '@/lib/services/business/staff';
 import { addDaysIso, timeEntriesBetween, workedMinutes } from '@/lib/services/business/time';
@@ -23,11 +25,14 @@ export default async function BusinessOverview({ searchParams }: { searchParams:
   const perf = await getPerformance(staff.org, period);
   const from = perf.from.toLocaleDateString('en-CA', { timeZone: tz });
   const to = addDaysIso(today, 1);
-  const [bank, runs, team, entries] = await Promise.all([
+  const [bank, runs, team, entries, stock, committed, insight] = await Promise.all([
     bankSummary(staff.organisationId, from, to),
     listPayRuns(staff.organisationId),
     listStaff(staff.organisationId),
     timeEntriesBetween(staff.organisationId, from, to, tz),
+    stockReport(staff.organisationId),
+    commitments(staff.organisationId),
+    spendingInsights(staff.organisationId, from, to, Math.max(1, Math.round((perf.period.days ?? 365) / 30))),
   ]);
   const k = perf.kpis;
   const per = perf.period.label.toLowerCase();
@@ -90,11 +95,45 @@ export default async function BusinessOverview({ searchParams }: { searchParams:
           </em>
         </div>
         <div className="metric">
+          <small>Stock held (cost)</small>
+          <strong className="metric-money">{stock.latest ? money(stock.latest.costPence) : '—'}</strong>
+          <em>{stock.latest ? `counted ${stock.latest.snap.takenOn}` : <Link href="/business/stock">Upload a stock count</Link>}</em>
+        </div>
+        <div className="metric">
+          <small>Committed (pre-books due)</small>
+          <strong className="metric-money">{money(committed.prebookCostPence)}</strong>
+          <em>at cost, still to arrive</em>
+        </div>
+        <div className="metric">
           <small>Hours worked</small>
           <strong className="metric-money">{hrs(totalMins)}</strong>
           <em>{totalMins ? `${money(Math.round(k.valuePence / (totalMins / 60)))} of orders per hour` : 'from the clock-in screen'}</em>
         </div>
       </div>
+
+      {insight.insights.length ? (
+        <section className="panel insights">
+          <div className="panel-head">
+            <h2>What we noticed</h2>
+            <Link href="/business/bank" className="muted">
+              Bank & spending →
+            </Link>
+          </div>
+          <ul>
+            {insight.insights.slice(0, 4).map((i) => (
+              <li key={i.title} className={`ins ins-${i.tone}`}>
+                <span className="ins-dot" aria-hidden="true">
+                  {i.tone === 'good' ? '✓' : i.tone === 'warn' ? '!' : 'i'}
+                </span>
+                <span>
+                  <b>{i.title}</b>
+                  <small>{i.detail}</small>
+                </span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
 
       <section className="panel tablewrap">
         <div className="panel-head">
