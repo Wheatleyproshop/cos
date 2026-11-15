@@ -1,4 +1,4 @@
-import { and, desc, eq, gte, inArray, isNull, lt } from 'drizzle-orm';
+import { and, desc, eq, gte, inArray, isNull, lt, sql } from 'drizzle-orm';
 import { withTenant } from '@/db';
 import { organisations, shopSales, stockCatalogue, stockItems, stockSnapshots } from '@/db/schema';
 import { recordEvent } from '../../audit';
@@ -21,9 +21,12 @@ export type Perf = {
 };
 
 export async function brandReview(orgId: string, from: string, to: string) {
-  const days = Math.max(1, Math.round((new Date(`${to}T12:00:00Z`).getTime() - new Date(`${from}T12:00:00Z`).getTime()) / 86_400_000));
-  const weeks = days / 7;
   return withTenant(orgId, async (tx) => {
+    // Rates of sale use the time COS actually has sales for (Shopify only gives recent history at first).
+    const [first] = await tx.select({ d: sql<string | null>`min(${shopSales.soldOn})::text` }).from(shopSales);
+    const start = first?.d && first.d > from ? first.d : from;
+    const days = Math.max(1, Math.round((new Date(`${to}T12:00:00Z`).getTime() - new Date(`${start}T12:00:00Z`).getTime()) / 86_400_000));
+    const weeks = days / 7;
     const [org] = await tx.select({ vouchers: organisations.voucherDiscounts }).from(organisations).limit(1);
     const vouchers = new Set((org?.vouchers ?? []).map((v) => v.toLowerCase()));
     const sales = await tx.select().from(shopSales).where(and(gte(shopSales.soldOn, from), lt(shopSales.soldOn, to)));
@@ -115,7 +118,7 @@ export async function brandReview(orgId: string, from: string, to: string) {
     const mc = median(byCat);
     const order = (a: Perf, b: Perf) => b.salesPence - a.salesPence || b.stockCostPence - a.stockCostPence;
     return {
-      from, to, weeks, snapTakenOn: snap?.takenOn ?? null, hasSales: sales.length > 0,
+      from: start, to, weeks, snapTakenOn: snap?.takenOn ?? null, hasSales: sales.length > 0,
       totals: finish(totals, 0),
       brands: [...byBrand.values()].map((a) => finish(a, mb)).sort(order),
       categories: [...byCat.values()].map((a) => finish(a, mc)).sort(order),

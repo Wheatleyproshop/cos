@@ -126,7 +126,7 @@ export default async function BrandReviewPage({ searchParams }: { searchParams: 
               <small>Sales (incl. VAT)</small>
               <strong className="metric-money">{pounds(t.salesPence)}</strong>
               <em>
-                {t.units.toLocaleString('en-GB')} items · {Math.round(r.weeks)} weeks
+                {t.units.toLocaleString('en-GB')} items · {Math.round(r.weeks)} weeks{r.from !== from ? ` (sales from ${r.from})` : ''}
               </em>
             </div>
             <div className="metric">
