@@ -206,3 +206,15 @@ export async function financeSettingsAction(_: FormState, fd: FormData) {
     return 'Saved — the forecasts below now use these settings.';
   }, fd);
 }
+
+export async function uploadHistoryAction(_: FormState, fd: FormData) {
+  return biz(async (ctx) => {
+    const file = fd.get('file');
+    if (!(file instanceof File) || !file.size) throw new ServiceError('Choose the report CSV.', { file: 'Choose a file' });
+    const { importSalesHistory } = await import('@/lib/services/business/year');
+    const y = Number(fd.get('year') || 0) || undefined;
+    const r = await importSalesHistory(ctx, file, y);
+    const what = r.dimension === 'brand' ? 'sales by brand' : r.dimension === 'category' ? 'sales by product type' : 'monthly sales';
+    return `Added ${what}: ${r.rows} rows, ${r.from.slice(0, 7)} to ${r.to.slice(0, 7)}.`;
+  }, fd);
+}

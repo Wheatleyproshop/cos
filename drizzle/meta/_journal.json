@@ -281,6 +281,13 @@
       "when": 1794774314133,
       "tag": "0039_finance_settings",
       "breakpoints": true
+    },
+    {
+      "idx": 40,
+      "version": "7",
+      "when": 1794776664407,
+      "tag": "0040_sales_history",
+      "breakpoints": true
     }
   ]
 }

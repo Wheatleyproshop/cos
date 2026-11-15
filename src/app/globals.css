@@ -1252,3 +1252,22 @@ html:has(.clock) body { background: #0f1115; }
 :root[data-theme='dark']:has(#sidenav) .area-stock { background: #2c2140; color: #c9a7f0; }
 :root[data-theme='dark']:has(#sidenav) .area-data { background: #24272e; color: #b6bcc6; }
 .rough { color: #a66c1e; }
+/* ---------- Year at a glance ---------- */
+.yoy { font-weight: 700; font-size: 11.5px; white-space: nowrap; }
+.yoy.up { color: #28673e; }
+.yoy.down { color: #a23b31; }
+.yoy-chart { display: flex; gap: 8px; align-items: flex-end; height: 220px; }
+.yoy-col { flex: 1; min-width: 0; height: 100%; display: flex; flex-direction: column; gap: 6px; }
+.yoy-col.future { opacity: .45; }
+.yoy-bars { flex: 1; display: flex; gap: 2px; align-items: flex-end; }
+.yoy-bars span { flex: 1; border-radius: 4px 4px 0 0; min-height: 0; }
+.bar-prev, .key-prev { background: #c9c6be; }
+.bar-now, .key-now { background: #2a78d6; }
+.bar-now.partial { background: repeating-linear-gradient(45deg, #2a78d6, #2a78d6 4px, #7fb0ea 4px, #7fb0ea 8px); }
+.key-now, .key-prev { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin: 0 4px 0 10px; vertical-align: middle; }
+.yoy-col small { text-align: center; font-size: 11px; color: var(--muted); }
+.yoy-table td { vertical-align: top; }
+.yoy-table tr.future td { opacity: .45; }
+:root[data-theme='dark']:has(#sidenav) .yoy.up { color: #7fe0ae; }
+:root[data-theme='dark']:has(#sidenav) .yoy.down { color: #ff9a92; }
+:root[data-theme='dark']:has(#sidenav) .bar-prev, :root[data-theme='dark']:has(#sidenav) .key-prev { background: #4a4d55; }

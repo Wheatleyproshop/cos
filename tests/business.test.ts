@@ -392,3 +392,34 @@ describe('tax planner', () => {
     expect(a.advice.some((x) => x.area === 'Cash & tax')).toBe(true);
   });
 });
+
+describe('previous years and year at a glance', () => {
+  it('reads Shopify sales reports (monthly totals, and by vendor with or without dates)', async () => {
+    const { parseSalesHistory, monthOf } = await import('@/lib/sales-history-csv');
+    expect(monthOf('2025-03-01')).toBe('2025-03-01');
+    expect(monthOf('Mar 2025')).toBe('2025-03-01');
+    expect(monthOf('15/03/2025')).toBe('2025-03-01');
+    const monthly = parseSalesHistory('Month,Orders,Gross sales,Discounts,Returns,Net sales,Shipping charges,Taxes,Total sales\n2025-10-01,120,"£20,000.00",-£1000.00,-£500.00,"£18,500.00",£50.00,"£3,700.00","£22,250.00"\n2025-11-01,90,£15000,-£800,£0,£14200,£0,£2840,£17040\n,Total,,,,,,,\n');
+    expect(monthly).toEqual([
+      { month: '2025-10-01', months: 1, dimension: 'total', name: '', salesPence: 2_220_000, discountPence: 100_000, quantity: 0, orders: 120 },
+      { month: '2025-11-01', months: 1, dimension: 'total', name: '', salesPence: 1_704_000, discountPence: 80_000, quantity: 0, orders: 90 },
+    ]);
+    const vendor = parseSalesHistory('Product vendor,Net quantity,Net sales,Taxes,Total sales\nNIKE,40,£2000,£400,£2400\nTitleist,10,£1000,£200,£1200\n', { year: 2025 });
+    expect(vendor.map((v) => [v.name, v.month, v.months, v.salesPence, v.quantity])).toEqual([['Nike', '2025-01-01', 12, 240_000, 40], ['Titleist', '2025-01-01', 12, 120_000, 10]]);
+    expect(() => parseSalesHistory('Product vendor,Net sales\nNike,10\n')).toThrow(/which year/);
+  });
+
+  it('puts each month beside the same month last year', async () => {
+    const { importSalesHistory, yearAtAGlance } = await import('@/lib/services/business/year');
+    const { financeSettings } = await import('@/lib/services/business/tax');
+    const f = (body: string) => new File([body], 'sales-2025.csv', { type: 'text/csv' });
+    expect(await importSalesHistory(owner, f('Month,Net sales,Taxes\n2025-11-01,£1000,£200\n'))).toMatchObject({ rows: 1, dimension: 'total' });
+    const y = await yearAtAGlance(org.id, financeSettings({}), '2026-11-15');
+    const nov = y.months.find((m) => m.month === '2026-11-01')!;
+    expect(nov.sales.prev).toBe(120_000);
+    expect(nov.sales.now).toBeGreaterThan(0); // live Shopify sales from earlier tests
+    expect(nov.moneyIn.now).toBe(120_000); // bank statement uploaded earlier: £1,000 + £200 in November
+    expect(y.months).toHaveLength(12);
+    expect(y.months[0].month).toBe('2026-01-01');
+  });
+});

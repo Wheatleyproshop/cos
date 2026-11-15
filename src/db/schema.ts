@@ -1027,3 +1027,28 @@ export const shopSales = pgTable(
   },
   (t) => [uniqueIndex('shop_sales_org_line').on(t.organisationId, t.lineId), index('shop_sales_org_date').on(t.organisationId, t.soldOn)],
 );
+
+/**
+ * Sales history uploaded from Shopify's own reports (before COS was linked): monthly totals, and sales
+ * by brand or product type, for year-on-year comparison. `months` = how many months the row covers
+ * (1 for a monthly report; e.g. 12 for a whole-year "sales by vendor" report).
+ */
+export const salesHistory = pgTable(
+  'sales_history',
+  {
+    id: id(),
+    organisationId: orgId(),
+    month: date('month', { mode: 'string' }).notNull(),
+    months: integer('months').notNull().default(1),
+    dimension: text('dimension', { enum: ['total', 'brand', 'category'] }).notNull(),
+    name: text('name').notNull().default(''),
+    /** Sales including VAT as Shopify reports them (net sales + tax: after discounts and returns, before shipping). */
+    salesPence: integer('sales_pence').notNull(),
+    discountPence: integer('discount_pence').notNull().default(0),
+    quantity: integer('quantity').notNull().default(0),
+    orders: integer('orders').notNull().default(0),
+    fileName: text('file_name').notNull().default(''),
+    createdAt: createdAt(),
+  },
+  (t) => [uniqueIndex('sales_history_unique').on(t.organisationId, t.month, t.months, t.dimension, t.name)],
+);

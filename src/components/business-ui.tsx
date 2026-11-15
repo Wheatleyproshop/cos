@@ -26,6 +26,7 @@ export function UnlockForm({ action, next }: { action: BoundAction; next: string
 const TABS = [
   { href: '/business/adviser', label: '★ Adviser' },
   { href: '/business', label: 'Overview' },
+  { href: '/business/year', label: 'Year at a glance' },
   { href: '/business/staff', label: 'Staff' },
   { href: '/business/time', label: 'Hours & rota' },
   { href: '/business/payroll', label: 'Payroll' },
@@ -201,6 +202,34 @@ export function FinanceSettingsForm({ action, values }: { action: BoundAction; v
           <FormMessage state={s} />
           <div className="actions" style={{ marginTop: 8 }}>
             <Submit>Save tax settings</Submit>
+          </div>
+        </>
+      )}
+    </ActionForm>
+  );
+}
+
+export function HistoryUploadForm({ action, years }: { action: BoundAction; years: number[] }) {
+  return (
+    <ActionForm action={action} encType="multipart/form-data" resetOnSuccess>
+      {(s) => (
+        <>
+          <div className="fields" style={{ alignItems: 'end' }}>
+            <label className={`field${s?.fieldErrors?.file ? ' invalid' : ''}`}>
+              <span>Shopify sales report (CSV) *</span>
+              <input type="file" name="file" accept=".csv,text/csv" required />
+              {s?.fieldErrors?.file ? <span className="err">{s.fieldErrors.file}</span> : <span className="hint">Sales over time (by month), or Sales by vendor / product type</span>}
+            </label>
+            <Field
+              state={s}
+              name="year"
+              label="Year (only for reports with no dates)"
+              options={[{ value: '', label: 'Report has a date column' }, ...years.map((y) => ({ value: String(y), label: String(y) }))]}
+            />
+          </div>
+          <FormMessage state={s} />
+          <div className="actions" style={{ marginTop: 8 }}>
+            <Submit pendingText="Reading report…">Upload sales history</Submit>
           </div>
         </>
       )}
