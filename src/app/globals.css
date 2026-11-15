@@ -1251,3 +1251,4 @@ html:has(.clock) body { background: #0f1115; }
 :root[data-theme='dark']:has(#sidenav) .area-cashtax { background: #173524; color: #7fe0ae; }
 :root[data-theme='dark']:has(#sidenav) .area-stock { background: #2c2140; color: #c9a7f0; }
 :root[data-theme='dark']:has(#sidenav) .area-data { background: #24272e; color: #b6bcc6; }
+.rough { color: #a66c1e; }

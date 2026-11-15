@@ -64,7 +64,7 @@ export default async function AdviserPage() {
           <>
             <h3>VAT {a.fin.vatScheme === 'flat' ? `(flat rate ${a.fin.flatRatePct}%)` : ''}</h3>
             <div className="vat-quarters">
-              {a.vat.quarters.map((q) => (
+              {a.vat.quarters.filter((q) => q.current || q.future || q.due >= a.today).map((q) => (
                 <div key={q.start} className={`vat-q${q.current ? ' current' : ''}`}>
                   <small>
                     {q.current ? 'This quarter' : q.future ? 'Next quarter' : 'Last quarter'} · {q.label}
@@ -85,7 +85,12 @@ export default async function AdviserPage() {
                       </>
                     ) : null}
                   </dl>
-                  {q.estimatedShare > 0 ? <p className="muted small">{q.estimatedShare}% of this quarter is projected from the current rate of sale.</p> : null}
+                  {q.estimatedShare > 0 ? (
+                    <p className="muted small">
+                      {q.estimatedShare >= 60 ? <b className="rough">Rough guide · </b> : null}
+                      {q.estimatedShare}% of this quarter is projected from the current rate of sale{q.future ? ' — golf is seasonal, so treat this as a rough guide' : ''}.
+                    </p>
+                  ) : null}
                 </div>
               ))}
             </div>
