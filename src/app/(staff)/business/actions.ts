@@ -198,3 +198,11 @@ export async function setVoucherAction(name: string, isVoucher: boolean) {
     return isVoucher ? `“${name}” now counts as a credit voucher (money received), not a discount.` : `“${name}” counts as a discount again.`;
   });
 }
+
+export async function financeSettingsAction(_: FormState, fd: FormData) {
+  return biz(async (ctx) => {
+    const { saveFinanceSettings } = await import('@/lib/services/business/tax');
+    await saveFinanceSettings(ctx, formValues(fd));
+    return 'Saved — the forecasts below now use these settings.';
+  }, fd);
+}

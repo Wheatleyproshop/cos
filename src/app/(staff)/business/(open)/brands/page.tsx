@@ -199,7 +199,7 @@ export default async function BrandReviewPage({ searchParams }: { searchParams: 
           </div>
 
           {story.length ? (
-            <section className="panel">
+            <section className="panel" id="why" style={{ scrollMarginTop: 20 }}>
               <div className="panel-head">
                 <h2>Why the margins are what they are</h2>
                 <span className="muted">items with a cost price · prices less VAT</span>

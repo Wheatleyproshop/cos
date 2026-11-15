@@ -24,6 +24,7 @@ export function UnlockForm({ action, next }: { action: BoundAction; next: string
 }
 
 const TABS = [
+  { href: '/business/adviser', label: '★ Adviser' },
   { href: '/business', label: 'Overview' },
   { href: '/business/staff', label: 'Staff' },
   { href: '/business/time', label: 'Hours & rota' },
@@ -157,6 +158,49 @@ export function StockUploadForm({ action, today }: { action: BoundAction; today:
           <FormMessage state={s} />
           <div className="actions" style={{ marginTop: 8 }}>
             <Submit pendingText="Reading file…">Upload</Submit>
+          </div>
+        </>
+      )}
+    </ActionForm>
+  );
+}
+
+const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+
+export function FinanceSettingsForm({ action, values }: { action: BoundAction; values: { vatRegistered: boolean; vatStagger: number; vatScheme: string; flatRatePct: number; yearEndMonth: number; limitedCompany: boolean } }) {
+  return (
+    <ActionForm action={action}>
+      {(s) => (
+        <>
+          <div className="fields three">
+            <label className="check">
+              <input type="checkbox" name="vatRegistered" defaultChecked={values.vatRegistered} />
+              <span>VAT registered</span>
+            </label>
+            <label className="check">
+              <input type="checkbox" name="limitedCompany" defaultChecked={values.limitedCompany} />
+              <span>Limited company (pays corporation tax)</span>
+            </label>
+            <span />
+            <Field
+              state={s}
+              name="vatStagger"
+              label="VAT quarters end in"
+              defaultValue={String(values.vatStagger)}
+              options={[
+                { value: '1', label: 'March, June, September, December' },
+                { value: '2', label: 'April, July, October, January' },
+                { value: '3', label: 'May, August, November, February' },
+              ]}
+              hint="As on your VAT certificate or HMRC account"
+            />
+            <Field state={s} name="vatScheme" label="VAT scheme" defaultValue={values.vatScheme} options={[{ value: 'standard', label: 'Standard (reclaim VAT on purchases)' }, { value: 'flat', label: 'Flat rate scheme' }]} />
+            <Field state={s} name="flatRatePct" label="Flat rate % (flat rate scheme only)" inputMode="decimal" defaultValue={values.flatRatePct ? String(values.flatRatePct) : ''} />
+            <Field state={s} name="yearEndMonth" label="Company year ends at the end of" defaultValue={String(values.yearEndMonth)} options={MONTHS.map((m, i) => ({ value: String(i + 1), label: m }))} hint="Your accounting reference date (Companies House)" />
+          </div>
+          <FormMessage state={s} />
+          <div className="actions" style={{ marginTop: 8 }}>
+            <Submit>Save tax settings</Submit>
           </div>
         </>
       )}

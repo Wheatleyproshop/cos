@@ -354,3 +354,41 @@ describe('advice: stock checks and why margins are what they are', () => {
     expect(tit.reasons.join(' ')).toMatch(/only makes 26%/);
   });
 });
+
+describe('tax planner', () => {
+  it('works out VAT quarters, due dates and corporation tax bands', async () => {
+    const { vatQuarter, accountingYear, corporationTax, vatForecast, corporationTaxForecast, financeSettings } = await import('@/lib/services/business/tax');
+    // Stagger 1 (Mar/Jun/Sep/Dec): 15 Nov 2026 is in Oct–Dec, due 7 Feb.
+    expect(vatQuarter('2026-11-15', 1)).toMatchObject({ start: '2026-10-01', end: '2027-01-01', due: '2027-02-07' });
+    expect(vatQuarter('2026-11-15', 1, -1)).toMatchObject({ start: '2026-07-01', end: '2026-10-01', due: '2026-11-07' });
+    // Stagger 2 (Apr/Jul/Oct/Jan): Nov–Jan.
+    expect(vatQuarter('2026-11-15', 2)).toMatchObject({ start: '2026-11-01', end: '2027-02-01', due: '2027-03-07' });
+    // Stagger 3 (May/Aug/Nov/Feb): Sep–Nov, due 7 Jan.
+    expect(vatQuarter('2026-11-15', 3)).toMatchObject({ start: '2026-09-01', end: '2026-12-01', due: '2027-01-07' });
+    // Year ending 31 March: due 1 January (9 months and a day later).
+    expect(accountingYear('2026-11-15', 3)).toMatchObject({ start: '2026-04-01', end: '2027-04-01', due: '2028-01-01' });
+    expect(accountingYear('2026-11-15', 12)).toMatchObject({ start: '2026-01-01', end: '2027-01-01', due: '2027-10-01' });
+    // 19% up to £50k, 25% over £250k, marginal relief between (£100k → £22,750).
+    expect(corporationTax(40_000_00)).toBe(7_600_00);
+    expect(corporationTax(100_000_00)).toBe(22_750_00);
+    expect(corporationTax(300_000_00)).toBe(75_000_00);
+    expect(corporationTax(-5)).toBe(0);
+    // Forecasts run on the data from the earlier tests without errors, and are sensible.
+    const fin = financeSettings({});
+    const v = await vatForecast(org.id, fin, '2026-11-15');
+    expect(v.quarters).toHaveLength(3);
+    expect(v.quarters.find((q) => q.current)!.outputVat).toBeGreaterThan(0);
+    const ct = await corporationTaxForecast(org.id, fin, '2026-11-15');
+    expect(ct.due).toBe('2027-10-01');
+    expect(ct.salesExVat).toBeGreaterThan(0);
+  });
+
+  it('gives the owner one ranked list of advice', async () => {
+    const { businessAdvice } = await import('@/lib/services/business/adviser');
+    const [o] = await systemDb().select().from(organisations).where(eq(organisations.id, org.id));
+    const a = await businessAdvice(o);
+    expect(a.advice.length).toBeGreaterThan(0);
+    expect(a.advice.map((x) => x.priority)).toEqual([...a.advice.map((x) => x.priority)].sort());
+    expect(a.advice.some((x) => x.area === 'Cash & tax')).toBe(true);
+  });
+});
