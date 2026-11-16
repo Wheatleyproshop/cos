@@ -273,7 +273,18 @@ export async function createUser(ctx: Ctx, raw: unknown) {
  * now, and they leave the team list, but orders, quotes and history keep their name. You can't
  * delete yourself or the last admin.
  */
+/**
+ * The private Business area's owner can only be changed by themselves: no other admin can reset their
+ * password, change their role, or deactivate or delete them (which would otherwise be a way in).
+ */
+function protectBusinessOwner(ctx: Ctx, userId: string, what: string) {
+  if (ctx.org.businessOwnerId && ctx.org.businessOwnerId === userId && ctx.userId !== userId) {
+    throw new ServiceError(`Only the account owner can ${what} on this account — it holds the private Business area.`);
+  }
+}
+
 export async function setUserDeleted(ctx: Ctx, userId: string, deleted: boolean) {
+  protectBusinessOwner(ctx, userId, 'delete or restore');
   requireRole(ctx, 'admin', 'delete team members');
   if (deleted && userId === ctx.userId) throw new ServiceError('You can’t delete your own account. Ask another admin.');
   await withTenant(ctx.org.id, async (tx) => {
@@ -315,6 +326,7 @@ export async function listDeletedUsers(orgId: string) {
 /** Role / active changes. Accounts are deactivated, never deleted, so audit history keeps its actors. */
 export async function updateUser(ctx: Ctx, userId: string, patch: { role?: 'admin' | 'manager' | 'staff'; active?: boolean }) {
   requireRole(ctx, 'admin', 'manage team members');
+  protectBusinessOwner(ctx, userId, 'change the role or deactivate');
   if (userId === ctx.userId && (patch.active === false || (patch.role && patch.role !== 'admin'))) {
     throw new ServiceError('You cannot remove your own admin access. Ask another admin.');
   }
@@ -348,6 +360,7 @@ export async function updateUser(ctx: Ctx, userId: string, patch: { role?: 'admi
 /** Admin sets a new temporary password for an account with a login (incl. the shared Pro Shop login). */
 export async function resetUserPassword(ctx: Ctx, userId: string): Promise<string> {
   requireRole(ctx, 'admin', 'reset passwords');
+  protectBusinessOwner(ctx, userId, 'reset the password');
   const temp = randomBytes(9).toString('base64url');
   await withTenant(ctx.org.id, async (tx) => {
     const [u] = await tx.select().from(users).where(eq(users.id, userId)).limit(1);

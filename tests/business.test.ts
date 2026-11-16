@@ -465,3 +465,24 @@ describe('Business area: owner only', () => {
     expect(canSeeBusiness({ ...owned, id: 'b', role: 'admin', sharedLoginName: null })).toBe(false); // another admin
   });
 });
+
+describe('Business owner account is protected from other admins', () => {
+  it('stops another admin resetting, demoting, deactivating or deleting the owner', async () => {
+    const { resetUserPassword, updateUser, setUserDeleted } = await import('@/lib/services/admin');
+    const db = systemDb();
+    // A second owner/admin login (like a shop account with admin rights).
+    const [other] = await db
+      .insert(users)
+      .values({ organisationId: org.id, name: 'Shop Admin', email: 'shop-admin@example.com', role: 'admin', passwordHash: 'x' })
+      .returning();
+    const ownerId = owner.userId!;
+    const [o] = await db.update(organisations).set({ businessOwnerId: ownerId }).where(eq(organisations.id, org.id)).returning();
+    const shopAdmin: Ctx = { org: o, actor: staffActor(other), userId: other.id, role: 'admin' };
+    await expect(resetUserPassword(shopAdmin, ownerId)).rejects.toThrow(/Only the account owner/);
+    await expect(updateUser(shopAdmin, ownerId, { role: 'staff' })).rejects.toThrow(/Only the account owner/);
+    await expect(updateUser(shopAdmin, ownerId, { active: false })).rejects.toThrow(/Only the account owner/);
+    await expect(setUserDeleted(shopAdmin, ownerId, true)).rejects.toThrow(/Only the account owner/);
+    // The owner can still manage the other admin, and reset their own password from the admin screen.
+    await expect(resetUserPassword({ ...owner, org: o }, other.id)).resolves.toEqual(expect.any(String));
+  });
+});
