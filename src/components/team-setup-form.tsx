@@ -4,6 +4,33 @@ import { useState } from 'react';
 import type { TeamOrder } from '@/db/schema';
 import { ActionForm, Field, FormMessage, Submit, type BoundAction } from './forms';
 
+/**
+ * Phone and supplier photos are often several MB each; three of them in one form would go over the
+ * host's upload limit. Each photo is shrunk in the browser (longest side 1400px, JPEG) before sending.
+ */
+async function shrink(input: HTMLInputElement) {
+  const file = input.files?.[0];
+  if (!file || !file.type.startsWith('image/') || file.size < 400 * 1024) return;
+  try {
+    const bmp = await createImageBitmap(file);
+    const scale = Math.min(1, 1400 / Math.max(bmp.width, bmp.height));
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.round(bmp.width * scale);
+    canvas.height = Math.round(bmp.height * scale);
+    const g = canvas.getContext('2d')!;
+    g.fillStyle = '#fff';
+    g.fillRect(0, 0, canvas.width, canvas.height);
+    g.drawImage(bmp, 0, 0, canvas.width, canvas.height);
+    const blob = await new Promise<Blob | null>((r) => canvas.toBlob(r, 'image/jpeg', 0.85));
+    if (!blob || blob.size >= file.size) return;
+    const dt = new DataTransfer();
+    dt.items.add(new File([blob], file.name.replace(/\.\w+$/, '') + '.jpg', { type: 'image/jpeg' }));
+    input.files = dt.files;
+  } catch {
+    /* keep the original; the server checks the size */
+  }
+}
+
 const pounds = (p: number | undefined) => (p === undefined ? undefined : (p / 100).toFixed(2));
 const LADIES = '8, 10, 12, 14, 16, 18, 20';
 
@@ -44,7 +71,7 @@ export function TeamSetupForm({ action, team, defaultTerms, max }: { action: Bou
                   <Field state={s} name={`item${n}_sizes`} label="Sizes" defaultValue={it ? it.sizes.join(', ') : LADIES} hint="Separated by commas, smallest first" />
                   <label className="field wide">
                     <span>Photo{it?.imageKey ? ' (leave empty to keep the current one)' : ''}</span>
-                    <input type="file" name={`item${n}_photo`} accept="image/png,image/jpeg,image/webp" />
+                    <input type="file" name={`item${n}_photo`} accept="image/png,image/jpeg,image/webp" onChange={(e) => void shrink(e.currentTarget)} />
                     {s?.fieldErrors?.[`item${n}_photo`] ? <span className="err">{s.fieldErrors[`item${n}_photo`]}</span> : <span className="hint">JPG, PNG or WebP, up to 4 MB</span>}
                   </label>
                 </div>
