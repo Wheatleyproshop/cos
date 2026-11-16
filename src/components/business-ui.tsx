@@ -12,7 +12,7 @@ export function UnlockForm({ action, next }: { action: BoundAction; next: string
       {(s) => (
         <>
           <input type="hidden" name="next" value={next} />
-          <Field state={s} name="password" label="Your password" type="password" required autoComplete="current-password" />
+          <Field state={s} name="passcode" label="Business passcode" type="password" required autoComplete="off" />
           <FormMessage state={s} />
           <div className="actions">
             <Submit pendingText="Checking…">Unlock</Submit>
@@ -42,6 +42,26 @@ const TABS = [
 export function BusinessBar({ renew, lock, idleMinutes }: { renew: () => Promise<boolean>; lock: () => Promise<FormState>; idleMinutes: number }) {
   const path = usePathname();
   const router = useRouter();
+
+  // Lock the moment the owner leaves the Business area (another page, or closing the tab), so the
+  // passcode is needed every time it's opened.
+  useEffect(() => {
+    const lockNow = () => {
+      try {
+        navigator.sendBeacon('/api/business/lock');
+      } catch {
+        void fetch('/api/business/lock', { method: 'POST', keepalive: true });
+      }
+    };
+    window.addEventListener('pagehide', lockNow);
+    return () => {
+      window.removeEventListener('pagehide', lockNow);
+      // Leaving the area (not just moving between its tabs): check where we ended up once navigation settles.
+      setTimeout(() => {
+        if (!window.location.pathname.startsWith('/business')) lockNow();
+      }, 0);
+    };
+  }, []);
   const lastActive = useRef(Date.now());
   const lastRenew = useRef(Date.now());
   const [, start] = useTransition();
@@ -230,6 +250,27 @@ export function HistoryUploadForm({ action, years }: { action: BoundAction; year
           <FormMessage state={s} />
           <div className="actions" style={{ marginTop: 8 }}>
             <Submit pendingText="Reading report…">Upload sales history</Submit>
+          </div>
+        </>
+      )}
+    </ActionForm>
+  );
+}
+
+export function PasscodeSetupForm({ action, reset }: { action: BoundAction; reset: boolean }) {
+  return (
+    <ActionForm action={action}>
+      {(s) => (
+        <>
+          <div className="fields">
+            <Field state={s} name="password" label="Your account password (to confirm it’s you)" type="password" required autoComplete="current-password" />
+            <span />
+            <Field state={s} name="passcode" label={reset ? 'New Business passcode' : 'Choose a Business passcode'} type="password" required autoComplete="new-password" hint="6 or more characters — different from your password" />
+            <Field state={s} name="confirm" label="Type it again" type="password" required autoComplete="new-password" />
+          </div>
+          <FormMessage state={s} />
+          <div className="actions">
+            <Submit pendingText="Saving…">{reset ? 'Reset passcode' : 'Set passcode and open'}</Submit>
           </div>
         </>
       )}

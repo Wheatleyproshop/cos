@@ -1,5 +1,5 @@
 import { eq } from 'drizzle-orm';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { setDatabaseHandle, systemDb, withTenant } from '@/db';
 import { runMigrations } from '@/db/migrate';
 import { organisations, payslips, staffProfiles, timeEntries, users, type Organisation } from '@/db/schema';
@@ -8,6 +8,8 @@ import { staffActor } from '@/lib/audit';
 import { categorise, parseBankAmount, parseBankCsv, parseBankDate, ruleMatchFor } from '@/lib/bank-csv';
 import { parseStockCsv } from '@/lib/stock-csv';
 import type { Ctx } from '@/lib/services/common';
+
+vi.mock('server-only', () => ({}));
 
 let close: () => Promise<void>;
 let org: Organisation;
@@ -448,5 +450,18 @@ describe('compare bank periods', () => {
     expect(c.a.in).toBeGreaterThan(0);
     expect(c.bHasData).toBe(false);
     expect(c.rows.some((r) => r.category === 'Card & online takings' && r.aIn > 0)).toBe(true);
+  });
+});
+
+describe('Business area: owner only', () => {
+  it('is visible only to the owner who set the passcode — not other admins, staff or the shop login', async () => {
+    const { canSeeBusiness } = await import('@/lib/business-lock');
+    const base = { org: { ...org, businessOwnerId: null, businessPasscodeHash: null } };
+    expect(canSeeBusiness({ ...base, id: 'a', role: 'admin', sharedLoginName: null })).toBe(true); // before anyone has claimed it
+    expect(canSeeBusiness({ ...base, id: 'a', role: 'manager', sharedLoginName: null })).toBe(false);
+    expect(canSeeBusiness({ ...base, id: 'a', role: 'admin', sharedLoginName: 'Pro Shop' })).toBe(false);
+    const owned = { org: { ...org, businessOwnerId: 'a', businessPasscodeHash: 'x' } };
+    expect(canSeeBusiness({ ...owned, id: 'a', role: 'admin', sharedLoginName: null })).toBe(true);
+    expect(canSeeBusiness({ ...owned, id: 'b', role: 'admin', sharedLoginName: null })).toBe(false); // another admin
   });
 });

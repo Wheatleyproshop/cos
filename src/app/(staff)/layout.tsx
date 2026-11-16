@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import { Sidebar } from '@/components/chrome';
 import { ServiceWorker } from '@/components/notifications';
 import { requireStaff, ROLE_LABELS } from '@/lib/auth';
+import { canSeeBusiness } from '@/lib/business-lock';
 import { logoutAction } from './actions';
 
 export const metadata: Metadata = {
@@ -17,7 +18,7 @@ export default async function StaffLayout({ children }: { children: React.ReactN
       <a href="#content" className="skip">
         Skip to content
       </a>
-      <Sidebar storeName={staff.org.storeName} userName={staff.name} roleLabel={ROLE_LABELS[staff.role]} signOut={logoutAction} sharedLoginName={staff.sharedLoginName} isOwner={staff.role === 'admin' && !staff.sharedLoginName} />
+      <Sidebar storeName={staff.org.storeName} userName={staff.name} roleLabel={ROLE_LABELS[staff.role]} signOut={logoutAction} sharedLoginName={staff.sharedLoginName} isOwner={canSeeBusiness(staff)} />
       <main id="content">{children}</main>
       <ServiceWorker />
     </>

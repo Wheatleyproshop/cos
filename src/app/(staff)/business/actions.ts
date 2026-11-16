@@ -4,7 +4,7 @@ import { revalidatePath } from 'next/cache';
 import { redirect, unstable_rethrow } from 'next/navigation';
 import type { FormState } from '@/lib/action-utils';
 import { ctxFor, formValues } from '@/lib/action-utils';
-import { lockBusiness, requireBusiness, unlockBusiness } from '@/lib/business-lock';
+import { lockBusiness, requireBusiness, setBusinessPasscode, unlockBusiness } from '@/lib/business-lock';
 import { ServiceError, type Ctx } from '@/lib/services/common';
 import type { Staff } from '@/lib/auth';
 import { saveStaffRecord, setClockPin } from '@/lib/services/business/staff';
@@ -36,10 +36,16 @@ async function biz(fn: (ctx: Ctx, staff: Staff) => Promise<string | { message?: 
 const str = (fd: FormData, k: string) => String(fd.get(k) ?? '').trim();
 
 export async function unlockAction(_: FormState, fd: FormData): Promise<FormState> {
-  const r = await unlockBusiness(String(fd.get('password') ?? ''));
-  if (!r.ok) return { error: r.error };
+  const r = await unlockBusiness(String(fd.get('passcode') ?? ''));
+  if (!r.ok) return { error: r.error, fieldErrors: r.field ? { [r.field]: r.error } : undefined };
   const next = str(fd, 'next');
   redirect(next.startsWith('/business') ? next : '/business');
+}
+
+export async function setPasscodeAction(_: FormState, fd: FormData): Promise<FormState> {
+  const r = await setBusinessPasscode(String(fd.get('password') ?? ''), String(fd.get('passcode') ?? ''), String(fd.get('confirm') ?? ''));
+  if (!r.ok) return { error: r.error, fieldErrors: r.field ? { [r.field]: r.error } : undefined };
+  redirect('/business/adviser');
 }
 
 export async function lockAction(): Promise<FormState> {

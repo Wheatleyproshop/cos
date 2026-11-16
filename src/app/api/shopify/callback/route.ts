@@ -4,6 +4,7 @@ import { withTenant } from '@/db';
 import { ctxFor } from '@/lib/action-utils';
 import { recordEvent } from '@/lib/audit';
 import { getStaff } from '@/lib/auth';
+import { canSeeBusiness } from '@/lib/business-lock';
 import { exchangeShopifyCode, shopifyConfig, ShopifyError, verifyShopifyHmac } from '@/lib/shopify';
 import { safeEqual } from '@/lib/tokens';
 
@@ -20,7 +21,7 @@ export async function GET(req: Request) {
   jar.delete('cos_shopify_state');
   const cfg = shopifyConfig();
   const fail = (why: string) => redirect(`/business/stock?shopify=${encodeURIComponent(why)}`);
-  if (!staff || staff.role !== 'admin' || staff.sharedLoginName) return new Response('Only the owner can connect Shopify.', { status: 403 });
+  if (!staff || !canSeeBusiness(staff)) return new Response('Only the owner can connect Shopify.', { status: 403 });
   if (!cfg) return fail('missing');
   if (!expected || !safeEqual(expected, p.get('state') ?? '')) return fail('expired');
   if (!verifyShopifyHmac(p)) return fail('signature');

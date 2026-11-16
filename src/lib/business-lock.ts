@@ -1,19 +1,21 @@
 import 'server-only';
-import { eq } from 'drizzle-orm';
+import bcrypt from 'bcryptjs';
+import { and, eq, gt, sql } from 'drizzle-orm';
 import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { systemDb, withTenant } from '@/db';
-import { users } from '@/db/schema';
+import { auditEvents, organisations, users } from '@/db/schema';
 import { recordEvent, staffActor } from './audit';
 import { requireStaff, verifyPassword, type Staff } from './auth';
 import { safeEqual, signValue } from './tokens';
 
 /**
- * The owner's Business area (bank, payroll, staff records) sits behind a second lock: owner/admin
- * role, plus their password re-entered. Unlocking sets a signed, short-lived cookie tied to the
- * person, renewed while they keep using it; it locks again after 15 minutes idle or on sign-out.
+ * The Business area (bank, payroll, staff records, tax) is for one person: the owner who set its
+ * passcode. Nobody else sees it — not other admins, not the shared shop login. The passcode is separate
+ * from the sign-in password and is asked for every time the area is opened: it locks when you leave it,
+ * close the tab, sign out, press Lock, or after 15 minutes without use.
  */
-const COOKIE = 'cos_business';
+export const BUSINESS_COOKIE = 'cos_business';
 export const BUSINESS_IDLE_MINUTES = 15;
 const MAX_TRIES = 5;
 
@@ -31,49 +33,54 @@ function valid(raw: string | undefined, userId: string) {
 
 async function setCookie(userId: string) {
   const until = Date.now() + BUSINESS_IDLE_MINUTES * 60_000;
-  (await cookies()).set(COOKIE, token(userId, until), {
-    httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: 'strict', path: '/', maxAge: BUSINESS_IDLE_MINUTES * 60,
-  });
+  // No maxAge: a session cookie, so closing the browser also locks it.
+  (await cookies()).set(BUSINESS_COOKIE, token(userId, until), { httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: 'strict', path: '/' });
 }
 
-/** True when this owner has unlocked the Business area recently. */
+/** Whether this person may see the Business area at all (before any passcode). */
+export function canSeeBusiness(staff: Pick<Staff, 'id' | 'role' | 'sharedLoginName' | 'org'>) {
+  if (staff.role !== 'admin' || staff.sharedLoginName) return false;
+  return !staff.org.businessOwnerId || staff.org.businessOwnerId === staff.id;
+}
+
 export async function businessUnlocked(staff: Staff) {
-  return staff.role === 'admin' && !staff.sharedLoginName && valid((await cookies()).get(COOKIE)?.value, staff.id);
+  return canSeeBusiness(staff) && Boolean(staff.org.businessPasscodeHash) && valid((await cookies()).get(BUSINESS_COOKIE)?.value, staff.id);
 }
 
-/**
- * Use at the top of every Business page and action. Not an owner → back to the dashboard;
- * locked → the unlock screen. Each use extends the 15 minutes (cookies can only be set in actions/route handlers).
- */
+/** Top of every Business page, action and download. Not theirs → dashboard; locked → passcode screen. */
 export async function requireBusiness(opts: { renew?: boolean } = {}): Promise<Staff> {
   const staff = await requireStaff();
-  if (staff.role !== 'admin' || staff.sharedLoginName) redirect('/');
+  if (!canSeeBusiness(staff)) redirect('/');
   if (!(await businessUnlocked(staff))) redirect('/business/unlock');
   if (opts.renew) await setCookie(staff.id);
   return staff;
 }
 
-/** Checks the owner's password and unlocks. Wrong passwords count towards the normal sign-in lockout. */
-export async function unlockBusiness(password: string): Promise<{ ok: true } | { ok: false; error: string }> {
+type Result = { ok: true } | { ok: false; error: string; field?: string };
+
+async function recentFailures(orgId: string, userId: string) {
+  const [r] = await withTenant(orgId, (tx) =>
+    tx
+      .select({ n: sql<number>`count(*)::int` })
+      .from(auditEvents)
+      .where(and(eq(auditEvents.eventType, 'business_unlock_failed'), eq(auditEvents.entityId, userId), gt(auditEvents.createdAt, sql`now() - interval '15 minutes'`))),
+  );
+  return r?.n ?? 0;
+}
+
+/** Opens the Business area with its passcode. Wrong passcodes are recorded (and committed) before saying no. */
+export async function unlockBusiness(passcode: string): Promise<Result> {
   const staff = await requireStaff();
-  if (staff.role !== 'admin' || staff.sharedLoginName) return { ok: false, error: 'Only the owner can open the Business area.' };
-  const db = systemDb();
-  const [u] = await db.select().from(users).where(eq(users.id, staff.id)).limit(1);
-  if (!u) return { ok: false, error: 'Account not found.' };
-  if (u.lockedUntil && u.lockedUntil > new Date()) return { ok: false, error: 'Too many wrong attempts. Try again in 15 minutes.' };
+  if (!canSeeBusiness(staff)) return { ok: false, error: 'The Business area is private to its owner.' };
+  if (!staff.org.businessPasscodeHash) return { ok: false, error: 'Set a passcode first.' };
+  if ((await recentFailures(staff.organisationId, staff.id)) >= MAX_TRIES) return { ok: false, error: 'Too many wrong passcodes. Try again in 15 minutes, or reset it with your account password.' };
   const actor = staffActor({ id: staff.id, name: staff.name });
-  if (!(await verifyPassword(password, u.passwordHash))) {
-    const failed = u.failedLoginCount + 1;
-    await db
-      .update(users)
-      .set({ failedLoginCount: failed >= MAX_TRIES ? 0 : failed, lockedUntil: failed >= MAX_TRIES ? new Date(Date.now() + 15 * 60_000) : null })
-      .where(eq(users.id, u.id));
+  if (!(await bcrypt.compare(passcode.trim(), staff.org.businessPasscodeHash))) {
     await withTenant(staff.organisationId, (tx) =>
-      recordEvent(tx, { organisationId: staff.organisationId, actor, eventType: 'business_unlock_failed', entityType: 'organisation', entityId: staff.organisationId }),
+      recordEvent(tx, { organisationId: staff.organisationId, actor, eventType: 'business_unlock_failed', entityType: 'user', entityId: staff.id }),
     );
-    return { ok: false, error: 'That password isn’t right.' };
+    return { ok: false, error: 'That passcode isn’t right.', field: 'passcode' };
   }
-  if (u.failedLoginCount) await db.update(users).set({ failedLoginCount: 0 }).where(eq(users.id, u.id));
   await setCookie(staff.id);
   await withTenant(staff.organisationId, (tx) =>
     recordEvent(tx, { organisationId: staff.organisationId, actor, eventType: 'business_unlocked', entityType: 'organisation', entityId: staff.organisationId }),
@@ -81,6 +88,32 @@ export async function unlockBusiness(password: string): Promise<{ ok: true } | {
   return { ok: true };
 }
 
+/**
+ * Sets (or resets) the passcode, confirmed with the person's account password. The first owner to do
+ * this becomes the Business area's only user.
+ */
+export async function setBusinessPasscode(password: string, passcode: string, confirm: string): Promise<Result> {
+  const staff = await requireStaff();
+  if (!canSeeBusiness(staff)) return { ok: false, error: 'The Business area is private to its owner.' };
+  const p = passcode.trim();
+  if (p.length < 6 || p.length > 32) return { ok: false, error: 'Use 6 to 32 characters.', field: 'passcode' };
+  if (/^(.)\1+$/.test(p) || ['123456', '1234567', '12345678', 'password', 'qwerty', '654321'].includes(p.toLowerCase())) return { ok: false, error: 'Pick a passcode that’s harder to guess.', field: 'passcode' };
+  if (p !== confirm.trim()) return { ok: false, error: 'The two passcodes don’t match.', field: 'confirm' };
+  const db = systemDb();
+  const [u] = await db.select().from(users).where(eq(users.id, staff.id)).limit(1);
+  if (!u || !(await verifyPassword(password, u.passwordHash))) return { ok: false, error: 'That isn’t your account password.', field: 'password' };
+  const hash = await bcrypt.hash(p, 12);
+  await withTenant(staff.organisationId, async (tx) => {
+    await tx.update(organisations).set({ businessOwnerId: staff.id, businessPasscodeHash: hash }).where(eq(organisations.id, staff.organisationId));
+    await recordEvent(tx, {
+      organisationId: staff.organisationId, actor: staffActor({ id: staff.id, name: staff.name }), eventType: 'settings_changed', entityType: 'organisation',
+      entityId: staff.organisationId, metadata: { section: 'business.passcode', reset: Boolean(staff.org.businessPasscodeHash) },
+    });
+  });
+  await setCookie(staff.id);
+  return { ok: true };
+}
+
 export async function lockBusiness() {
-  (await cookies()).delete(COOKIE);
+  (await cookies()).delete(BUSINESS_COOKIE);
 }

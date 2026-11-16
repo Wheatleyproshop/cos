@@ -121,6 +121,10 @@ export const organisations = pgTable('organisations', {
   /** Shopify discount names (lower-case) that are really trade-in credit vouchers (e.g. CreditYard): counted as payment, not as a price cut. */
   voucherDiscounts: jsonb('voucher_discounts').$type<string[]>().notNull().default([]),
   /** Shopify sales sync progress: orders updated since this time are fetched next; a bulk export in progress. */
+  /** The one person who can open the Business area (set when they create its passcode). */
+  businessOwnerId: uuid('business_owner_id'),
+  /** bcrypt of the Business area passcode (separate from any sign-in password). */
+  businessPasscodeHash: text('business_passcode_hash'),
   /** Tax planning settings for the Business adviser (VAT quarters, scheme, accounting year end). */
   finance: jsonb('finance').$type<FinanceSettings>().notNull().default({}),
   /** Read-only Shopify access token from the one-time "Connect to Shopify" approval (AES-GCM encrypted). */
