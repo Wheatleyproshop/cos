@@ -16,7 +16,7 @@ export async function submitTeamOrderAction(token: string, _: FormState, fd: For
     const r = await submitTeamOrder(token, raw, { ip: h.get('x-forwarded-for')?.split(',')[0]?.trim() ?? null });
     return {
       ok: true,
-      message: `Your order number is ${r.order.orderNumber}: size ${r.size}${r.printedName ? `, with “${r.printedName}”` : ''}, ${money(r.total)}. A confirmation is on its way to your inbox, and we’ll let you know when it’s ready to collect.`,
+      message: `Your order number is ${r.order.orderNumber}: ${r.lines.map((l) => `${l.product} (size ${l.size})`).join(', ')}${r.printedName ? `, with “${r.printedName}”` : ''} — ${money(r.total)}. A confirmation is on its way to your inbox, and we’ll let you know when it’s ready to collect.`,
     };
   } catch (e) {
     const values: Record<string, string> = {};

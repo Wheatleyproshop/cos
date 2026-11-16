@@ -84,7 +84,7 @@ export async function createOrder(ctx: Ctx, raw: unknown, opts: { notify?: boole
         sku: input.sku,
         supplier: input.brand,
         specificationText: composeSpec({ ...input, unitPricePence, notes: input.specificationText }),
-        ...(combined.spec ? { specificationJson: combined.spec } : opts.spec ? { specificationJson: opts.spec } : {}),
+        ...(combined.spec ? { specificationJson: { ...combined.spec, ...(opts.spec ?? {}) } } : opts.spec ? { specificationJson: opts.spec } : {}),
         totalGrossPence: input.totalGrossPence,
         etaDate: input.etaDate,
         supplierReference: input.supplierReference,

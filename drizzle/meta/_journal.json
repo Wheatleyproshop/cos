@@ -302,6 +302,20 @@
       "when": 1794846367479,
       "tag": "0042_team_orders",
       "breakpoints": true
+    },
+    {
+      "idx": 43,
+      "version": "7",
+      "when": 1794846794330,
+      "tag": "0043_team_order_drop_single",
+      "breakpoints": true
+    },
+    {
+      "idx": 44,
+      "version": "7",
+      "when": 1794846794843,
+      "tag": "0044_team_order_items",
+      "breakpoints": true
     }
   ]
 }

@@ -9,7 +9,7 @@ import { hasRole, requireStaff } from '@/lib/auth';
 import { money } from '@/lib/format';
 import { statusLabel } from '@/lib/status';
 import { appUrl } from '@/lib/tokens';
-import { DEFAULT_TEAM_TERMS, isOpen, londonToday, teamOrderDetail } from '@/lib/services/team-orders';
+import { DEFAULT_TEAM_TERMS, isOpen, londonToday, MAX_TEAM_ITEMS, teamOrderDetail } from '@/lib/services/team-orders';
 import { closeTeamOrderAction, updateTeamOrderAction } from '../actions';
 
 export const metadata: Metadata = { title: 'Team order' };
@@ -28,7 +28,7 @@ export default async function TeamOrderPage({ params }: { params: Promise<{ id: 
       <PageHeader
         staff={staff}
         title={team.title}
-        sub={`${[team.teamName, `${team.brand} ${team.product}`, team.colour].filter(Boolean).join(' · ')} — ${money(team.pricePence)}${team.namePricePence ? `, name +${money(team.namePricePence)}` : ''}`}
+        sub={`${[team.teamName, team.brand].filter(Boolean).join(' · ')} — ${team.items.map((i) => `${i.product} ${money(i.pricePence)}`).join(', ')}${team.namePricePence ? `; name +${money(team.namePricePence)} each` : ''}`}
         actions={
           <Link href="/orders/team" className="btn">
             All team orders
@@ -39,7 +39,7 @@ export default async function TeamOrderPage({ params }: { params: Promise<{ id: 
         <h2>Link for the team {open ? '' : <span className="muted">(closed)</span>}</h2>
         <CopyLink url={url} label="Team order link" />
         <p className="muted" style={{ marginBottom: 0 }}>
-          Send this to the team captain or post it in the team’s group chat. Each person fills it in once per shirt. Each order lands on the order board as
+          Send this to the team captain or post it in the team’s group chat. Each person fills it in once, choosing a size for each item they want. Each order lands on the order board as
           “To place” and the customer gets a confirmation email.
           {team.closesOn ? ` Closes at the end of ${team.closesOn.split('-').reverse().join('/')}.` : ''}
         </p>
@@ -55,34 +55,43 @@ export default async function TeamOrderPage({ params }: { params: Promise<{ id: 
       <section className="panel">
         <div className="sheet-head">
           <h2 style={{ margin: 0 }}>
-            {d.totals.count} ordered · {money(d.totals.value)}
+            {d.totals.orders} {d.totals.orders === 1 ? 'order' : 'orders'} · {d.totals.garments} items · {money(d.totals.value)}
             {d.totals.named ? <span className="muted"> · {d.totals.named} with names</span> : null}
           </h2>
-          {d.totals.count ? (
+          {d.totals.orders ? (
             <a className="btn small" href={`/api/export/team/${team.id}`}>
               Download list (CSV)
             </a>
           ) : null}
         </div>
-        <div className="team-tally" aria-label="Sizes ordered">
-          {d.sizes.map((s) => (
-            <div key={s.size}>
-              <span className="muted">{s.size}</span>
-              <b>{s.total}</b>
-              {s.named ? <small className="muted">{s.named} named</small> : null}
+        {d.items.map((it) => (
+          <div key={it.id} style={{ marginTop: 14 }}>
+            <b>{it.product}</b>
+            <span className="muted">
+              {' '}
+              · {it.total} ordered{it.named ? `, ${it.named} with names` : ''}
+            </span>
+            <div className="team-tally" aria-label={`${it.product} sizes ordered`}>
+              {it.sizes.map((s) => (
+                <div key={s.size}>
+                  <span className="muted">{s.size}</span>
+                  <b>{s.total}</b>
+                  {s.named ? <small className="muted">{s.named} named</small> : null}
+                </div>
+              ))}
             </div>
-          ))}
-        </div>
+          </div>
+        ))}
         {d.orders.length ? (
-          <div className="tablewrap">
+          <div className="tablewrap" style={{ marginTop: 16 }}>
             <table className="compact">
               <thead>
                 <tr>
                   <th>Order</th>
                   <th>Customer</th>
-                  <th>Size</th>
+                  <th>Items</th>
                   <th>Name on it</th>
-                  <th className="num">Price</th>
+                  <th className="num">Total</th>
                   <th>Status</th>
                 </tr>
               </thead>
@@ -98,7 +107,13 @@ export default async function TeamOrderPage({ params }: { params: Promise<{ id: 
                       {o.customer}
                       <div className="muted">{o.email}</div>
                     </td>
-                    <td>{o.size}</td>
+                    <td>
+                      {o.lines.map((l) => (
+                        <div key={l.itemId}>
+                          {l.product} · <b>{l.size}</b>
+                        </div>
+                      ))}
+                    </td>
                     <td>{o.printedName || <span className="muted">—</span>}</td>
                     <td className="num">{money(o.totalGrossPence)}</td>
                     <td>{statusLabel(o.status)}</td>
@@ -117,7 +132,7 @@ export default async function TeamOrderPage({ params }: { params: Promise<{ id: 
           <summary>
             <b>Edit the details</b>
           </summary>
-          <TeamSetupForm action={updateTeamOrderAction.bind(null, team.id)} team={team} defaultTerms={DEFAULT_TEAM_TERMS} />
+          <TeamSetupForm action={updateTeamOrderAction.bind(null, team.id)} team={team} defaultTerms={DEFAULT_TEAM_TERMS} max={MAX_TEAM_ITEMS} />
         </details>
       ) : null}
     </>

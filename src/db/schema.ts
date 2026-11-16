@@ -1073,18 +1073,14 @@ export const teamOrders = pgTable(
     title: text('title').notNull(),
     teamName: text('team_name').notNull().default(''),
     brand: text('brand').notNull(),
-    product: text('product').notNull(),
-    colour: text('colour').notNull().default(''),
     description: text('description').notNull().default(''),
-    sizes: jsonb('sizes').$type<string[]>().notNull(),
-    pricePence: integer('price_pence').notNull(),
+    /** The garments on offer, each with its own price, sizes and photo. */
+    items: jsonb('items').$type<TeamItem[]>().notNull().default([]),
     /** 0 = no name option. */
     namePricePence: integer('name_price_pence').notNull().default(0),
     namePlacement: text('name_placement').notNull().default(''),
     nameMaxLength: integer('name_max_length').notNull().default(20),
     terms: text('terms').notNull().default(''),
-    imageKey: text('image_key'),
-    imageMime: text('image_mime'),
     closesOn: date('closes_on', { mode: 'string' }),
     closedAt: timestamp('closed_at', { withTimezone: true }),
     createdByUserId: uuid('created_by_user_id').notNull().references(() => users.id),
@@ -1092,4 +1088,5 @@ export const teamOrders = pgTable(
   },
   (t) => [index('team_orders_org_idx').on(t.organisationId, t.createdAt)],
 );
+export type TeamItem = { id: string; product: string; colour: string; pricePence: number; sizes: string[]; imageKey: string | null; imageMime: string | null };
 export type TeamOrder = typeof teamOrders.$inferSelect;

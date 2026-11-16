@@ -4,7 +4,7 @@ import { TeamSetupForm } from '@/components/team-setup-form';
 import { PageHeader } from '@/components/views';
 import { hasRole, requireStaff } from '@/lib/auth';
 import { money } from '@/lib/format';
-import { DEFAULT_TEAM_TERMS, isOpen, listTeamOrders, londonToday } from '@/lib/services/team-orders';
+import { DEFAULT_TEAM_TERMS, isOpen, listTeamOrders, londonToday, MAX_TEAM_ITEMS } from '@/lib/services/team-orders';
 import { createTeamOrderAction } from './actions';
 
 export const metadata: Metadata = { title: 'Team orders' };
@@ -19,7 +19,7 @@ export default async function TeamOrdersPage() {
       <PageHeader
         staff={staff}
         title="Team orders"
-        sub="A link for a team to order the same garment: each member picks their size, adds their name if they want it, and accepts the order. Every response becomes an order."
+        sub="A link for a team’s kit: each member picks a size for the items they want, adds their name if they want it, and accepts the order. Every response becomes an order."
       />
       <section className="panel">
         {list.length ? (
@@ -28,7 +28,7 @@ export default async function TeamOrdersPage() {
               <thead>
                 <tr>
                   <th>Team order</th>
-                  <th>Price</th>
+                  <th>Prices</th>
                   <th className="num">Orders</th>
                   <th className="num">Value</th>
                   <th>Link</th>
@@ -42,11 +42,11 @@ export default async function TeamOrdersPage() {
                         {t.title}
                       </Link>
                       <div className="muted">
-                        {[t.teamName, `${t.brand} ${t.product}`].filter(Boolean).join(' · ')}
+                        {[t.teamName, t.items.map((i) => i.product).join(', ')].filter(Boolean).join(' · ')}
                       </div>
                     </td>
                     <td>
-                      {money(t.pricePence)}
+                      {t.items.map((i) => money(i.pricePence)).join(' / ')}
                       {t.namePricePence ? <div className="muted">+{money(t.namePricePence)} name</div> : null}
                     </td>
                     <td className="num">{t.count}</td>
@@ -66,7 +66,7 @@ export default async function TeamOrdersPage() {
       {canSetUp ? (
         <section className="panel">
           <h2>New team order link</h2>
-          <TeamSetupForm action={createTeamOrderAction} defaultTerms={DEFAULT_TEAM_TERMS} />
+          <TeamSetupForm action={createTeamOrderAction} defaultTerms={DEFAULT_TEAM_TERMS} max={MAX_TEAM_ITEMS} />
         </section>
       ) : null}
     </>

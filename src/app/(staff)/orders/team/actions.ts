@@ -2,17 +2,18 @@
 
 import { redirect } from 'next/navigation';
 import { act, type FormState } from '@/lib/action-utils';
-import { createTeamOrder, setTeamOrderClosed, updateTeamOrder } from '@/lib/services/team-orders';
+import { createTeamOrder, MAX_TEAM_ITEMS, setTeamOrderClosed, updateTeamOrder } from '@/lib/services/team-orders';
 
 const fields = (fd: FormData) => {
   const raw: Record<string, string> = {};
   for (const [k, v] of fd.entries()) if (typeof v === 'string' && !k.startsWith('$')) raw[k] = v;
   return raw;
 };
-const photo = (fd: FormData) => {
-  const f = fd.get('photo');
-  return f instanceof File && f.size > 0 ? f : null;
-};
+const photo = (fd: FormData) =>
+  Array.from({ length: MAX_TEAM_ITEMS }, (_, n) => {
+    const f = fd.get(`item${n}_photo`);
+    return f instanceof File && f.size > 0 ? f : null;
+  });
 
 export async function createTeamOrderAction(_: FormState, fd: FormData): Promise<FormState> {
   let id = '';
