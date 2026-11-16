@@ -60,7 +60,7 @@ export function orderEmailContext(o: Order, c: Customer, t: PaymentTotals, actio
  * emails the customer their confirmation ("your order has been placed"). Placing it with the
  * supplier afterwards is internal.
  */
-export async function createOrder(ctx: Ctx, raw: unknown, opts: { notify?: boolean } = {}) {
+export async function createOrder(ctx: Ctx, raw: unknown, opts: { notify?: boolean; spec?: Record<string, unknown> } = {}) {
   if (!ctx.userId) throw new ServiceError('Orders must be taken by a signed-in staff member.');
   const combined = itemsOrError(raw);
   raw = combined.raw;
@@ -84,7 +84,7 @@ export async function createOrder(ctx: Ctx, raw: unknown, opts: { notify?: boole
         sku: input.sku,
         supplier: input.brand,
         specificationText: composeSpec({ ...input, unitPricePence, notes: input.specificationText }),
-        ...(combined.spec ? { specificationJson: combined.spec } : {}),
+        ...(combined.spec ? { specificationJson: combined.spec } : opts.spec ? { specificationJson: opts.spec } : {}),
         totalGrossPence: input.totalGrossPence,
         etaDate: input.etaDate,
         supplierReference: input.supplierReference,

@@ -1283,3 +1283,34 @@ html:has(.clock) body { background: #0f1115; }
 .compare-form { display: flex; gap: 12px; align-items: end; flex-wrap: wrap; margin-bottom: 14px; }
 .compare-form .field { min-width: 220px; margin: 0; }
 .compare-form select { padding: 10px 12px; border-radius: 9px; border: 1px solid var(--line); background: transparent; color: inherit; font: inherit; }
+
+/* Team order link (public) */
+.team-page { display: grid; grid-template-columns: minmax(0, 340px) minmax(0, 1fr); gap: 28px; align-items: start; }
+.team-photo { background: #f6f7f5; border-radius: 14px; padding: 12px; position: sticky; top: 16px; }
+.team-photo img { width: 100%; height: auto; display: block; border-radius: 8px; }
+.team-eyebrow { font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: #6b746e; margin-bottom: 4px; }
+.team-desc { margin-top: 8px !important; }
+.team-closes { margin-top: 8px !important; font-weight: 600; color: #1d2a22 !important; }
+.team-price { font-size: 17px; margin: 4px 0 6px; }
+.team-price b { font-size: 26px; }
+.team-sizes { display: flex; flex-wrap: wrap; gap: 8px; }
+.team-size { position: relative; }
+.team-size input { position: absolute; opacity: 0; inset: 0; margin: 0; cursor: pointer; }
+.team-size span { display: inline-flex; align-items: center; justify-content: center; min-width: 52px; height: 44px; padding: 0 14px; border: 1.5px solid #cfd6d0; border-radius: 10px; font-weight: 600; background: #fff; }
+.team-size input:checked + span { border-color: var(--green, #193b2c); background: var(--green, #193b2c); color: #fff; }
+.team-size input:focus-visible + span { outline: 2px solid var(--green, #193b2c); outline-offset: 2px; }
+.team-check { display: flex; gap: 10px; align-items: flex-start; margin: 6px 0 10px; font-size: 15px; cursor: pointer; }
+.team-check input { width: 20px; height: 20px; margin-top: 1px; flex: none; }
+.team-check.invalid span { color: #b42318; }
+.team-total { display: flex; justify-content: space-between; align-items: baseline; border-top: 1px solid #e4e8e2; margin-top: 22px; padding-top: 14px; font-size: 17px; }
+.team-total b { font-size: 24px; }
+.team-tally { display: flex; flex-wrap: wrap; gap: 10px; margin: 6px 0 4px; }
+.team-tally div { border: 1px solid var(--line, #e4e8e2); border-radius: 10px; padding: 8px 14px; min-width: 70px; text-align: center; }
+.team-tally b { display: block; font-size: 22px; }
+.team-link { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.team-link input { flex: 1 1 320px; min-width: 0; }
+@media (max-width: 720px) {
+  .team-page { grid-template-columns: 1fr; gap: 16px; }
+  .team-photo { position: static; max-width: 300px; margin: 0 auto; }
+}
+.team-main .fields { grid-template-columns: 1fr; }

@@ -1056,3 +1056,40 @@ export const salesHistory = pgTable(
   },
   (t) => [uniqueIndex('sales_history_unique').on(t.organisationId, t.month, t.months, t.dimension, t.name)],
 );
+
+/* ───────────────────────────── Team orders ──────────────────────────────── */
+
+/**
+ * A team-wear order link: one garment at a set price, the customer picks a size and (optionally) a
+ * printed name for an extra charge. Each response becomes a normal order ("To place").
+ */
+export const teamOrders = pgTable(
+  'team_orders',
+  {
+    id: id(),
+    organisationId: orgId(),
+    /** Unguessable part of the public link. */
+    token: text('token').notNull().unique(),
+    title: text('title').notNull(),
+    teamName: text('team_name').notNull().default(''),
+    brand: text('brand').notNull(),
+    product: text('product').notNull(),
+    colour: text('colour').notNull().default(''),
+    description: text('description').notNull().default(''),
+    sizes: jsonb('sizes').$type<string[]>().notNull(),
+    pricePence: integer('price_pence').notNull(),
+    /** 0 = no name option. */
+    namePricePence: integer('name_price_pence').notNull().default(0),
+    namePlacement: text('name_placement').notNull().default(''),
+    nameMaxLength: integer('name_max_length').notNull().default(20),
+    terms: text('terms').notNull().default(''),
+    imageKey: text('image_key'),
+    imageMime: text('image_mime'),
+    closesOn: date('closes_on', { mode: 'string' }),
+    closedAt: timestamp('closed_at', { withTimezone: true }),
+    createdByUserId: uuid('created_by_user_id').notNull().references(() => users.id),
+    createdAt: createdAt(),
+  },
+  (t) => [index('team_orders_org_idx').on(t.organisationId, t.createdAt)],
+);
+export type TeamOrder = typeof teamOrders.$inferSelect;
