@@ -223,3 +223,38 @@ export async function commitments(orgId: string) {
     };
   });
 }
+
+/**
+ * Buying for one category, by brand: pre-book lines due in the period (by expected date, else the
+ * pre-book's delivery window, else when it was placed). Archived pre-books count — they were still bought;
+ * drafts, cancelled and deleted ones don't.
+ */
+export async function buyingByBrand(orgId: string, category: string, from: string, to: string) {
+  return withTenant(orgId, async (tx) => {
+    const lines = await tx
+      .select({ l: prebookLines, p: prebooks })
+      .from(prebookLines)
+      .innerJoin(prebooks, eq(prebooks.id, prebookLines.prebookId))
+      .where(and(isNull(prebookLines.removedAt), isNull(prebooks.removedAt), notInArray(prebooks.status, ['cancelled', 'draft'])));
+    const skus = [...new Set(lines.map((x) => x.l.sku).filter(Boolean))];
+    const cat = skus.length ? await tx.select({ sku: stockCatalogue.sku, category: stockCatalogue.category }).from(stockCatalogue).where(inArray(stockCatalogue.sku, skus)) : [];
+    const catBySku = new Map(cat.map((c) => [c.sku.toLowerCase(), c.category]));
+    const out = new Map<string, { name: string; units: number; costPence: number; receivedUnits: number; toComeUnits: number; toComeCostPence: number }>();
+    for (const { l, p } of lines) {
+      const c = (l.sku && catBySku.get(l.sku.toLowerCase())) || guessCategory(`${l.product} ${p.title}`);
+      if (c.toLowerCase() !== category.toLowerCase()) continue;
+      const when = l.expectedDate ?? p.expectedFrom ?? p.placedOn ?? p.createdAt.toISOString().slice(0, 10);
+      if (when < from || when >= to) continue;
+      const name = cleanBrand(p.brand) || 'Unknown';
+      const g = out.get(name.toLowerCase()) ?? { name, units: 0, costPence: 0, receivedUnits: 0, toComeUnits: 0, toComeCostPence: 0 };
+      const toCome = p.status === 'delivered' ? 0 : Math.max(0, l.quantity - l.quantityReceived);
+      g.units += l.quantity;
+      g.costPence += l.quantity * l.unitCostPence;
+      g.receivedUnits += p.status === 'delivered' ? l.quantity : Math.min(l.quantity, l.quantityReceived);
+      g.toComeUnits += toCome;
+      g.toComeCostPence += toCome * l.unitCostPence;
+      out.set(name.toLowerCase(), g);
+    }
+    return out;
+  });
+}

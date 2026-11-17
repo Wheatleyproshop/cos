@@ -305,6 +305,10 @@ describe('brand review from Shopify sales, with credit vouchers', () => {
     const nike = after.brands.find((b) => b.name === 'Nike')!;
     expect(nike).toMatchObject({ units: 1, salesPence: 4500 - 450, discountPence: 450 });
     expect(after.discounts.find((d) => d.name === 'CREDITYARD')!.voucher).toBe(true);
+    // Brands within a category: only Nike sold a polo; Titleist's driver isn't in it.
+    const polos = after.brandsIn(after.categories.find((c) => c.name !== 'Drivers')!.name);
+    expect(polos.map((b) => b.name)).toEqual(['Nike']);
+    expect(polos[0]).toMatchObject({ units: 1, salesPence: 4050 });
     const { salesLines } = await import('@/lib/services/business/brand-review');
     const [driver] = await salesLines(org.id, '2026-11-01', '2026-11-16', { brand: 'Titleist' });
     expect(driver).toMatchObject({ fullPence: 54900, discountPence: 0, creditPence: 10000, soldForPence: 54900, paidOtherwisePence: 44900, marginPct: 26 });

@@ -6,6 +6,7 @@ import { requireBusiness } from '@/lib/business-lock';
 import { todayInTz } from '@/lib/format';
 import { brandReview, salesLines, type Perf } from '@/lib/services/business/brand-review';
 import { marginStory, supplierReturn } from '@/lib/services/business/advice';
+import { buyingByBrand } from '@/lib/services/business/stock';
 import { shopifyStatus } from '@/lib/services/business/shopify-sync';
 import { setVoucherAction, syncShopifyAction } from '../../actions';
 
@@ -14,6 +15,7 @@ export const maxDuration = 300;
 
 const pounds = (p: number) => `£${Math.round(p / 100).toLocaleString('en-GB')}`;
 const RANGES = [
+  { key: 'ytd', label: 'This year' },
   { key: '90', label: '90 days' },
   { key: '180', label: '6 months' },
   { key: '365', label: '12 months' },
@@ -75,22 +77,32 @@ function PerfTable({ rows, label, link }: { rows: Perf[]; label: string; link: (
   );
 }
 
-export default async function BrandReviewPage({ searchParams }: { searchParams: Promise<{ days?: string; brand?: string; category?: string }> }) {
+export default async function BrandReviewPage({ searchParams }: { searchParams: Promise<{ days?: string; brand?: string; category?: string; cat?: string }> }) {
   const staff = await requireBusiness();
   const sp = await searchParams;
-  const days = RANGES.some((r) => r.key === sp.days) ? Number(sp.days) : 90;
+  const range = RANGES.some((r) => r.key === sp.days) ? sp.days! : '90';
   const today = todayInTz(staff.org.timezone);
   const to = new Date(new Date(`${today}T12:00:00Z`).getTime() + 86_400_000).toISOString().slice(0, 10);
-  const from = new Date(new Date(`${to}T12:00:00Z`).getTime() - days * 86_400_000).toISOString().slice(0, 10);
+  const from = range === 'ytd' ? `${today.slice(0, 4)}-01-01` : new Date(new Date(`${to}T12:00:00Z`).getTime() - Number(range) * 86_400_000).toISOString().slice(0, 10);
+  const days = range;
+  const compareCat = (sp.cat ?? 'Shoes').slice(0, 80);
   const brand = sp.brand?.slice(0, 80);
   const category = brand ? undefined : sp.category?.slice(0, 80);
-  const [r, shopify, lines, story, spend] = await Promise.all([
+  const [r, shopify, lines, story, spend, buying] = await Promise.all([
     brandReview(staff.organisationId, from, to),
     shopifyStatus(staff.organisationId),
     brand || category ? salesLines(staff.organisationId, from, to, { brand, category }) : Promise.resolve(null),
     marginStory(staff.organisationId, from, to),
     supplierReturn(staff.organisationId, todayInTz(staff.org.timezone)),
+    buyingByBrand(staff.organisationId, compareCat, from, to),
   ]);
+  const inCat = r.brandsIn(compareCat);
+  const catSales = inCat.reduce((n, b) => n + b.salesPence, 0);
+  const compareRows = [...new Set([...inCat.map((b) => b.name.toLowerCase()), ...buying.keys()])].map((k) => ({
+    perf: inCat.find((b) => b.name.toLowerCase() === k) ?? null,
+    buy: buying.get(k) ?? null,
+    name: inCat.find((b) => b.name.toLowerCase() === k)?.name ?? buying.get(k)?.name ?? k,
+  }));
   const href = (o: Record<string, string>) => `/business/brands?${new URLSearchParams({ days: String(days), ...o })}#items`;
   const t = r.totals;
   const stars = r.brands.filter((b) => b.verdict === 'star');
@@ -101,7 +113,7 @@ export default async function BrandReviewPage({ searchParams }: { searchParams: 
       <div className="perf-bar">
         <div className="pills">
           {RANGES.map((x) => (
-            <Link key={x.key} href={`/business/brands?days=${x.key}`} className={`pill${days === Number(x.key) ? ' selected' : ''}`} scroll={false}>
+            <Link key={x.key} href={`/business/brands?days=${x.key}`} className={`pill${days === x.key ? ' selected' : ''}`} scroll={false}>
               {x.label}
             </Link>
           ))}
@@ -279,6 +291,79 @@ export default async function BrandReviewPage({ searchParams }: { searchParams: 
               </p>
             </section>
           ) : null}
+
+          <section className="panel" id="compare" style={{ marginBottom: 18, scrollMarginTop: 20 }}>
+            <div className="panel-head">
+              <h2>Brands within {compareCat.toLowerCase()}</h2>
+              <span className="muted">same period · sales, margin, stock and buying side by side</span>
+            </div>
+            <div className="pills" style={{ marginBottom: 12 }}>
+              {r.categories.filter((c) => c.units > 0 || c.stockUnits > 0).slice(0, 12).map((c) => (
+                <Link key={c.name} href={`/business/brands?${new URLSearchParams({ days, cat: c.name })}#compare`} className={`pill${c.name.toLowerCase() === compareCat.toLowerCase() ? ' selected' : ''}`} scroll={false}>
+                  {c.name}
+                </Link>
+              ))}
+            </div>
+            {compareRows.length ? (
+              <div className="tablewrap">
+                <table className="compact review">
+                  <thead>
+                    <tr>
+                      <th>Brand</th>
+                      <th className="num">Sold</th>
+                      <th className="num">Sales</th>
+                      <th className="num" title="Share of this category’s sales">Share</th>
+                      <th className="num" title="Average selling price per item, incl. VAT">Avg price</th>
+                      <th className="num" title="Real discounts as a share of full price">Discount</th>
+                      <th className="num" title="Margin on prices less VAT, where cost is known">Margin</th>
+                      <th className="num" title="Gross profit in £ (ex VAT) on items with a cost price">Profit</th>
+                      <th className="num">In stock</th>
+                      <th className="num" title="Sold ÷ (sold + still in stock)">Sell-through</th>
+                      <th className="num">Stock cover</th>
+                      <th className="num" title="Pre-book lines due in this period (not drafts or cancelled)">Bought (pre-books)</th>
+                      <th className="num">Still to arrive</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {compareRows.map(({ name, perf: b, buy }) => (
+                      <tr key={name} className={b?.verdict ? `v-${b.verdict}` : ''}>
+                        <td>
+                          <b>{name}</b>
+                          {b?.reasons.length ? <div className="muted small">{b.reasons.join(' · ')}</div> : null}
+                        </td>
+                        <td className="num">{b ? b.units.toLocaleString('en-GB') : '—'}</td>
+                        <td className="num">{b ? pounds(b.salesPence) : '—'}</td>
+                        <td className="num">{b && catSales ? `${Math.round((b.salesPence / catSales) * 100)}%` : '—'}</td>
+                        <td className="num">{b && b.units ? pounds(b.salesPence / b.units) : '—'}</td>
+                        <td className="num">{b && b.salesPence + b.discountPence ? `${Math.round((b.discountPence / (b.salesPence + b.discountPence)) * 100)}%` : '—'}</td>
+                        <td className="num">{b?.marginPct == null ? <span className="muted">—</span> : `${b.marginPct}%`}</td>
+                        <td className="num">{b && b.cogsPence ? pounds(b.costedSalesExVat - b.cogsPence) : '—'}</td>
+                        <td className="num">
+                          {b?.stockUnits ? b.stockUnits.toLocaleString('en-GB') : '—'}
+                          {b?.stockCostPence ? <div className="muted small">{pounds(b.stockCostPence)} at cost</div> : null}
+                        </td>
+                        <td className="num">{b?.sellThroughPct == null ? '—' : `${b.sellThroughPct}%`}</td>
+                        <td className="num">{b?.weeksCover == null ? '—' : b.weeksCover >= 999 ? 'no sales' : `${b.weeksCover} wks`}</td>
+                        <td className="num">
+                          {buy ? `${buy.units.toLocaleString('en-GB')}` : '—'}
+                          {buy ? <div className="muted small">{pounds(buy.costPence)} at cost</div> : null}
+                        </td>
+                        <td className="num">
+                          {buy?.toComeUnits ? buy.toComeUnits.toLocaleString('en-GB') : '—'}
+                          {buy?.toComeCostPence ? <div className="muted small">{pounds(buy.toComeCostPence)}</div> : null}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <p className="muted">No sales, stock or pre-books in this category for the period.</p>
+            )}
+            <p className="muted small" style={{ marginBottom: 0 }}>
+              Stock is from the latest count{r.snapTakenOn ? ` (${r.snapTakenOn})` : ''}. Buying comes from pre-books in COS — anything ordered outside a pre-book (top-ups, rep orders) isn’t counted here; see “Spend with suppliers” for what was actually paid.
+            </p>
+          </section>
 
           <section className="panel">
             <div className="panel-head">

@@ -44,6 +44,13 @@ export async function brandReview(orgId: string, from: string, to: string) {
     });
     const byBrand = new Map<string, Acc>();
     const byCat = new Map<string, Acc>();
+    const byBrandCat = new Map<string, Map<string, Acc>>();
+    const inCat = (cat: string) => {
+      const k = (cat || 'Other').toLowerCase();
+      const m = byBrandCat.get(k) ?? new Map<string, Acc>();
+      byBrandCat.set(k, m);
+      return m;
+    };
     const get = (m: Map<string, Acc>, name: string) => {
       const k = (name || 'Unknown').toLowerCase();
       const a = m.get(k) ?? blank(name || 'Unknown');
@@ -67,7 +74,7 @@ export async function brandReview(orgId: string, from: string, to: string) {
       const sold = gross - realDiscount; // vouchers count as money received
       const reported = gross - s.discountPence; // how it looks with vouchers as discounts
       const unitCost = costByKey.get(s.key) ?? (s.sku ? costBySku.get(s.sku.toLowerCase()) : null) ?? null;
-      for (const a of [get(byBrand, s.brand), get(byCat, s.category), totals]) {
+      for (const a of [get(byBrand, s.brand), get(byCat, s.category), get(inCat(s.category), s.brand), totals]) {
         a.units += s.quantity;
         a.salesPence += sold;
         a.reportedSalesPence += reported;
@@ -82,7 +89,7 @@ export async function brandReview(orgId: string, from: string, to: string) {
     }
     for (const i of stock) {
       if (i.quantity <= 0) continue;
-      for (const a of [get(byBrand, i.brand), get(byCat, i.category), totals]) {
+      for (const a of [get(byBrand, i.brand), get(byCat, i.category), get(inCat(i.category), i.brand), totals]) {
         a.stockUnits += i.quantity;
         a.stockCostPence += i.quantity * (i.costPence ?? 0);
       }
@@ -122,6 +129,12 @@ export async function brandReview(orgId: string, from: string, to: string) {
       totals: finish(totals, 0),
       brands: [...byBrand.values()].map((a) => finish(a, mb)).sort(order),
       categories: [...byCat.values()].map((a) => finish(a, mc)).sort(order),
+      /** Brands within one category (e.g. shoes: FootJoy v Nike v Under Armour). */
+      brandsIn: (category: string) => {
+        const m = byBrandCat.get(category.toLowerCase()) ?? new Map<string, Acc>();
+        const md = median(m);
+        return [...m.values()].map((a) => finish(a, md)).sort(order);
+      },
       discounts: [...discountNames.values()].sort((a, b) => b.pence - a.pence).slice(0, 40),
     };
   });
