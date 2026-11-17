@@ -13,7 +13,7 @@ import { decryptSecret, encryptSecret, safeEqual } from './tokens';
 
 const API_VERSION = '2026-10';
 /** Read-only: products and costs, stock levels, and orders (for sales). */
-export const SHOPIFY_SCOPES = 'read_products,read_inventory,read_orders';
+export const SHOPIFY_SCOPES = 'read_products,read_inventory,read_orders,read_all_orders';
 
 export function shopifyConfig() {
   const shop = process.env.SHOPIFY_SHOP?.trim().replace(/\.myshopify\.com$/, '');
@@ -146,7 +146,13 @@ export async function exchangeShopifyCode(code: string) {
   });
   const json = (await res.json().catch(() => ({}))) as { access_token?: string; scope?: string };
   if (!res.ok || !json.access_token) throw new ShopifyError('Shopify didn’t complete the connection. Please try again.');
-  await systemDb().update(organisations).set({ shopifyTokenEncrypted: encryptSecret(json.access_token) }).where(eq(organisations.slug, cfg.orgSlug));
+  // With full order history newly granted, start the sales sync again from the beginning (lines are
+  // upserted, so nothing is counted twice).
+  const fullHistory = (json.scope ?? '').split(',').includes('read_all_orders');
+  await systemDb()
+    .update(organisations)
+    .set({ shopifyTokenEncrypted: encryptSecret(json.access_token), ...(fullHistory ? { shopifySync: {} } : {}) })
+    .where(eq(organisations.slug, cfg.orgSlug));
   cached = null;
   return { scope: json.scope ?? '' };
 }

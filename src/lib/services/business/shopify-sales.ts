@@ -12,6 +12,12 @@ import { categoryFor, cleanBrand, keyFor } from '../../stock-csv';
  */
 
 const FIRST_RUN_DAYS = 365;
+/** First run: back to 1 January last year, so this year can be compared with last (Shopify gives only 60 days without read_all_orders). */
+const firstRunSince = () => {
+  const lastJan = `${new Date().getUTCFullYear() - 1}-01-01T00:00:00.000Z`;
+  const yearAgo = new Date(Date.now() - FIRST_RUN_DAYS * 86_400_000).toISOString();
+  return lastJan < yearAgo ? lastJan : yearAgo;
+};
 const OVERLAP_MS = 2 * 86_400_000;
 
 const bulkQuery = (since: string) => `{
@@ -120,7 +126,7 @@ export async function syncShopifySales(opts: { actor?: Actor; waitMs?: number } 
   if (!bulkId) {
     since = state.ordersSince
       ? new Date(new Date(state.ordersSince).getTime() - OVERLAP_MS).toISOString()
-      : new Date(Date.now() - FIRST_RUN_DAYS * 86_400_000).toISOString();
+      : firstRunSince();
     const res: { bulkOperationRunQuery: { bulkOperation: { id: string } | null; userErrors: { message: string }[] } } = await shopifyGraphql(
       `mutation Run($q: String!) { bulkOperationRunQuery(query: $q) { bulkOperation { id status } userErrors { field message } } }`,
       { q: bulkQuery(since.slice(0, 19) + 'Z') },

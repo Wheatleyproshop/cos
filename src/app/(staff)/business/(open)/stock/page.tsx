@@ -114,9 +114,14 @@ export default async function StockPage({ searchParams }: { searchParams: Promis
                   : 'Not synced yet — press Sync now, then it updates automatically every night.'}
               </span>
             </span>
-            <ActionButton action={syncShopifyAction} className="btn small primary">
-              ↻ Sync now
-            </ActionButton>
+            <span style={{ display: 'flex', gap: 8 }}>
+              <a href="/api/shopify/install" className="btn small" title="Approve COS again in Shopify, e.g. after adding read_all_orders for full order history">
+                Reconnect
+              </a>
+              <ActionButton action={syncShopifyAction} className="btn small primary">
+                ↻ Sync now
+              </ActionButton>
+            </span>
           </>
         ) : (
           <span>
