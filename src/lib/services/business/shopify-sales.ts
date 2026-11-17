@@ -117,8 +117,17 @@ export async function syncShopifySales(opts: { actor?: Actor; waitMs?: number } 
   if (!cfg) throw new ShopifyError('Shopify isn’t connected yet.');
   const [org] = await systemDb().select().from(organisations).where(eq(organisations.slug, cfg.orgSlug)).limit(1);
   if (!org) throw new ShopifyError(`No COS shop called “${cfg.orgSlug}”.`);
-  const state = { ...org.shopifySync };
+  let state = { ...org.shopifySync };
   const started = Date.now();
+  // Once Shopify has granted full order history (read_all_orders), fetch everything again from the
+  // start, once — orders older than 60 days were invisible before. Lines are upserted, so no doubles.
+  if (!state.fullHistory && !state.bulkId) {
+    const r: { currentAppInstallation: { accessScopes: { handle: string }[] } } = await shopifyGraphql(`{ currentAppInstallation { accessScopes { handle } } }`);
+    if (r.currentAppInstallation.accessScopes.some((x) => x.handle === 'read_all_orders')) {
+      state = { fullHistory: true };
+      await saveState(org.id, state);
+    }
+  }
   let bulkId = state.bulkId;
   let since = state.bulkSince;
   // When the export now being collected was asked for (orders changed after that are fetched next time).
@@ -162,7 +171,7 @@ export async function syncShopifySales(opts: { actor?: Actor; waitMs?: number } 
     result = await importBulkFile(org, await file.text(), org.timezone);
   }
   // Next time: orders changed since this export started (with a little overlap).
-  await saveState(org.id, { ordersSince: exportStartedAt, lastRunAt: new Date().toISOString() });
+  await saveState(org.id, { ordersSince: exportStartedAt, lastRunAt: new Date().toISOString(), ...(state.fullHistory ? { fullHistory: true } : {}) });
   await withTenant(org.id, (tx) =>
     recordEvent(tx, {
       organisationId: org.id, actor: opts.actor ?? SYSTEM, eventType: 'stock_uploaded', entityType: 'organisation', entityId: org.id,

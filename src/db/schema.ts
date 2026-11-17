@@ -129,7 +129,7 @@ export const organisations = pgTable('organisations', {
   finance: jsonb('finance').$type<FinanceSettings>().notNull().default({}),
   /** Read-only Shopify access token from the one-time "Connect to Shopify" approval (AES-GCM encrypted). */
   shopifyTokenEncrypted: text('shopify_token_encrypted'),
-  shopifySync: jsonb('shopify_sync').$type<{ ordersSince?: string; bulkId?: string; bulkSince?: string; lastError?: string; lastRunAt?: string }>().notNull().default({}),
+  shopifySync: jsonb('shopify_sync').$type<{ ordersSince?: string; bulkId?: string; bulkSince?: string; lastError?: string; lastRunAt?: string; fullHistory?: boolean }>().notNull().default({}),
   readyUncollectedDays: integer('ready_uncollected_days').notNull().default(7),
   quoteFollowupDays: integer('quote_followup_days').notNull().default(5),
   missingSupplierRefDays: integer('missing_supplier_ref_days').notNull().default(2),

@@ -490,3 +490,42 @@ describe('Business owner account is protected from other admins', () => {
     await expect(resetUserPassword({ ...owner, org: o }, other.id)).resolves.toEqual(expect.any(String));
   });
 });
+
+describe('Shopify sales: full order history', () => {
+  it('fetches everything again from 1 January last year once read_all_orders is granted, then carries on as normal', async () => {
+    process.env.SHOPIFY_SHOP = 'test-shop';
+    process.env.SHOPIFY_CLIENT_ID = 'id';
+    process.env.SHOPIFY_CLIENT_SECRET = 'secret';
+    await systemDb().update(organisations).set({ shopifySync: { ordersSince: '2026-11-01T00:00:00.000Z' } }).where(eq(organisations.id, org.id));
+    const asked: string[] = [];
+    let scopeChecks = 0;
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation(async (url, init) => {
+      if (String(url).endsWith('/admin/oauth/access_token')) return new Response(JSON.stringify({ access_token: 'tok', expires_in: 86399 }));
+      const body = JSON.parse(String(init?.body));
+      if (body.query.includes('currentAppInstallation')) {
+        scopeChecks++;
+        return new Response(JSON.stringify({ data: { currentAppInstallation: { accessScopes: [{ handle: 'read_orders' }, { handle: 'read_all_orders' }] } } }));
+      }
+      if (body.query.includes('bulkOperationRunQuery')) {
+        asked.push(body.variables.q);
+        return new Response(JSON.stringify({ data: { bulkOperationRunQuery: { bulkOperation: { id: 'gid://shopify/BulkOperation/1' }, userErrors: [] } } }));
+      }
+      return new Response(JSON.stringify({ data: { node: { id: 'gid://shopify/BulkOperation/1', status: 'COMPLETED', errorCode: null, url: null, objectCount: '0' } } }));
+    });
+    try {
+      const { syncShopifySales } = await import('@/lib/services/business/shopify-sales');
+      await syncShopifySales();
+      expect(asked[0]).toContain(`updated_at:>='${new Date().getUTCFullYear() - 1}-01-01T00:00:00Z'`);
+      await syncShopifySales();
+      expect(asked[1]).not.toContain('-01-01T00:00:00Z');
+      expect(scopeChecks).toBe(1);
+      const [o] = await systemDb().select({ s: organisations.shopifySync }).from(organisations).where(eq(organisations.id, org.id));
+      expect(o.s.fullHistory).toBe(true);
+    } finally {
+      fetchMock.mockRestore();
+      delete process.env.SHOPIFY_SHOP;
+      delete process.env.SHOPIFY_CLIENT_ID;
+      delete process.env.SHOPIFY_CLIENT_SECRET;
+    }
+  });
+});
