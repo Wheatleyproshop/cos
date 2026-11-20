@@ -49,8 +49,15 @@ const SHOPIFY_MSG: Record<string, string> = {
   exchange: 'Shopify didn’t complete the connection. Try again in a minute.',
 };
 
-export default async function StockPage({ searchParams }: { searchParams: Promise<{ shopify?: string }> }) {
-  const msg = SHOPIFY_MSG[(await searchParams).shopify ?? ''];
+export default async function StockPage({ searchParams }: { searchParams: Promise<{ shopify?: string; payments?: string }> }) {
+  const sp = await searchParams;
+  const msg = SHOPIFY_MSG[sp.shopify ?? ''];
+  const payments =
+    sp.payments === 'ok'
+      ? '✓ Pay before print: COS can now create Shopify invoices, and Shopify will tell COS when they’re paid.'
+      : sp.payments === 'failed'
+        ? 'Connected, but Shopify didn’t set up the “order paid” notification for pay before print. Press Reconnect to try again.'
+        : null;
   const staff = await requireBusiness();
   const today = todayInTz(staff.org.timezone);
   const [y, m] = today.split('-').map(Number);
@@ -94,6 +101,7 @@ export default async function StockPage({ searchParams }: { searchParams: Promis
       <PageHeader staff={staff} title="Stock & commitments." sub="What’s on the shelves, what’s on its way, and where the money is tied up — by brand and category." actions={<span />} />
 
       {msg ? <div className={`notice${msg.startsWith('✓') ? '' : ' warn'}`}>{msg}</div> : null}
+      {payments ? <div className={`notice${payments.startsWith('✓') ? '' : ' warn'}`}>{payments}</div> : null}
       <section className={`panel shopify-link${shopify.connected ? ' on' : ''}`}>
         {shopify.connected && !shopify.authorised && !shopify.last ? (
           <>

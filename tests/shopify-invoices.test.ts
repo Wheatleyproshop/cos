@@ -340,3 +340,26 @@ describe('pay before print: approving never starts print unpaid', () => {
     expect(personal.title).toBe(`Free personalisation: “Happy Christmas Dad” (Classic serif, Navy ink) – ${order.orderNumber}`);
   });
 });
+
+describe('pay before print: payment notification set up on Reconnect', () => {
+  it('subscribes orders/paid to the COS webhook address, and treats an existing one as done', async () => {
+    vi.stubEnv('SHOPIFY_STORE_DOMAIN', 'desirable-golf-online-store.myshopify.com');
+    vi.stubEnv('SHOPIFY_ADMIN_TOKEN', 'shpat_fake_for_tests');
+    const { ensurePaidWebhook } = await import('@/lib/shopify-admin');
+    let taken = false;
+    const sent: Record<string, unknown>[] = [];
+    vi.stubGlobal('fetch', async (_url: string, init: { body: string }) => {
+      const body = JSON.parse(init.body) as { variables: Record<string, unknown> };
+      sent.push(body.variables);
+      const r = taken
+        ? { webhookSubscription: null, userErrors: [{ field: ['address'], message: 'Address for this topic has already been taken' }] }
+        : { webhookSubscription: { id: 'gid://shopify/WebhookSubscription/1' }, userErrors: [] };
+      taken = true;
+      return new Response(JSON.stringify({ data: { webhookSubscriptionCreate: r } }), { status: 200 });
+    });
+    expect(await ensurePaidWebhook('https://cos.desirablegolf.co.uk/api/webhooks/shopify')).toBe('created');
+    expect(await ensurePaidWebhook('https://cos.desirablegolf.co.uk/api/webhooks/shopify')).toBe('exists');
+    expect(sent[0]).toEqual({ topic: 'ORDERS_PAID', sub: { uri: 'https://cos.desirablegolf.co.uk/api/webhooks/shopify', format: 'JSON' } });
+    vi.unstubAllGlobals();
+  });
+});

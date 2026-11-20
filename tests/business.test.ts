@@ -337,7 +337,7 @@ describe('Connect to Shopify (one-time approval)', () => {
       expect(verifyShopifyHmac(new URLSearchParams(withHost.toString()))).toBe(true);
       const u = new URL(shopifyAuthorizeUrl('xyz', 'https://cos.example/api/shopify/callback'));
       expect(u.host).toBe('test-shop.myshopify.com');
-      expect(u.searchParams.get('scope')).toBe('read_products,read_inventory,read_orders,read_all_orders');
+      expect(u.searchParams.get('scope')).toBe('read_products,read_inventory,read_orders,read_all_orders,write_draft_orders,read_customers,write_customers');
     } finally {
       delete process.env.SHOPIFY_SHOP;
       delete process.env.SHOPIFY_CLIENT_ID;
