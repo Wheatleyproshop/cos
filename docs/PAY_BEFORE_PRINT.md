@@ -44,15 +44,9 @@ COS already has a Shopify app: the one behind **Connect to Shopify** on Business
 
 ### 2. Tell COS when an invoice is paid (webhook)
 
-1. Shopify admin → **Settings → Notifications → Webhooks** (near the bottom) → **Create webhook**.
-   - Event: **Order payment**
-   - Format: **JSON**
-   - URL: `https://cos.desirablegolf.co.uk/api/webhooks/shopify`
-   - Webhook API version: **2026-10**
-2. Under the list, Shopify shows "Your webhooks will be signed with …". Copy that key into Vercel as `SHOPIFY_WEBHOOK_SECRET` (Production).
-3. If that Webhooks section has gone from your admin, add the same subscription (topic `orders/paid`, same URL) to the COS app in the Dev Dashboard instead. COS then checks it with the app's client secret, which is already in Vercel.
+Automatic. When you press **Reconnect Shopify** (step 1), COS asks Shopify to send it an "order paid" message at `https://cos.desirablegolf.co.uk/api/webhooks/shopify`. Shopify signs those messages with the COS app's client secret, which is already in Vercel, so there's no key to copy. The Stock page confirms "✓ Pay before print: …" afterwards. If it says the notification wasn't set up, press Reconnect again.
 
-COS checks Shopify's signature on every webhook and ignores anything unsigned, from another store, or without a COS invoice reference.
+COS checks Shopify's signature on every message, and ignores anything unsigned, from another store, or without a COS invoice reference. (`SHOPIFY_WEBHOOK_SECRET` is only needed if you also add a webhook by hand under Settings → Notifications → Webhooks.)
 
 ### 3. Delivery and collection at checkout
 
@@ -74,7 +68,7 @@ Nothing new to set up. Paid invoice orders are normal Shopify orders, so they ar
 | `SHOPIFY_STORE_DOMAIN` | `desirable-golf-online-store.myshopify.com` |
 | `SHOPIFY_EXTRA_SCOPES` | `write_draft_orders,read_customers,write_customers` (step 1) |
 | `SHOPIFY_ADMIN_TOKEN` | only if you use the alternative token route |
-| `SHOPIFY_WEBHOOK_SECRET` | the signing key from step 2 |
+| `SHOPIFY_WEBHOOK_SECRET` | not needed (COS uses the app's client secret); only for a webhook added by hand |
 | `SHOPIFY_API_VERSION` | optional, defaults to `2026-10` |
 | `SHOPIFY_INVOICES` | leave unset for test mode; set to `live` to send real invoices |
 

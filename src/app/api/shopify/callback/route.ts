@@ -6,7 +6,8 @@ import { recordEvent } from '@/lib/audit';
 import { getStaff } from '@/lib/auth';
 import { canSeeBusiness } from '@/lib/business-lock';
 import { exchangeShopifyCode, shopifyConfig, ShopifyError, verifyShopifyHmac } from '@/lib/shopify';
-import { safeEqual } from '@/lib/tokens';
+import { appUrl, safeEqual } from '@/lib/tokens';
+import { ensurePaidWebhook } from '@/lib/shopify-admin';
 
 /**
  * Shopify sends the owner back here after they approve access. Checked three ways before anything is
@@ -28,18 +29,26 @@ export async function GET(req: Request) {
   if (p.get('shop') !== `${cfg.shop}.myshopify.com`) return fail('wrong-store');
   const code = p.get('code');
   if (!code) return fail('cancelled');
+  let paymentsHook: string | null = null;
   try {
     const r = await exchangeShopifyCode(code);
+    // Pay before print: with draft-order access granted, make sure Shopify tells COS when invoices are paid.
+    if (r.scope.split(',').includes('write_draft_orders')) {
+      paymentsHook = await ensurePaidWebhook(appUrl('/api/webhooks/shopify')).catch((e: Error) => {
+        console.error('[COS Shopify payment webhook]', e.message);
+        return `failed: ${e.message}`.slice(0, 300);
+      });
+    }
     const ctx = ctxFor(staff);
     await withTenant(staff.organisationId, (tx) =>
       recordEvent(tx, {
         organisationId: staff.organisationId, actor: ctx.actor, eventType: 'settings_changed', entityType: 'organisation', entityId: staff.organisationId,
-        metadata: { section: 'shopify.connected', shop: cfg.shop, scope: r.scope },
+        metadata: { section: 'shopify.connected', shop: cfg.shop, scope: r.scope, paymentsWebhook: paymentsHook },
       }),
     );
   } catch (e) {
     if (e instanceof ShopifyError) return fail('exchange');
     throw e;
   }
-  redirect('/business/stock?shopify=connected');
+  redirect(`/business/stock?shopify=connected${paymentsHook ? `&payments=${paymentsHook.startsWith('failed') ? 'failed' : 'ok'}` : ''}`);
 }

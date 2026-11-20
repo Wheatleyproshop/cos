@@ -162,6 +162,32 @@ export async function deleteDraftOrder(id: string) {
 
 /* ─────────────────────────────── Webhooks ─────────────────────────────── */
 
+/**
+ * Subscribes the app to "order paid" → COS's webhook address. Created through the app, so Shopify
+ * signs it with the app's client secret (already in the hosting settings): nobody copies a key.
+ * Safe to repeat: an existing subscription for the same address counts as done.
+ */
+export async function ensurePaidWebhook(address: string): Promise<'created' | 'exists'> {
+  const run = (field: 'uri' | 'callbackUrl') =>
+    gql<{ webhookSubscriptionCreate: { webhookSubscription: { id: string } | null; userErrors: UserErrors } }>(
+      `mutation Hook($topic: WebhookSubscriptionTopic!, $sub: WebhookSubscriptionInput!) {
+        webhookSubscriptionCreate(topic: $topic, webhookSubscription: $sub) { webhookSubscription { id } userErrors { field message } }
+      }`,
+      { topic: 'ORDERS_PAID', sub: { [field]: address, format: 'JSON' } },
+    );
+  let r;
+  try {
+    r = (await run('uri')).webhookSubscriptionCreate;
+  } catch (e) {
+    // Older API versions call the address field callbackUrl.
+    if (!(e instanceof ShopifyInvoiceError) || !/uri/i.test(e.message)) throw e;
+    r = (await run('callbackUrl')).webhookSubscriptionCreate;
+  }
+  if (r.webhookSubscription) return 'created';
+  if (r.userErrors.some((u) => /already been taken|already exists/i.test(u.message))) return 'exists';
+  throw new ShopifyInvoiceError(`Shopify didn’t set up the payment notification: ${errText(r.userErrors)}`);
+}
+
 function webhookSecrets() {
   return [process.env.SHOPIFY_WEBHOOK_SECRET?.trim(), process.env.SHOPIFY_CLIENT_SECRET?.trim()].filter((s): s is string => Boolean(s));
 }
