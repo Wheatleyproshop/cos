@@ -2,7 +2,7 @@
 
 import { startTransition, useActionState, useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent, type PointerEvent } from 'react';
 import type { FormState } from '@/lib/action-utils';
-import { INK_COLOURS, LOGO_TYPES, MAX_LOGO_BYTES, PRINT_FONTS, type InkKey, type PrintFontKey } from '@/lib/ball-print';
+import { ballsPrice, INK_COLOURS, LOGO_TYPES, MAX_LOGO_BYTES, PRINT_FONTS, type InkKey, type MultiBuy, type PrintFontKey } from '@/lib/ball-print';
 import { money, penceToInput, parseMoneyToPence } from '@/lib/format';
 import {
   artworkDecal, BRAND_SIDE, IDENTITY, photoDecal, qAxisAngle, qMul, qNormalize, qSlerp, renderBall, renderProof, sidestampDecal,
@@ -177,6 +177,7 @@ export function BallPrintBuilder({
   action,
   defaults,
   variant = 'staff',
+  multiBuy,
 }: {
   balls: BuilderBall[];
   setupFeePence: number;
@@ -184,6 +185,8 @@ export function BallPrintBuilder({
   defaults: PickerDefaults;
   /** 'public' = the customer's own design page: fixed prices, their own details, sends to the shop for review. */
   variant?: 'staff' | 'public';
+  /** A promotion's multi-buy (e.g. 2 dozen for £80), applied to the customer's total. */
+  multiBuy?: MultiBuy | null;
 }) {
   const isPublic = variant === 'public';
   const [state, formAction, pending] = useActionState(action, null);
@@ -509,10 +512,23 @@ export function BallPrintBuilder({
             </label>
             <div className="bp-total">
               <div>
-                <span>{dozens} dozen × {money(ball?.pricePerDozenPence ?? 0)}</span>
+                {(() => {
+                  const p = ballsPrice(dozens, ball?.pricePerDozenPence ?? 0, multiBuy);
+                  return p.groups ? (
+                    <span>
+                      {p.groups} × {multiBuy!.dozens} dozen for {money(multiBuy!.pricePence)}
+                      {p.single ? ` + ${p.single} dozen × ${money(ball?.pricePerDozenPence ?? 0)}` : ''}
+                    </span>
+                  ) : (
+                    <span>
+                      {dozens} dozen × {money(ball?.pricePerDozenPence ?? 0)}
+                      {multiBuy && dozens < multiBuy.dozens ? ` · ${multiBuy.dozens} dozen for ${money(multiBuy.pricePence)}` : ''}
+                    </span>
+                  );
+                })()}
                 {setupFeePence ? <span>Artwork setup {money(setupFeePence)}</span> : null}
               </div>
-              <b>{money(dozens * (ball?.pricePerDozenPence ?? 0) + setupFeePence)}</b>
+              <b>{money(ballsPrice(dozens, ball?.pricePerDozenPence ?? 0, multiBuy).total + setupFeePence)}</b>
             </div>
             <div className="actions">
               <button className="btn primary" type="submit" disabled={working || !ball || !hasArtwork}>

@@ -132,3 +132,35 @@ describe('ball promotions (e.g. Titleist No.1 Gift in Golf)', () => {
     expect(svc.isPromoOpen({ closedAt: null, closesOn: '2020-01-01' }, '2026-11-20')).toBe(false);
   });
 });
+
+describe('multi-buy (e.g. £45 a dozen or 2 dozen for £80, free personalisation)', () => {
+  it('prices whole groups at the multi-buy and the rest at the dozen price', async () => {
+    const { ballsPrice } = await import('@/lib/ball-print');
+    const mb = { dozens: 2, pricePence: 8000 };
+    expect(ballsPrice(1, 4500, mb)).toEqual({ total: 4500, groups: 0, single: 1 });
+    expect(ballsPrice(2, 4500, mb)).toEqual({ total: 8000, groups: 1, single: 0 });
+    expect(ballsPrice(3, 4500, mb)).toEqual({ total: 12500, groups: 1, single: 1 });
+    expect(ballsPrice(4, 4500, mb).total).toBe(16000);
+    expect(ballsPrice(3, 4500, null).total).toBe(13500);
+  });
+
+  it('applies the multi-buy to designs sent through the promotion, and needs both boxes filled', async () => {
+    const svc = await import('@/lib/services/ball-promotions');
+    const { getBallRange } = await import('@/lib/services/ball-printing');
+    const v1 = (await getBallRange(org.id)).find((b) => b.brand === 'Titleist' && b.name === 'Pro V1')!;
+    const base = { title: 'Gift in Golf multi-buy', setupFee: '0', minDozens: '1', [`ball_${v1.id}`]: 'yes', [`price_${v1.id}`]: '45.00' };
+    await expect(svc.createBallPromotion(manager, { ...base, multiBuyDozens: '2' })).rejects.toMatchObject({
+      fieldErrors: { multiBuyPrice: 'Fill in both multi-buy boxes, or leave both empty' },
+    });
+    const p = await svc.createBallPromotion(manager, { ...base, multiBuyDozens: '2', multiBuyPrice: '80.00' });
+    expect(svc.promoMultiBuy(p)).toEqual({ dozens: 2, pricePence: 8000 });
+    const q = await svc.submitPromotionDesign(
+      p.token,
+      { customerName: 'Two Dozen', email: 'two@example.com', ballId: v1.id, artworkType: 'text', textLines: ['JB'], font: 'classic', ink: 'navy', scale: '0.8', dozens: '3' },
+      { logo: null, proof: proof() },
+      { ip: '203.0.113.30' },
+    );
+    expect(q.totalGrossPence).toBe(12500);
+    expect(q.specificationText).toContain('1 × 2 dozen for £80.00 + 1 dozen at £45.00');
+  });
+});

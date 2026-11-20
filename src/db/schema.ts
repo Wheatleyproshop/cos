@@ -1079,6 +1079,9 @@ export const ballPromotions = pgTable(
     balls: jsonb('balls').$type<PromoBall[]>().notNull().default([]),
     setupFeePence: integer('setup_fee_pence').notNull().default(0),
     minDozens: integer('min_dozens').notNull().default(1),
+    /** Optional multi-buy, e.g. 2 dozen for £80 (the rest at the dozen price). */
+    multiBuyDozens: integer('multi_buy_dozens'),
+    multiBuyPricePence: integer('multi_buy_price_pence'),
     terms: text('terms').notNull().default(''),
     closesOn: date('closes_on', { mode: 'string' }),
     closedAt: timestamp('closed_at', { withTimezone: true }),

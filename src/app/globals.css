@@ -192,6 +192,7 @@ details.section[open] { padding-bottom: 16px; }
 .promo-was { color: #7a828e; text-decoration: line-through; margin-left: 6px; font-size: 13px; }
 .promo-facts { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; flex-basis: 100%; }
 .promo-facts span { background: #eef3ff; color: #1d3f8f; border-radius: 999px; padding: 4px 12px; font-size: 13px; font-weight: 600; }
+.promo-facts span.promo-deal { background: #d9792b; color: #fff; }
 .promo-terms { color: #5a6270; font-size: 13px; margin: 22px 0 0; max-width: 760px; }
 .bp-hp { position: absolute; left: -9999px; width: 1px; height: 1px; overflow: hidden; }
 .bp-thanks { text-align: center; padding: 28px 8px; }

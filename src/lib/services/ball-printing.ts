@@ -11,6 +11,8 @@ import {
   PRINT_FONTS,
   sniffImage,
   STARTER_BALLS,
+  ballsPrice,
+  type MultiBuy,
   type BallPrintSpec,
   type InkKey,
   type PrintFontKey,
@@ -24,7 +26,7 @@ import { checkDesignLimits, customerDesignCtx, designSubmitted } from './online-
 import { createQuote } from './quotes';
 
 /** What a ball promotion sets for a design submitted through it. */
-export type PromoTerms = { id: string; title: string; pricePerDozenPence: number; setupFeePence: number; minDozens: number };
+export type PromoTerms = { id: string; title: string; pricePerDozenPence: number; setupFeePence: number; minDozens: number; multiBuy?: MultiBuy | null };
 
 export async function getBallRange(orgId: string, opts: { includeInactive?: boolean } = {}) {
   return withTenant(orgId, (tx) =>
@@ -265,14 +267,17 @@ export async function createBallPrintQuote(
     artwork = { type: 'text', lines, font: input.font as PrintFontKey, ink: input.ink as InkKey, scale: input.scale };
   }
 
-  const total = input.dozens * input.pricePerDozenPence + input.setupFeePence;
+  const priced = ballsPrice(input.dozens, input.pricePerDozenPence, opts.promo?.multiBuy);
+  const total = priced.total + input.setupFeePence;
   const fontLabel = PRINT_FONTS.find((f) => f.key === input.font)!.label;
   const inkLabel = INK_COLOURS.find((c) => c.key === input.ink)!.label;
   const specLines = [
     ...(opts.promo ? [`Promotion: ${opts.promo.title}`] : []),
     `Ball: ${ball.brand} ${ball.name}`,
     artwork.type === 'logo' ? `Personalisation: customer logo (${artwork.filename})` : `Personalisation: “${lines.join(' / ')}” — ${fontLabel}, ${inkLabel} ink`,
-    `Quantity: ${input.dozens} dozen (${input.dozens * 12} balls) at ${money(input.pricePerDozenPence)} per dozen`,
+    priced.groups
+      ? `Quantity: ${input.dozens} dozen (${input.dozens * 12} balls): ${priced.groups} × ${opts.promo!.multiBuy!.dozens} dozen for ${money(opts.promo!.multiBuy!.pricePence)}${priced.single ? ` + ${priced.single} dozen at ${money(input.pricePerDozenPence)}` : ''}`
+      : `Quantity: ${input.dozens} dozen (${input.dozens * 12} balls) at ${money(input.pricePerDozenPence)} per dozen`,
     ...(input.setupFeePence ? [`Artwork setup: ${money(input.setupFeePence)}`] : []),
     ...(input.notes ? ['', input.notes] : []),
   ];

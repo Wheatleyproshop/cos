@@ -45,6 +45,32 @@ const setupSchema = z.object({
       return p;
     }),
   minDozens: z.coerce.number().int('Whole dozens').min(1, 'At least 1').max(500).default(1),
+  multiBuyDozens: z
+    .string()
+    .trim()
+    .default('')
+    .transform((v, ctx) => {
+      if (!v) return null;
+      const n = Number(v);
+      if (!Number.isInteger(n) || n < 2 || n > 50) {
+        ctx.addIssue({ code: 'custom', message: 'A whole number of dozens, 2 or more' });
+        return z.NEVER;
+      }
+      return n;
+    }),
+  multiBuyPrice: z
+    .string()
+    .trim()
+    .default('')
+    .transform((v, ctx) => {
+      if (!v) return null;
+      const p = pounds(v);
+      if (!p) {
+        ctx.addIssue({ code: 'custom', message: 'Enter an amount, e.g. 80.00' });
+        return z.NEVER;
+      }
+      return p;
+    }),
   terms: t(2000),
   closesOn: z
     .string()
@@ -79,7 +105,10 @@ async function readBalls(ctx: Ctx, raw: Record<string, string>) {
 async function parseSetup(ctx: Ctx, raw: Record<string, string>) {
   const res = setupSchema.safeParse(raw);
   const { balls, errs } = await readBalls(ctx, raw);
-  const all = { ...(res.success ? {} : fieldErrors(res.error.issues)), ...errs };
+  const all: Record<string, string> = { ...(res.success ? {} : fieldErrors(res.error.issues)), ...errs };
+  if (res.success && (res.data.multiBuyDozens === null) !== (res.data.multiBuyPrice === null)) {
+    all[res.data.multiBuyDozens === null ? 'multiBuyDozens' : 'multiBuyPrice'] = 'Fill in both multi-buy boxes, or leave both empty';
+  }
   if (!res.success || Object.keys(all).length) throw new ServiceError('Please check the highlighted fields.', all);
   return { ...res.data, balls };
 }
@@ -115,12 +144,13 @@ export async function createBallPromotion(ctx: Ctx, raw: Record<string, string>,
       .insert(ballPromotions)
       .values({
         organisationId: ctx.org.id, token: newToken().slice(0, 22), title: v.title, headline: v.headline, description: v.description, balls: v.balls,
-        setupFeePence: v.setupFee, minDozens: v.minDozens, terms: v.terms || DEFAULT_PROMO_TERMS, closesOn: v.closesOn, createdByUserId: ctx.userId!, ...images,
+        setupFeePence: v.setupFee, minDozens: v.minDozens, multiBuyDozens: v.multiBuyDozens, multiBuyPricePence: v.multiBuyPrice, terms: v.terms || DEFAULT_PROMO_TERMS,
+        closesOn: v.closesOn, createdByUserId: ctx.userId!, ...images,
       })
       .returning();
     await recordEvent(tx, {
       organisationId: ctx.org.id, actor: ctx.actor, eventType: 'ball_promotion_created', entityType: 'organisation', entityId: ctx.org.id,
-      newValue: { promotionId: row.id, title: row.title, balls: v.balls, setupFeePence: v.setupFee, minDozens: v.minDozens, closesOn: v.closesOn },
+      newValue: { promotionId: row.id, title: row.title, balls: v.balls, setupFeePence: v.setupFee, minDozens: v.minDozens, multiBuy: promoMultiBuy(row), closesOn: v.closesOn },
     });
     return row;
   });
@@ -136,14 +166,14 @@ export async function updateBallPromotion(ctx: Ctx, id: string, raw: Record<stri
       .update(ballPromotions)
       .set({
         title: v.title, headline: v.headline, description: v.description, balls: v.balls, setupFeePence: v.setupFee, minDozens: v.minDozens,
-        terms: v.terms || DEFAULT_PROMO_TERMS, closesOn: v.closesOn, ...images,
+        multiBuyDozens: v.multiBuyDozens, multiBuyPricePence: v.multiBuyPrice, terms: v.terms || DEFAULT_PROMO_TERMS, closesOn: v.closesOn, ...images,
       })
       .where(eq(ballPromotions.id, id))
       .returning({ id: ballPromotions.id });
     if (!row) throw new ServiceError('Promotion not found.');
     await recordEvent(tx, {
       organisationId: ctx.org.id, actor: ctx.actor, eventType: 'ball_promotion_changed', entityType: 'organisation', entityId: ctx.org.id,
-      newValue: { promotionId: id, title: v.title, balls: v.balls, setupFeePence: v.setupFee, minDozens: v.minDozens, closesOn: v.closesOn },
+      newValue: { promotionId: id, title: v.title, balls: v.balls, setupFeePence: v.setupFee, minDozens: v.minDozens, multiBuy: v.multiBuyDozens ? { dozens: v.multiBuyDozens, pricePence: v.multiBuyPrice } : null, closesOn: v.closesOn },
     });
   });
 }
@@ -159,6 +189,10 @@ export async function setBallPromotionClosed(ctx: Ctx, id: string, closed: boole
     });
   });
 }
+
+/** The promotion's multi-buy, if it has one. */
+export const promoMultiBuy = (p: Pick<BallPromotion, 'multiBuyDozens' | 'multiBuyPricePence'>) =>
+  p.multiBuyDozens && p.multiBuyPricePence ? { dozens: p.multiBuyDozens, pricePence: p.multiBuyPricePence } : null;
 
 export const isPromoOpen = (p: Pick<BallPromotion, 'closedAt' | 'closesOn'>, today: string) => !p.closedAt && (!p.closesOn || p.closesOn >= today);
 export const londonToday = () => new Date().toLocaleDateString('en-CA', { timeZone: 'Europe/London' });
@@ -268,7 +302,7 @@ export async function submitPromotionDesign(token: string, raw: Record<string, u
     {
       send: false,
       source: 'customer',
-      promo: { id: promo.id, title: promo.title, pricePerDozenPence: ball.promoPricePence, setupFeePence: promo.setupFeePence, minDozens: promo.minDozens },
+      promo: { id: promo.id, title: promo.title, pricePerDozenPence: ball.promoPricePence, setupFeePence: promo.setupFeePence, minDozens: promo.minDozens, multiBuy: promoMultiBuy(promo) },
     },
   );
   await designSubmitted('ball', ctx, quote, meta.ip);

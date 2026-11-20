@@ -330,6 +330,13 @@
       "when": 1795174703654,
       "tag": "0046_ball_promotion_images",
       "breakpoints": true
+    },
+    {
+      "idx": 47,
+      "version": "7",
+      "when": 1795175069031,
+      "tag": "0047_ball_promotion_multibuy",
+      "breakpoints": true
     }
   ]
 }

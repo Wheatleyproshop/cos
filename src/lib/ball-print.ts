@@ -64,6 +64,17 @@ export type BallPrintSpec = {
   promo?: { id: string; title: string };
 };
 
+/** A multi-buy on a promotion, e.g. 2 dozen for £80. */
+export type MultiBuy = { dozens: number; pricePence: number };
+
+/** Price of `dozens` at `perDozen`, with any multi-buy applied to whole groups and the rest at the dozen price. */
+export function ballsPrice(dozens: number, perDozen: number, multiBuy?: MultiBuy | null) {
+  if (!multiBuy || multiBuy.dozens < 2 || multiBuy.pricePence <= 0) return { total: dozens * perDozen, groups: 0, single: dozens };
+  const groups = Math.floor(dozens / multiBuy.dozens);
+  const single = dozens - groups * multiBuy.dozens;
+  return { total: groups * multiBuy.pricePence + single * perDozen, groups, single };
+}
+
 export function asBallPrintSpec(json: unknown): BallPrintSpec | null {
   const s = json as BallPrintSpec | null;
   return s && typeof s === 'object' && s.kind === 'cos-ball-print' && typeof s.proofKey === 'string' ? s : null;
