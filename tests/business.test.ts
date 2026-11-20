@@ -529,3 +529,16 @@ describe('Shopify sales: full order history', () => {
     }
   });
 });
+
+describe('Reconnect Shopify pass (the area locks as the owner leaves the Stock page)', () => {
+  it('is valid for 10 minutes, for that owner only', async () => {
+    const { shopifyConnectPass, validShopifyConnectPass } = await import('@/lib/business-lock');
+    const now = Date.UTC(2026, 10, 20, 16, 0);
+    const pass = shopifyConnectPass('owner-1', now);
+    expect(validShopifyConnectPass('owner-1', pass, now + 9 * 60_000)).toBe(true);
+    expect(validShopifyConnectPass('owner-1', pass, now + 11 * 60_000)).toBe(false);
+    expect(validShopifyConnectPass('someone-else', pass, now)).toBe(false);
+    expect(validShopifyConnectPass('owner-1', `${pass}x`, now)).toBe(false);
+    expect(validShopifyConnectPass('owner-1', null, now)).toBe(false);
+  });
+});
