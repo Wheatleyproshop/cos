@@ -201,7 +201,7 @@ export function describeEvent(e: Pick<AuditEvent, 'eventType' | 'oldValueJson' |
     case 'shopify_invoice_test':
       return `Test mode: Shopify invoice for ${money(n.totalPence ?? 0)} worked out (nothing sent)`;
     case 'shopify_invoice_paid':
-      return `Paid on Shopify (order ${n.shopifyOrderName ?? ''}, ${money(n.paidPence ?? 0)}) · ready to print`;
+      return `Paid on Shopify (order ${n.shopifyOrderName ?? ''}, ${money(n.paidPence ?? 0)}) · ${n.delivery === 'delivery' ? `post: ${n.deliveryLabel}` : n.delivery === 'collection' ? 'collection' : 'delivery not stated'} · ready to print`;
     case 'crest_design_submitted':
       return 'Cresting design submitted online by the customer';
     case 'mat_design_submitted':

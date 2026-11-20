@@ -42,7 +42,7 @@ import { CancelButton } from './cancel-button';
 import { CloseButton } from './chrome';
 import { ActionButton, LinkGenerator } from './forms';
 import { AcceptInStoreForm, EditQuoteForm } from './misc-forms';
-import { InvoicePanel } from './invoice-panel';
+import { InvoicePanel, OrderPaidNotice } from './invoice-panel';
 import { AttachmentForm, CreateRequestForm, EditOrderForm, NoteForm, PaymentForm, ProgressForm, VoidPaymentForm, type RequestDefaults } from './order-forms';
 import { SpecView } from './spec-view';
 import { InternalNotesForm } from './workshop-forms';
@@ -261,6 +261,7 @@ export async function OrderDetail({ staff, number, inModal }: { staff: Staff; nu
           Created from accepted quote <Link href={`/quotes/${d.sourceQuoteNumber}`}>{d.sourceQuoteNumber}</Link>.
         </p>
       ) : null}
+      {o.quoteId ? <OrderPaidNotice orgId={staff.organisationId} quoteId={o.quoteId} tz={staff.org.timezone} /> : null}
       {o.internalNotes ? (
         <div className="notice" style={{ background: '#f7f8f5', color: '#3b4339' }}>
           <b>Internal notes</b>

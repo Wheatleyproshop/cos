@@ -15,7 +15,7 @@
 
 import { createHmac } from 'node:crypto';
 import { shopifyAccessToken, shopifyConfig } from './shopify';
-import { handleFor, type DraftOrderInput, type ShopifyVariant } from './shopify-invoice';
+import { e164, handleFor, splitName, type DraftOrderInput, type ShopifyVariant } from './shopify-invoice';
 import { safeEqual } from './tokens';
 
 export class ShopifyInvoiceError extends Error {}
@@ -70,7 +70,7 @@ async function gql<T>(query: string, variables: Record<string, unknown>): Promis
     }
     if (json.errors?.length) {
       const msg = json.errors.map((e) => e.message).join('; ');
-      if (/access denied|scope/i.test(msg)) throw new ShopifyInvoiceError(`The Shopify app is missing a permission (needs write_draft_orders and read_products): ${msg}`);
+      if (/access denied|scope/i.test(msg)) throw new ShopifyInvoiceError(`The Shopify app is missing a permission (needs write_draft_orders, read_products, read_customers and write_customers): ${msg}`);
       throw new ShopifyInvoiceError(`Shopify said: ${msg}`);
     }
     return json.data as T;
@@ -101,6 +101,32 @@ export async function findVariantsByHandle(ballNames: string[]): Promise<Shopify
 
 type UserErrors = { field: string[] | null; message: string }[];
 const errText = (e: UserErrors) => e.map((x) => x.message).join('; ');
+
+/**
+ * The Shopify customer for this invoice: found by email, or created from the COS name, email and
+ * phone, so the order shows their details without retyping (needs read_customers / write_customers).
+ */
+export async function findOrCreateCustomer(c: { name: string; email: string; phone: string }): Promise<{ id: string; created: boolean }> {
+  const email = c.email.trim().toLowerCase();
+  const found = await gql<{ customers: { nodes: { id: string; email: string | null }[] } }>(
+    `query Find($q: String!) { customers(first: 5, query: $q) { nodes { id email } } }`,
+    { q: `email:"${email.replace(/["\\]/g, '')}"` },
+  );
+  const hit = found.customers.nodes.find((n) => n.email?.toLowerCase() === email);
+  if (hit) return { id: hit.id, created: false };
+  const create = async (withPhone: boolean) =>
+    (
+      await gql<{ customerCreate: { customer: { id: string } | null; userErrors: UserErrors } }>(
+        `mutation New($input: CustomerInput!) { customerCreate(input: $input) { customer { id } userErrors { field message } } }`,
+        { input: { ...splitName(c.name), email, ...(withPhone && e164(c.phone) ? { phone: e164(c.phone) } : {}) } },
+      )
+    ).customerCreate;
+  let r = await create(true);
+  // A phone number already on another Shopify customer is rejected; the email alone is enough.
+  if (r.userErrors.length && r.userErrors.some((e) => e.field?.includes('phone'))) r = await create(false);
+  if (r.userErrors.length || !r.customer) throw new ShopifyInvoiceError(`Shopify didn’t add the customer: ${errText(r.userErrors) || 'no customer returned'}`);
+  return { id: r.customer.id, created: true };
+}
 
 export async function createDraftOrder(input: DraftOrderInput) {
   const data = await gql<{

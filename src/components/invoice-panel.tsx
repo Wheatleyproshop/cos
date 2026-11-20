@@ -74,7 +74,9 @@ export async function InvoicePanel({ orgId, quote, email, tz }: { orgId: string;
         <div className={`notice${state.overdue ? ' warn' : ''}`}>
           <b>{state.label}</b>
           {state.status === 'paid'
-            ? `Paid ${state.paidAt ? stamp(state.paidAt, tz) : ''} on Shopify order ${state.shopifyOrderName ?? ''} (${money(state.totalPence)}).`
+            ? `Paid ${state.paidAt ? stamp(state.paidAt, tz) : ''} on Shopify order ${state.shopifyOrderName ?? ''} (${money(state.totalPence)}). ${
+                state.deliveryMethod === 'delivery' ? `To post: ${state.deliveryLabel}. Print before posting.` : state.deliveryMethod === 'collection' ? 'Collecting from the shop.' : (state.deliveryLabel ?? '')
+              }`
             : `Shopify invoice ${latest.draftOrderName ?? ''} for ${money(state.totalPence)} emailed ${state.sentAt ? stamp(state.sentAt, tz) : ''}. Printing starts once it’s paid.`}
           {state.overdue ? ' Not paid after 3 days: give the customer a call or resend the invoice from Shopify.' : ''}
           <div style={{ marginTop: 6, display: 'flex', gap: 12, flexWrap: 'wrap' }}>
@@ -129,5 +131,23 @@ export async function InvoicePanel({ orgId, quote, email, tz }: { orgId: string;
       ) : null}
       {latest && state?.status === 'cancelled' ? <div className="muted">An earlier invoice attempt didn’t go through and was cancelled.</div> : null}
     </>
+  );
+}
+
+/** On the print job (order): paid on Shopify, which order, and whether it's posted or collected. */
+export async function OrderPaidNotice({ orgId, quoteId, tz }: { orgId: string; quoteId: string; tz: string }) {
+  const inv = await latestInvoiceForQuote(orgId, quoteId);
+  if (inv?.status !== 'paid') return null;
+  const post = inv.deliveryMethod === 'delivery';
+  return (
+    <div className="notice">
+      <b>Paid – ready to print · Shopify order {inv.shopifyOrderName}</b>
+      Paid {inv.paidAt ? stamp(inv.paidAt, tz) : ''} ({money(inv.totalPence)}).{' '}
+      {post
+        ? `Royal Mail / post: ${inv.deliveryLabel}. Print first, then fulfil it from Click & Drop (it's tagged personalised-print).`
+        : inv.deliveryMethod === 'collection'
+          ? 'Collecting from the shop.'
+          : 'Delivery or collection not stated on the Shopify order: check it in Shopify.'}
+    </div>
   );
 }

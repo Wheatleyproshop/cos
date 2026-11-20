@@ -8,9 +8,13 @@ Personalised balls are paid for before they're printed. The customer never adds 
 2. On the quote, staff check the logo and proof, then press **Approve and send invoice**.
    - If the same customer sent other designs, tick them to put everything on one invoice. The multi-buy is worked out across all of them, so 1 dozen Pro V1 plus 1 dozen Left Dash comes to £80, not £90.
    - COS creates a Shopify draft order: the ball product (in dozens) plus a £0 "Personalisation – free" line. That line carries the COS quote number, the print text or logo name, and links to the proof and logo images. The same details are in the order note.
+   - The customer's name, email and phone go across from COS: COS finds them in Shopify by email, or adds them as a new Shopify customer. COS doesn't store postal addresses, so the customer enters theirs at checkout if they want it posted.
+   - **Postage:** by default there's no postage on the invoice. At checkout the customer chooses Royal Mail delivery (your usual rates, e.g. "UK Free shipping" over £50) or picking up from the pro shop, if pickup is switched on (see below). If you've already agreed it with the customer, choose "Collecting from the pro shop" or "Royal Mail delivery, postage £…" on the approval screen instead.
+   - The order is tagged `personalised-print`, and its note starts **PRINT BEFORE POSTING – COS Q-…**.
    - Shopify emails the customer the invoice with a payment link.
 3. The quote now shows **Awaiting payment**. After 3 days unpaid it's flagged in red on the Quotes page and on the promotion page.
-4. When the customer pays, Shopify tells COS. COS turns each design into an order **Paid – ready to print**, records the card payment against it, and sends the usual order confirmation.
+4. When the customer pays, Shopify tells COS. COS turns each design into an order **Paid – ready to print**, records the card payment against it, and sends the usual order confirmation. The print job shows the Shopify order number and whether it's **to post** (with the postage option the customer chose) or **collecting**.
+5. Print the balls. Then post them from Click & Drop, or hand them over in the shop.
 
 ## Test mode (the default)
 
@@ -25,12 +29,12 @@ You do these steps yourself in Shopify and Vercel. Never paste keys into chat, e
 COS already has a Shopify app: the one behind **Connect to Shopify** on Business → Stock. That app is read-only at the moment. It needs one extra permission.
 
 1. Shopify admin → **Settings → Apps → Develop apps**. This now opens the **Dev Dashboard** (Shopify moved custom apps there in November 2026).
-2. Open the COS app → **Configuration** (or **Versions → Create version**) → **Access scopes**. Add `write_draft_orders` and keep the existing ones (`read_products`, `read_inventory`, `read_orders`, `read_all_orders`). `write_customers` isn't needed: Shopify links the invoice to the customer by email.
+2. Open the COS app → **Configuration** (or **Versions → Create version**) → **Access scopes**. Add `write_draft_orders`, `read_customers` and `write_customers`, and keep the existing ones (`read_products`, `read_inventory`, `read_orders`, `read_all_orders`). The customer permissions let COS find the customer by email, or add them, so their details are filled in on the order.
 3. **Release** the new version.
-4. In Vercel → COS project → **Settings → Environment Variables**, add `SHOPIFY_EXTRA_SCOPES` = `write_draft_orders` (Production). Redeploy.
+4. In Vercel → COS project → **Settings → Environment Variables**, add `SHOPIFY_EXTRA_SCOPES` = `write_draft_orders,read_customers,write_customers` (Production). Redeploy.
 5. In COS → Business → Stock & commitments, press **Reconnect Shopify** and approve. The approval screen should now list draft orders.
 
-*Alternative:* if you already have an Admin API access token that includes `write_draft_orders` (it starts `shpat_`), put it in `SHOPIFY_ADMIN_TOKEN` instead and skip steps 4 and 5. Shopify won't issue fixed tokens like this for new apps from 1 December 2026, so the steps above are the better route.
+*Alternative:* if you already have an Admin API access token with those permissions (it starts `shpat_`), put it in `SHOPIFY_ADMIN_TOKEN` instead and skip steps 4 and 5. Shopify won't issue fixed tokens like this for new apps from 1 December 2026, so the steps above are the better route.
 
 ### 2. Tell COS when an invoice is paid (webhook)
 
@@ -44,23 +48,38 @@ COS already has a Shopify app: the one behind **Connect to Shopify** on Business
 
 COS checks Shopify's signature on every webhook and ignores anything unsigned, from another store, or without a COS invoice reference.
 
-### 3. Environment variables (Vercel only)
+### 3. Collection at checkout (pickup in store)
+
+For customers to choose "Pick up" at checkout: Shopify admin → **Settings → Shipping and delivery → Pickup in store**. Turn it on for the Wheatley pro shop location, and set the pickup message (e.g. "Ready in about a week. We'll email you."). Shopify says pickup needs the latest checkout, and by default the items must be in stock at that location.
+
+Shopify's help says customers "select a shipping method" on an invoice checkout. It doesn't spell out that pickup appears there too, so check it during the first live test. If it doesn't appear, use the "Collecting from the pro shop" choice on the approval screen.
+
+### 4. Royal Mail (Click & Drop)
+
+Nothing new to set up. Paid invoice orders are normal Shopify orders, so they arrive in Click & Drop like your other online orders. **Because Click & Drop imports them as soon as they're paid, before the balls are printed:**
+
+- They're tagged **`personalised-print`** in Shopify. In Shopify's Orders list, filter by that tag to see them all.
+- The order note starts **PRINT BEFORE POSTING – COS Q-…**. If your Click & Drop shows order notes or tags, that's how to spot them. I couldn't check Royal Mail's help pages, so look in your Click & Drop import settings for a tag filter. If there is one, you could leave `personalised-print` orders out of the automatic import and add them once they're printed.
+- Orders the customer is collecting have no postage, so check they don't need a label.
+- Once printed, post as usual. When the tracking is added, Shopify marks the order fulfilled.
+
+### 5. Environment variables (Vercel only)
 
 | Name | Value |
 |---|---|
 | `SHOPIFY_STORE_DOMAIN` | `desirable-golf-online-store.myshopify.com` |
-| `SHOPIFY_EXTRA_SCOPES` | `write_draft_orders` (step 1) |
+| `SHOPIFY_EXTRA_SCOPES` | `write_draft_orders,read_customers,write_customers` (step 1) |
 | `SHOPIFY_ADMIN_TOKEN` | only if you use the alternative token route |
 | `SHOPIFY_WEBHOOK_SECRET` | the signing key from step 2 |
 | `SHOPIFY_API_VERSION` | optional, defaults to `2026-10` |
 | `SHOPIFY_INVOICES` | leave unset for test mode; set to `live` to send real invoices |
 
-### 4. First live test (before customers)
+### 6. First live test (before customers)
 
 1. Deploy, with `SHOPIFY_INVOICES` still unset. Try **Approve and send invoice (test mode)** on a real promo design and check the total.
 2. Set `SHOPIFY_INVOICES` = `live` and redeploy.
-3. Send yourself a design on the promo link (1 dozen Pro V1) using your own email. Approve and send the invoice. Check the email, the £45 total and the checkout (delivery or collection options).
-4. In Shopify, open the draft order and choose **Mark as paid** (no card needed). Within a minute the COS quote should show **Paid – ready to print** with order #… recorded.
+3. Send yourself a design on the promo link (1 dozen Pro V1) using your own email. Approve and send the invoice. Check the email, the £45 total, your name filled in, and the checkout: does it offer both Royal Mail and Pick up?
+4. In Shopify, open the draft order and choose **Mark as paid** (no card needed). Within a minute the COS job should show **Paid – ready to print** with the Shopify order number and "to post" or "collecting". Check whether it appeared in Click & Drop.
 5. Do the same with two designs on one invoice to see £80.
 6. Afterwards, cancel or refund the test order in Shopify and delete the test order in COS.
 

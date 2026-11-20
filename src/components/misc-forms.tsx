@@ -100,6 +100,20 @@ export function ApproveInvoiceForm({
               ))}
             </fieldset>
           ) : null}
+          <fieldset style={{ border: 0, padding: 0, margin: '0 0 10px' }}>
+            <legend className="muted">Postage</legend>
+            <label style={{ display: 'block' }}>
+              <input type="radio" name="delivery" value="checkout" defaultChecked /> Customer chooses at checkout: collect from the shop or Royal Mail delivery (the shop’s usual rates)
+            </label>
+            <label style={{ display: 'block' }}>
+              <input type="radio" name="delivery" value="collect" /> Collecting from the pro shop (no postage)
+            </label>
+            <label style={{ display: 'block' }}>
+              <input type="radio" name="delivery" value="royal_mail" /> Royal Mail delivery, postage £{' '}
+              <input name="postage" inputMode="decimal" placeholder="0.00" style={{ width: 70 }} aria-label="Postage in pounds" />
+            </label>
+            {s?.fieldErrors?.postage ? <span className="err">{s.fieldErrors.postage}</span> : null}
+          </fieldset>
           <InvoiceSubmit confirmText={confirmText} label={live ? 'Approve and send invoice' : 'Approve and send invoice (test mode)'} />
           <FormMessage state={s} />
         </>

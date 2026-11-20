@@ -32,7 +32,7 @@ export type InvoiceDesign = {
 /** A Shopify product variant found by handle. Prices in pence. */
 export type ShopifyVariant = { handle: string; variantId: string; title: string; pricePence: number; compareAtPence: number | null };
 
-export type InvoiceCustomer = { name: string; email: string; phone: string };
+export type InvoiceCustomer = { name: string; email: string; phone: string; address?: Omit<ShippingAddress, 'firstName' | 'lastName' | 'phone'> | null };
 
 type Attr = { key: string; value: string };
 type Money = { amount: string; currencyCode: 'GBP' };
@@ -48,9 +48,34 @@ export type DraftOrderInput = {
   customAttributes: Attr[];
   lineItems: DraftLineItem[];
   appliedDiscount?: { title: string; description: string; value: number; valueType: 'FIXED_AMOUNT' };
+  /** Only when staff pick collection or a fixed postage charge; otherwise the customer chooses at checkout. */
+  shippingLine?: { title: string; priceWithCurrency: Money };
+  shippingAddress?: ShippingAddress;
+  /** The Shopify customer (found or created from the COS details), so nothing is retyped. */
+  purchasingEntity?: { customerId: string };
   /** Off: the store's automatic "2 dozen for £80" discount must not be added on top of ours. */
   acceptAutomaticDiscounts: false;
 };
+
+export type ShippingAddress = {
+  firstName: string; lastName: string; address1: string; address2?: string; city: string; zip: string; countryCode: string; phone?: string;
+};
+
+/**
+ * Postage. "checkout" (default): no shipping line, so the customer picks delivery or collection from
+ * the store's own options at checkout (e.g. "UK Free shipping" over £50, or pick up in store).
+ * "collect" / "royal_mail": staff set it on the approval screen instead.
+ */
+export type DeliveryChoice = { mode: 'checkout' } | { mode: 'collect' } | { mode: 'royal_mail'; pricePence: number };
+export const COLLECT_TITLE = 'Collect from Wheatley Golf Club pro shop';
+export const PRINT_TAG = 'personalised-print';
+
+/** First name / last name for Shopify from a single COS name. */
+export function splitName(name: string) {
+  const parts = name.trim().split(/\s+/);
+  if (parts.length < 2) return { firstName: parts[0] ?? '', lastName: '' };
+  return { firstName: parts.slice(0, -1).join(' '), lastName: parts[parts.length - 1] };
+}
 
 /** One line of the invoice in plain terms, for staff to check (and for tests). */
 export type InvoiceLine = { label: string; quantity: number; unitPence: number; shopifyProduct: boolean; note?: string };
@@ -60,7 +85,9 @@ export type InvoicePlan = {
   lines: InvoiceLine[];
   subtotalPence: number;
   discountPence: number;
-  /** What the customer will pay on Shopify. */
+  /** Postage set on the draft (0 when the customer chooses at checkout). */
+  shippingPence: number;
+  /** What the customer will pay on Shopify, before any postage they choose at checkout. */
   totalPence: number;
   /** The sum of the COS quote totals the customer was shown. */
   cosTotalPence: number;
@@ -150,8 +177,12 @@ export function buildDraftOrder(opts: {
   customer: InvoiceCustomer;
   designs: InvoiceDesign[];
   variants: ShopifyVariant[];
+  delivery?: DeliveryChoice;
+  /** Shopify customer id (gid), when known. */
+  shopifyCustomerId?: string | null;
 }): InvoicePlan {
   const { invoiceId, customer, designs, variants } = opts;
+  const delivery = opts.delivery ?? { mode: 'checkout' };
   if (!designs.length) throw new Error('No designs to invoice.');
   const warnings: string[] = [];
   const lineItems: DraftLineItem[] = [];
@@ -216,6 +247,12 @@ export function buildDraftOrder(opts: {
       : 'Price agreed on your COS quote';
 
   const phone = e164(customer.phone);
+  const shipping =
+    delivery.mode === 'collect'
+      ? { title: COLLECT_TITLE, priceWithCurrency: gbp(0) }
+      : delivery.mode === 'royal_mail'
+        ? { title: 'Royal Mail delivery', priceWithCurrency: gbp(delivery.pricePence) }
+        : null;
   const designNotes = designs.map((d) =>
     [
       `${d.quoteNumber}: ${d.dozens} dozen ${d.ball.brand} ${d.ball.name}`,
@@ -224,8 +261,11 @@ export function buildDraftOrder(opts: {
       ...(d.logoUrl ? [`  Logo: ${d.logoUrl}`] : []),
     ].join('\n'),
   );
+  const deliveryNote =
+    delivery.mode === 'collect' ? `Delivery: collect from the pro shop` : delivery.mode === 'royal_mail' ? `Delivery: Royal Mail (${fmt(delivery.pricePence)})` : 'Delivery: customer chooses at checkout';
   const note = [
-    `Personalised golf balls from COS (${refs}). Pay before print: the proof has been approved; printing starts once this is paid.`,
+    `PRINT BEFORE POSTING – COS ${refs}. Personalised golf balls: hold this order until the balls are printed.`,
+    `Pay before print: the proof has been approved; printing starts once this is paid. ${deliveryNote}.`,
     `Customer: ${customer.name}${customer.phone ? `, ${customer.phone}` : ''}`,
     ...(titles.length || multi ? [`Promotion: ${(multi?.title ?? titles[0])}`] : []),
     '',
@@ -238,7 +278,7 @@ export function buildDraftOrder(opts: {
     email: customer.email,
     ...(phone ? { phone } : {}),
     note,
-    tags: ['COS', 'Pay before print', ...(multi ? [multi.title.slice(0, 40)] : [])],
+    tags: [PRINT_TAG, 'COS', 'Pay before print', ...(multi ? [multi.title.slice(0, 40)] : [])],
     customAttributes: [
       { key: COS_INVOICE_ATTR, value: invoiceId },
       { key: 'COS quotes', value: refs },
@@ -248,7 +288,30 @@ export function buildDraftOrder(opts: {
     ...(discount > 0
       ? { appliedDiscount: { title: discountTitle.slice(0, 255), description: `COS ${refs}`.slice(0, 255), value: Number(pounds(discount)), valueType: 'FIXED_AMOUNT' as const } }
       : {}),
+    ...(shipping ? { shippingLine: shipping } : {}),
+    ...(customer.address ? { shippingAddress: { ...splitName(customer.name), ...customer.address, ...(phone ? { phone } : {}) } } : {}),
+    ...(opts.shopifyCustomerId ? { purchasingEntity: { customerId: opts.shopifyCustomerId } } : {}),
     acceptAutomaticDiscounts: false,
   };
-  return { input, lines, subtotalPence, discountPence: discount, totalPence: subtotalPence - discount, cosTotalPence: cosTotal, warnings };
+  const shippingPence = delivery.mode === 'royal_mail' ? delivery.pricePence : 0;
+  return { input, lines, subtotalPence, discountPence: discount, shippingPence, totalPence: subtotalPence - discount + shippingPence, cosTotalPence: cosTotal, warnings };
+}
+
+/** The bits of a paid Shopify order (REST webhook) that say how it reaches the customer. */
+export type OrderShipping = { shipping_lines?: { title?: string | null; code?: string | null; source?: string | null }[] | null; shipping_address?: unknown };
+
+/**
+ * Delivery or collection, from the paid order. Pickup shows as a shipping line whose title/code/source
+ * mentions pick up / collect (Shopify's local pickup, or our own "Collect from…" line). Any other
+ * shipping line is a delivery. No line and no address: treated as collection.
+ */
+export function deliveryFromOrder(o: OrderShipping): { method: 'delivery' | 'collection' | 'unknown'; label: string } {
+  const line = o.shipping_lines?.[0];
+  if (line) {
+    const text = `${line.title ?? ''} ${line.code ?? ''} ${line.source ?? ''}`;
+    if (/pick ?-?up|collect/i.test(text)) return { method: 'collection', label: line.title || 'Collection' };
+    return { method: 'delivery', label: line.title || 'Delivery' };
+  }
+  if (o.shipping_address) return { method: 'delivery', label: 'Delivery' };
+  return { method: 'unknown', label: 'No delivery method on the Shopify order' };
 }

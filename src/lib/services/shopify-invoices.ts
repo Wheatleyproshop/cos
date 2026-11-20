@@ -1,15 +1,15 @@
 import { randomUUID } from 'node:crypto';
 import { and, eq, inArray, isNull, sql } from 'drizzle-orm';
 import { systemDb, withTenant } from '@/db';
-import { ballPromotions, customers, organisations, quotes, shopifyInvoices, type Quote, type ShopifyInvoice } from '@/db/schema';
+import { ballPromotions, customers, orders, organisations, quotes, shopifyInvoices, type BallPromotion, type Quote, type ShopifyInvoice } from '@/db/schema';
 import { recordEvent, type Actor } from '../audit';
 import { asBallPrintSpec, INK_COLOURS, PRINT_FONTS } from '../ball-print';
 import { dispatchMessages } from '../email/outbox';
 import { money } from '../format';
 import {
-  createDraftOrder, deleteDraftOrder, findVariantsByHandle, invoiceMode, invoiceSetupProblems, sendDraftOrderInvoice, ShopifyInvoiceError, type InvoiceMode,
+  createDraftOrder, deleteDraftOrder, findOrCreateCustomer, findVariantsByHandle, invoiceMode, invoiceSetupProblems, sendDraftOrderInvoice, ShopifyInvoiceError, type InvoiceMode,
 } from '../shopify-admin';
-import { buildDraftOrder, COS_INVOICE_ATTR, KNOWN_PROMO_VARIANTS, type InvoiceDesign, type InvoicePlan } from '../shopify-invoice';
+import { buildDraftOrder, COS_INVOICE_ATTR, deliveryFromOrder, KNOWN_PROMO_VARIANTS, type DeliveryChoice, type InvoiceDesign, type InvoicePlan, type OrderShipping } from '../shopify-invoice';
 import { appUrl, signValue } from '../tokens';
 import { ServiceError, type Ctx } from './common';
 import { insertPayment } from './orders';
@@ -27,7 +27,7 @@ export const UNPAID_FLAG_DAYS = 3;
 const OPEN = ['draft', 'sent'] as const;
 export const logoPathFor = (quoteId: string) => `/api/public/ball-logo/${quoteId}/${signValue(`ball-logo:${quoteId}`)}`;
 
-function personalisationText(q: Quote) {
+function personalisationText(q: Pick<Quote, 'specificationJson'>) {
   const s = asBallPrintSpec(q.specificationJson)!;
   if (s.artwork.type === 'logo') return `Logo: ${s.artwork.filename}`;
   const font = PRINT_FONTS.find((f) => f.key === (s.artwork as { font: string }).font)?.label ?? '';
@@ -39,18 +39,21 @@ function personalisationText(q: Quote) {
 async function toDesigns(orgId: string, rows: Quote[]): Promise<InvoiceDesign[]> {
   const promoIds = [...new Set(rows.map((q) => asBallPrintSpec(q.specificationJson)?.promo?.id).filter((x): x is string => Boolean(x)))];
   const promos = promoIds.length ? await withTenant(orgId, (tx) => tx.select().from(ballPromotions).where(inArray(ballPromotions.id, promoIds))) : [];
-  return rows.map((q) => {
-    const s = asBallPrintSpec(q.specificationJson)!;
-    const p = s.promo ? promos.find((x) => x.id === s.promo!.id) : undefined;
-    return {
-      quoteId: q.id, quoteNumber: q.quoteNumber, ball: { brand: s.ball.brand, name: s.ball.name }, dozens: s.dozens, pricePerDozenPence: s.pricePerDozenPence,
-      setupFeePence: s.setupFeePence, quoteTotalPence: q.totalGrossPence, personalisation: personalisationText(q),
-      proofUrl: appUrl(proofPathFor(q.id)), logoUrl: s.artwork.type === 'logo' ? appUrl(logoPathFor(q.id)) : null,
-      promo: s.promo
-        ? { id: s.promo.id, title: s.promo.title, multiBuy: p?.multiBuyDozens && p.multiBuyPricePence ? { dozens: p.multiBuyDozens, pricePence: p.multiBuyPricePence } : null }
-        : null,
-    };
-  });
+  return rows.map((q) => designFromQuote(q, promos));
+}
+
+/** One quote as an invoice design line (pure apart from building the signed image links). */
+export function designFromQuote(q: Pick<Quote, 'id' | 'quoteNumber' | 'totalGrossPence' | 'specificationJson'>, promos: Pick<BallPromotion, 'id' | 'multiBuyDozens' | 'multiBuyPricePence'>[]): InvoiceDesign {
+  const s = asBallPrintSpec(q.specificationJson)!;
+  const p = s.promo ? promos.find((x) => x.id === s.promo!.id) : undefined;
+  return {
+    quoteId: q.id, quoteNumber: q.quoteNumber, ball: { brand: s.ball.brand, name: s.ball.name }, dozens: s.dozens, pricePerDozenPence: s.pricePerDozenPence,
+    setupFeePence: s.setupFeePence, quoteTotalPence: q.totalGrossPence, personalisation: personalisationText(q),
+    proofUrl: appUrl(proofPathFor(q.id)), logoUrl: s.artwork.type === 'logo' ? appUrl(logoPathFor(q.id)) : null,
+    promo: s.promo
+      ? { id: s.promo.id, title: s.promo.title, multiBuy: p?.multiBuyDozens && p.multiBuyPricePence ? { dozens: p.multiBuyDozens, pricePence: p.multiBuyPricePence } : null }
+      : null,
+  };
 }
 
 /** Whether a quote can go on a new invoice: an open ball design with no live invoice. */
@@ -87,7 +90,12 @@ export type InvoiceResult = { mode: InvoiceMode; invoice: ShopifyInvoice; plan: 
  * and in live mode creates it on Shopify and has Shopify email the invoice. In test mode the
  * payload is worked out and saved, but nothing leaves COS.
  */
-export async function approveAndSendInvoice(ctx: Ctx, quoteId: string, companionIds: string[] = [], opts: { mode?: InvoiceMode } = {}): Promise<InvoiceResult> {
+export async function approveAndSendInvoice(
+  ctx: Ctx,
+  quoteId: string,
+  companionIds: string[] = [],
+  opts: { mode?: InvoiceMode; delivery?: DeliveryChoice } = {},
+): Promise<InvoiceResult> {
   if (!ctx.userId) throw new ServiceError('Invoices must be sent by a signed-in staff member.');
   const mode = opts.mode ?? invoiceMode();
   const ids = [quoteId, ...companionIds.filter((x) => x !== quoteId)];
@@ -111,8 +119,16 @@ export async function approveAndSendInvoice(ctx: Ctx, quoteId: string, companion
 
   const designs = await toDesigns(ctx.org.id, rows);
   const invoiceId = randomUUID();
+  if (mode === 'live') {
+    const problems = invoiceSetupProblems();
+    if (problems.length) throw new ServiceError(`Shopify invoices aren’t set up yet: ${problems.join('; ')}.`);
+  }
   const variants = mode === 'live' ? await findVariantsByHandle(designs.map((d) => d.ball.name)) : KNOWN_PROMO_VARIANTS;
-  const plan = buildDraftOrder({ invoiceId, customer: { name: customer.name, email: customer.email, phone: customer.phone }, designs, variants });
+  const shopifyCustomer = mode === 'live' ? await findOrCreateCustomer(customer) : null;
+  const plan = buildDraftOrder({
+    invoiceId, customer: { name: customer.name, email: customer.email, phone: customer.phone }, designs, variants, delivery: opts.delivery, shopifyCustomerId: shopifyCustomer?.id ?? null,
+  });
+  if (mode === 'dry_run') plan.warnings.push(`Shopify customer: found by ${customer.email}, or created as ${customer.name} with that email${customer.phone ? ' and phone' : ''}.`);
   const base = {
     id: invoiceId, organisationId: ctx.org.id, customerId: customer.id, quoteIds: ids, totalPence: plan.totalPence, cosTotalPence: plan.cosTotalPence,
     payload: plan.input, warnings: plan.warnings, createdByUserId: ctx.userId,
@@ -129,9 +145,6 @@ export async function approveAndSendInvoice(ctx: Ctx, quoteId: string, companion
     });
     return { mode, invoice, plan };
   }
-
-  const problems = invoiceSetupProblems();
-  if (problems.length) throw new ServiceError(`Shopify invoices aren’t set up yet: ${problems.join('; ')}.`);
 
   // Save first, so a payment can always be matched back even if Shopify is quick.
   await withTenant(ctx.org.id, async (tx) => {
@@ -195,9 +208,9 @@ export type ShopifyOrderWebhook = {
   financial_status?: string;
   total_price?: string;
   note_attributes?: { name: string; value: string }[];
-};
+} & OrderShipping;
 
-export type PaidResult = { matched: false; reason: string } | { matched: true; invoiceId: string; already: boolean; orders: string[]; warnings: string[] };
+export type PaidResult = { matched: false; reason: string } | { matched: true; invoiceId: string; already: boolean; orders: string[]; delivery: string; warnings: string[] };
 
 /** Matches a paid Shopify order back to its COS invoice (via the "COS invoice" attribute) and puts the designs into print. */
 export async function markShopifyOrderPaid(order: ShopifyOrderWebhook): Promise<PaidResult> {
@@ -213,6 +226,8 @@ export async function markShopifyOrderPaid(order: ShopifyOrderWebhook): Promise<
   const paidPence = Math.round(Number(order.total_price ?? 0) * 100);
   const shopify: Actor = { type: 'system', label: 'Shopify' };
   const warnings: string[] = [];
+  const delivery = deliveryFromOrder(order);
+  const jobNote = `Paid on Shopify ${shopifyOrderName} · ${delivery.method === 'delivery' ? `Post: ${delivery.label}` : delivery.method === 'collection' ? 'Collection from the shop' : delivery.label} · Print before posting.`;
 
   const out = await withTenant(org.id, async (tx) => {
     const [inv] = await tx.select().from(shopifyInvoices).where(eq(shopifyInvoices.id, hit.id)).for('update').limit(1);
@@ -239,6 +254,10 @@ export async function markShopifyOrderPaid(order: ShopifyOrderWebhook): Promise<
         const customer = cs.find((c) => c.id === q.customerId)!;
         const r = await acceptAndConvert(tx, ctx, q, customer, `Paid online (Shopify ${shopifyOrderName})`, { shopifyOrder: shopifyOrderName, invoiceId: inv.id }, { ignoreExpiry: true });
         orderId = r.order.id;
+        await tx
+          .update(orders)
+          .set({ internalNotes: [r.order.internalNotes, jobNote].filter(Boolean).join('\n\n') })
+          .where(eq(orders.id, r.order.id));
         orderNumbers.push(r.order.orderNumber);
         messages.push(r.messageId);
       } else if (!orderId) {
@@ -250,26 +269,26 @@ export async function markShopifyOrderPaid(order: ShopifyOrderWebhook): Promise<
     }
     await tx
       .update(shopifyInvoices)
-      .set({ status: 'paid', paidAt: new Date(), shopifyOrderId: String(order.admin_graphql_api_id ?? order.id ?? ''), shopifyOrderName, warnings: [...inv.warnings, ...warnings] })
+      .set({ status: 'paid', paidAt: new Date(), deliveryMethod: delivery.method, deliveryLabel: delivery.label, shopifyOrderId: String(order.admin_graphql_api_id ?? order.id ?? ''), shopifyOrderName, warnings: [...inv.warnings, ...warnings] })
       .where(eq(shopifyInvoices.id, inv.id));
     for (const q of qs) {
       await recordEvent(tx, {
         organisationId: org.id, actor: shopify, eventType: 'shopify_invoice_paid', entityType: 'quote', quoteId: q.id, customerId: q.customerId,
-        orderId: orderFor.get(q.id), newValue: { invoiceId: inv.id, shopifyOrderName, paidPence: amount }, metadata: warnings.length ? { warnings } : undefined,
+        orderId: orderFor.get(q.id), newValue: { invoiceId: inv.id, shopifyOrderName, paidPence: amount, delivery: delivery.method, deliveryLabel: delivery.label }, metadata: warnings.length ? { warnings } : undefined,
       });
     }
     return { already: false, orders: orderNumbers, messages };
   });
   if (!out) return { matched: false, reason: 'invoice not payable' };
   if (out.messages.length) await dispatchMessages(org, out.messages);
-  return { matched: true, invoiceId: hit.id, already: out.already, orders: out.orders, warnings };
+  return { matched: true, invoiceId: hit.id, already: out.already, orders: out.orders, delivery: delivery.method, warnings };
 }
 
 /* ─────────────────────────────── Staff lists ─────────────────────────────── */
 
 export type PayState = {
   invoiceId: string; status: ShopifyInvoice['status']; label: string; overdue: boolean; sentAt: Date | null; paidAt: Date | null;
-  draftOrderName: string | null; invoiceUrl: string | null; shopifyOrderName: string | null; totalPence: number; warnings: string[]; quoteIds: string[];
+  draftOrderName: string | null; invoiceUrl: string | null; shopifyOrderName: string | null; deliveryMethod: string | null; deliveryLabel: string | null; totalPence: number; warnings: string[]; quoteIds: string[];
 };
 
 export function payStateOf(inv: ShopifyInvoice, now = new Date()): PayState {
@@ -278,7 +297,7 @@ export function payStateOf(inv: ShopifyInvoice, now = new Date()): PayState {
     inv.status === 'paid' ? 'Paid – ready to print' : inv.status === 'awaiting_payment' ? (overdue ? `Awaiting payment (over ${UNPAID_FLAG_DAYS} days)` : 'Awaiting payment') : inv.status === 'dry_run' ? 'Test invoice' : 'Invoice cancelled';
   return {
     invoiceId: inv.id, status: inv.status, label, overdue, sentAt: inv.sentAt, paidAt: inv.paidAt, draftOrderName: inv.draftOrderName, invoiceUrl: inv.invoiceUrl,
-    shopifyOrderName: inv.shopifyOrderName, totalPence: inv.totalPence, warnings: inv.warnings, quoteIds: inv.quoteIds,
+    shopifyOrderName: inv.shopifyOrderName, deliveryMethod: inv.deliveryMethod, deliveryLabel: inv.deliveryLabel, totalPence: inv.totalPence, warnings: inv.warnings, quoteIds: inv.quoteIds,
   };
 }
 

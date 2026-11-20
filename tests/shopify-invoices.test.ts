@@ -7,7 +7,7 @@ import { orders, organisations, payments, quotes, shopifyInvoices, users, type O
 import { seedDemo } from '@/db/seed';
 import { staffActor } from '@/lib/audit';
 import type { Ctx } from '@/lib/services/common';
-import { buildDraftOrder, e164, handleFor, KNOWN_PROMO_VARIANTS, type InvoiceDesign } from '@/lib/shopify-invoice';
+import { buildDraftOrder, deliveryFromOrder, e164, handleFor, KNOWN_PROMO_VARIANTS, type InvoiceDesign } from '@/lib/shopify-invoice';
 
 vi.mock('server-only', () => ({}));
 
@@ -95,6 +95,39 @@ describe('pay before print: the Shopify draft order', () => {
     const up = build([design('Pro V1', 1, { quoteTotalPence: 5000 })]);
     expect(up.totalPence).toBe(5000);
     expect(up.input.appliedDiscount).toBeUndefined();
+  });
+
+  it('tags personalised orders and says print before posting, so Click & Drop orders can be held back', () => {
+    const p = build([design('Pro V1', 1)]);
+    expect(p.input.tags).toContain('personalised-print');
+    expect(p.input.note.split('\n')[0]).toMatch(/^PRINT BEFORE POSTING – COS Q-\d+/);
+  });
+
+  it('postage: no shipping line by default (customer chooses at checkout); collection or Royal Mail when staff pick it', () => {
+    expect(build([design('Pro V1', 1)]).input.shippingLine).toBeUndefined();
+    const collect = buildDraftOrder({ invoiceId: 'x', customer, designs: [design('Pro V1', 1)], variants: KNOWN_PROMO_VARIANTS, delivery: { mode: 'collect' } });
+    expect(collect.input.shippingLine).toEqual({ title: 'Collect from Wheatley Golf Club pro shop', priceWithCurrency: { amount: '0.00', currencyCode: 'GBP' } });
+    expect(collect.totalPence).toBe(4500);
+    const post = buildDraftOrder({ invoiceId: 'x', customer, designs: [design('Pro V1', 1)], variants: KNOWN_PROMO_VARIANTS, delivery: { mode: 'royal_mail', pricePence: 399 } });
+    expect(post.totalPence).toBe(4899);
+    expect(post.input.shippingLine!.title).toBe('Royal Mail delivery');
+  });
+
+  it('passes the customer through: Shopify customer id, and an address when COS has one', () => {
+    const p = buildDraftOrder({
+      invoiceId: 'x', customer: { ...customer, address: { address1: '1 High St', city: 'Doncaster', zip: 'DN2 5LD', countryCode: 'GB' } },
+      designs: [design('Pro V1', 1)], variants: KNOWN_PROMO_VARIANTS, shopifyCustomerId: 'gid://shopify/Customer/7',
+    });
+    expect(p.input.purchasingEntity).toEqual({ customerId: 'gid://shopify/Customer/7' });
+    expect(p.input.shippingAddress).toEqual({ firstName: 'Gift', lastName: 'Buyer', address1: '1 High St', city: 'Doncaster', zip: 'DN2 5LD', countryCode: 'GB', phone: '+447700900123' });
+    expect(build([design('Pro V1', 1)]).input.shippingAddress).toBeUndefined();
+  });
+
+  it('reads delivery or collection off the paid order', () => {
+    expect(deliveryFromOrder({ shipping_lines: [{ title: 'UK Free shipping', code: 'UK Free shipping', source: 'shopify' }] })).toEqual({ method: 'delivery', label: 'UK Free shipping' });
+    expect(deliveryFromOrder({ shipping_lines: [{ title: 'Wheatley Golf Club', code: 'Pickup', source: 'shopify' }] }).method).toBe('collection');
+    expect(deliveryFromOrder({ shipping_lines: [{ title: 'Collect from Wheatley Golf Club pro shop' }] }).method).toBe('collection');
+    expect(deliveryFromOrder({ shipping_lines: [] }).method).toBe('unknown');
   });
 
   it('only sends phone numbers Shopify accepts', () => {
@@ -190,6 +223,11 @@ describe('pay before print: approve, invoice, paid', () => {
           },
         });
       }
+      if (body.query.includes('customers(')) return json({ customers: { nodes: [] } });
+      if (body.query.includes('customerCreate')) {
+        expect(body.variables.input).toEqual({ firstName: 'Gift', lastName: 'Buyer', email: 'live@example.com', phone: '+447700900123' });
+        return json({ customerCreate: { customer: { id: 'gid://shopify/Customer/77' }, userErrors: [] } });
+      }
       if (body.query.includes('draftOrderCreate')) {
         return json({ draftOrderCreate: { draftOrder: { id: 'gid://shopify/DraftOrder/999', name: '#D42', invoiceUrl: 'https://shop.example/invoice/abc', status: 'OPEN', totalPriceSet: { shopMoney: { amount: '80.00' } } }, userErrors: [] } });
       }
@@ -202,7 +240,9 @@ describe('pay before print: approve, invoice, paid', () => {
     const r = await svc.approveAndSendInvoice(manager, a.id, [b.id]);
     expect(r.mode).toBe('live');
     expect(r.invoice).toMatchObject({ status: 'awaiting_payment', draftOrderId: 'gid://shopify/DraftOrder/999', draftOrderName: '#D42', invoiceUrl: 'https://shop.example/invoice/abc', totalPence: 8000 });
-    const create = sent.find((s) => s.query.includes('draftOrderCreate'))!.variables.input as { appliedDiscount: { value: number }; acceptAutomaticDiscounts: boolean };
+    const create = sent.find((s) => s.query.includes('draftOrderCreate'))!.variables.input as { appliedDiscount: { value: number }; acceptAutomaticDiscounts: boolean; purchasingEntity: unknown; tags: string[] };
+    expect(create.purchasingEntity).toEqual({ customerId: 'gid://shopify/Customer/77' });
+    expect(create.tags).toContain('personalised-print');
     expect(create.appliedDiscount.value).toBe(10);
     expect(create.acceptAutomaticDiscounts).toBe(false);
     expect(sent.some((s) => s.query.includes('draftOrderInvoiceSend'))).toBe(true);
@@ -215,7 +255,7 @@ describe('pay before print: approve, invoice, paid', () => {
 
     // Shopify → COS webhook.
     const { POST } = await import('@/app/api/webhooks/shopify/route');
-    const order = { id: 5551234, admin_graphql_api_id: 'gid://shopify/Order/5551234', name: '#1234', financial_status: 'paid', total_price: '80.00', note_attributes: [{ name: 'COS invoice', value: r.invoice.id }] };
+    const order = { id: 5551234, admin_graphql_api_id: 'gid://shopify/Order/5551234', name: '#1234', financial_status: 'paid', total_price: '80.00', note_attributes: [{ name: 'COS invoice', value: r.invoice.id }], shipping_lines: [{ title: 'UK Free shipping', code: 'UK Free shipping', source: 'shopify' }] };
     const raw = JSON.stringify(order);
     const call = (sig: string) =>
       POST(new Request('http://localhost/api/webhooks/shopify', {
@@ -229,11 +269,12 @@ describe('pay before print: approve, invoice, paid', () => {
     expect(await res.json()).toMatchObject({ matched: true, already: false });
 
     const [inv] = await withTenant(org.id, (tx) => tx.select().from(shopifyInvoices).where(eq(shopifyInvoices.id, r.invoice.id)));
-    expect(inv).toMatchObject({ status: 'paid', shopifyOrderName: '#1234' });
+    expect(inv).toMatchObject({ status: 'paid', shopifyOrderName: '#1234', deliveryMethod: 'delivery', deliveryLabel: 'UK Free shipping' });
     const qs = await withTenant(org.id, (tx) => tx.select().from(quotes).where(inArray(quotes.id, [a.id, b.id])));
     expect(qs.map((q) => q.status)).toEqual(['accepted', 'accepted']);
     const os = await withTenant(org.id, (tx) => tx.select().from(orders).where(inArray(orders.quoteId, [a.id, b.id])));
     expect(os).toHaveLength(2);
+    expect(os[0].internalNotes).toContain('Paid on Shopify #1234 · Post: UK Free shipping · Print before posting.');
     const ps = await withTenant(org.id, (tx) => tx.select().from(payments).where(inArray(payments.orderId, os.map((o) => o.id))));
     expect(ps.reduce((n, p) => n + p.amountPence, 0)).toBe(8000);
     expect(ps.every((p) => p.reference === 'Shopify #1234' && p.method === 'card')).toBe(true);

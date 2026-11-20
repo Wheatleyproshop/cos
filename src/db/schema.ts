@@ -1131,6 +1131,9 @@ export const shopifyInvoices = pgTable(
     paidAt: timestamp('paid_at', { withTimezone: true }),
     shopifyOrderId: text('shopify_order_id'),
     shopifyOrderName: text('shopify_order_name'),
+    /** From the paid order: "delivery" (e.g. Royal Mail) or "collection". */
+    deliveryMethod: text('delivery_method', { enum: ['delivery', 'collection', 'unknown'] }),
+    deliveryLabel: text('delivery_label'),
     createdByUserId: uuid('created_by_user_id').notNull().references(() => users.id),
     createdAt: createdAt(),
   },
