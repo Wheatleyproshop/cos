@@ -95,8 +95,11 @@ async function readBalls(ctx: Ctx, raw: Record<string, string>) {
     if (raw[`ball_${b.id}`] !== 'yes') continue;
     const priceRaw = String(raw[`price_${b.id}`] ?? '').trim();
     const price = priceRaw ? pounds(priceRaw) : b.pricePerDozenPence;
+    const stockRaw = String(raw[`stock_${b.id}`] ?? '').trim();
+    const stock = stockRaw === '' ? null : /^\d{1,5}$/.test(stockRaw) ? Number(stockRaw) : NaN;
     if (price === null || price === 0) errs[`price_${b.id}`] = 'Enter the promotion price per dozen, e.g. 54.99';
-    else balls.push({ ballId: b.id, pricePerDozenPence: price });
+    else if (Number.isNaN(stock)) errs[`stock_${b.id}`] = 'Whole dozens, or leave empty for no limit';
+    else balls.push({ ballId: b.id, pricePerDozenPence: price, stockDozens: stock });
   }
   if (!balls.length && !Object.keys(errs).length) errs.balls = 'Tick at least one ball';
   return { balls, errs };
@@ -197,6 +200,21 @@ export const promoMultiBuy = (p: Pick<BallPromotion, 'multiBuyDozens' | 'multiBu
 export const isPromoOpen = (p: Pick<BallPromotion, 'closedAt' | 'closesOn'>, today: string) => !p.closedAt && (!p.closesOn || p.closesOn >= today);
 export const londonToday = () => new Date().toLocaleDateString('en-CA', { timeZone: 'Europe/London' });
 const promoIdSql = sql`${quotes.specificationJson}->'promo'->>'id'`;
+/** Designs that still hold stock: everything except declined, expired or cancelled quotes. */
+const HOLDS_STOCK = sql`${quotes.status} not in ('declined', 'expired', 'cancelled')`;
+
+/** Dozens taken so far per ball on a promotion (designs waiting to be checked count, so stock isn't oversold). */
+async function dozensTaken(orgId: string, promoId: string) {
+  const rows = await withTenant(orgId, (tx) =>
+    tx
+      .select({ ballId: sql<string>`${quotes.specificationJson}->'ball'->>'id'`, dozens: sql<number>`coalesce(sum((${quotes.specificationJson}->>'dozens')::int), 0)::int` })
+      .from(quotes)
+      .where(and(sql`${promoIdSql} = ${promoId}`, HOLDS_STOCK))
+      .groupBy(sql`1`),
+  );
+  return new Map(rows.map((r) => [r.ballId, r.dozens]));
+}
+const left = (b: PromoBall, taken: Map<string, number>) => (b.stockDozens == null ? null : Math.max(0, b.stockDozens - (taken.get(b.ballId) ?? 0)));
 
 export async function listBallPromotions(orgId: string) {
   return withTenant(orgId, async (tx) => {
@@ -239,8 +257,9 @@ export async function ballPromotionDetail(orgId: string, id: string) {
     const balls = promo.balls.map((b) => {
       const r = range.find((x) => x.id === b.ballId);
       const mine = designs.filter((d) => d.ballId === b.ballId);
+      const held = mine.filter((d) => !['declined', 'expired', 'cancelled'].includes(d.status)).reduce((n, d) => n + d.dozens, 0);
       return {
-        ...b, brand: r?.brand ?? '', name: r?.name ?? 'Ball no longer in range', colour: r?.colour ?? '#ffffff', listPricePence: r?.pricePerDozenPence ?? null,
+        ...b, left: b.stockDozens == null ? null : Math.max(0, b.stockDozens - held), brand: r?.brand ?? '', name: r?.name ?? 'Ball no longer in range', colour: r?.colour ?? '#ffffff', listPricePence: r?.pricePerDozenPence ?? null,
         designs: mine.length, dozens: mine.reduce((n, d) => n + d.dozens, 0),
       };
     });
@@ -268,18 +287,20 @@ export function promoCsv(d: NonNullable<Awaited<ReturnType<typeof ballPromotionD
 
 /* ─────────────────────────────── Public link ─────────────────────────────── */
 
-export async function findBallPromotion(token: string): Promise<{ promo: BallPromotion; org: Organisation; balls: (typeof printBalls.$inferSelect & { promoPricePence: number })[] } | null> {
+export async function findBallPromotion(
+  token: string,
+): Promise<{ promo: BallPromotion; org: Organisation; balls: (typeof printBalls.$inferSelect & { promoPricePence: number; left: number | null })[] } | null> {
   if (!/^[A-Za-z0-9_-]{10,64}$/.test(token)) return null;
   const db = systemDb();
   const [promo] = await db.select().from(ballPromotions).where(eq(ballPromotions.token, token)).limit(1);
   if (!promo) return null;
   const [org] = await db.select().from(organisations).where(eq(organisations.id, promo.organisationId)).limit(1);
   if (!org) return null;
-  const range = await getBallRange(org.id);
+  const [range, taken] = await Promise.all([getBallRange(org.id), dozensTaken(org.id, promo.id)]);
   const balls = promo.balls
     .map((b) => {
       const r = range.find((x) => x.id === b.ballId);
-      return r ? { ...r, promoPricePence: b.pricePerDozenPence } : null;
+      return r ? { ...r, promoPricePence: b.pricePerDozenPence, left: left(b, taken) } : null;
     })
     .filter((b): b is NonNullable<typeof b> => Boolean(b));
   return { promo, org, balls };
@@ -293,6 +314,11 @@ export async function submitPromotionDesign(token: string, raw: Record<string, u
   if (!isPromoOpen(promo, londonToday())) throw new ServiceError('This promotion has now closed. Please contact the shop.');
   const ball = balls.find((b) => b.id === String(raw.ballId ?? ''));
   if (!ball) throw new ServiceError('Please choose one of the balls in this promotion.', { ballId: 'Choose a ball' });
+  const dozens = Number(raw.dozens ?? 0);
+  if (ball.left !== null && ball.left < 1) throw new ServiceError(`Sorry, the ${ball.name} has sold out in this promotion.`, { ballId: 'Sold out' });
+  if (ball.left !== null && dozens > ball.left) {
+    throw new ServiceError(`Sorry, there ${ball.left === 1 ? 'is' : 'are'} only ${ball.left} dozen ${ball.name} left in this promotion.`, { dozens: `Up to ${ball.left}` });
+  }
   await checkDesignLimits(org.id, meta.ip);
   const ctx = await customerDesignCtx(org, String(raw.customerName ?? ''));
   const quote = await createBallPrintQuote(
@@ -317,3 +343,6 @@ export const promoImagePath = (p: Pick<BallPromotion, 'token' | 'bannerKey' | 'f
   const key = slot === 'banner' ? p.bannerKey : p.featureKey;
   return key ? `/api/public/promo-image/${p.token}/${slot}?v=${key.slice(-10)}` : null;
 };
+
+/** Whether every ball with a stock limit has sold out (a promotion with unlimited balls never sells out). */
+export const promoSoldOut = (balls: { left: number | null }[]) => balls.length > 0 && balls.every((b) => b.left !== null && b.left < 1);

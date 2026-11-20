@@ -162,8 +162,8 @@ export function PromoSetupForm({
 
           <h3 className="team-setup-h">Balls in the promotion</h3>
           <p className="muted" style={{ marginTop: 0 }}>
-            Tick each ball and set its promotion price per dozen (inc. VAT). Missing a ball or colour? Add it on the{' '}
-            <a href="/ball-printing/range">ball range</a> page first.
+            Tick each ball and set its promotion price per dozen (inc. VAT). Add the stock you have for the promotion to run it until stock runs out: each ball
+            stops when its stock is used. Missing a ball or colour? Add it on the <a href="/ball-printing/range">ball range</a> page first.
           </p>
           {s?.fieldErrors?.balls ? <p className="err">{s.fieldErrors.balls}</p> : null}
           <div className="tablewrap">
@@ -174,6 +174,7 @@ export function PromoSetupForm({
                   <th>Ball</th>
                   <th className="num">Usual price</th>
                   <th>Promotion price (£ a dozen)</th>
+                  <th>Promotion stock (dozens)</th>
                 </tr>
               </thead>
               <tbody>
@@ -215,6 +216,17 @@ export function PromoSetupForm({
                           style={{ maxWidth: 120 }}
                         />
                         {err ? <div className="err">{err}</div> : null}
+                      </td>
+                      <td>
+                        <input
+                          name={`stock_${b.id}`}
+                          inputMode="numeric"
+                          defaultValue={inPromo?.stockDozens ?? ''}
+                          placeholder="No limit"
+                          aria-label={`Promotion stock for ${b.brand} ${b.name}`}
+                          style={{ maxWidth: 110 }}
+                        />
+                        {s?.fieldErrors?.[`stock_${b.id}`] ? <div className="err">{s.fieldErrors[`stock_${b.id}`]}</div> : null}
                       </td>
                     </tr>
                   );

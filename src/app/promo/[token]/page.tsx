@@ -2,7 +2,7 @@ import type { Metadata } from 'next';
 import { BallPrintBuilder } from '@/components/ball-print-builder';
 import { InvalidLink, PublicShell } from '@/components/public-shell';
 import { money } from '@/lib/format';
-import { findBallPromotion, isPromoOpen, londonToday, promoImagePath, promoMultiBuy } from '@/lib/services/ball-promotions';
+import { findBallPromotion, isPromoOpen, londonToday, promoImagePath, promoMultiBuy, promoSoldOut } from '@/lib/services/ball-promotions';
 import { submitPromotionAction } from './actions';
 
 // Absolute title: customer pages never mention COS. Not for search engines: the link is shared directly.
@@ -24,7 +24,9 @@ export default async function PromotionPage({ params }: { params: Promise<{ toke
   const found = await findBallPromotion(token);
   if (!found || !found.balls.length) return <InvalidLink title="This page isn’t available" body="This promotion can’t be found. Please contact the shop." />;
   const { promo, org, balls } = found;
-  const open = isPromoOpen(promo, londonToday());
+  const soldOut = promoSoldOut(balls);
+  const open = isPromoOpen(promo, londonToday()) && !soldOut;
+  const available = balls.filter((b) => b.left === null || b.left > 0);
   const multiBuy = promoMultiBuy(promo);
   return (
     <PublicShell org={org} wide>
@@ -42,7 +44,7 @@ export default async function PromotionPage({ params }: { params: Promise<{ toke
 
           <div className="promo-offer" aria-label="Balls in this promotion">
             {balls.map((b) => (
-              <div key={b.id} className="promo-ball">
+              <div key={b.id} className={b.left === 0 ? 'promo-ball sold' : 'promo-ball'}>
                 <span className="promo-swatch" style={{ background: b.colour }} aria-hidden="true" />
                 <div>
                   <b>
@@ -52,6 +54,11 @@ export default async function PromotionPage({ params }: { params: Promise<{ toke
                     {money(b.promoPricePence)} a dozen
                     {b.promoPricePence < b.pricePerDozenPence ? <span className="promo-was"> usually {money(b.pricePerDozenPence)}</span> : null}
                   </div>
+                  {b.left === 0 ? (
+                    <small className="promo-left out">Sold out</small>
+                  ) : b.left !== null ? (
+                    <small className="promo-left">{b.left <= 10 ? `Only ${b.left} dozen left` : `${b.left} dozen left`}</small>
+                  ) : null}
                 </div>
               </div>
             ))}
@@ -63,6 +70,7 @@ export default async function PromotionPage({ params }: { params: Promise<{ toke
               ) : null}
               <span>{promo.setupFeePence ? `Logo setup ${money(promo.setupFeePence)}` : 'Free personalisation'}</span>
               {promo.minDozens > 1 ? <span>Minimum {promo.minDozens} dozen</span> : null}
+              {balls.some((b) => b.left !== null) ? <span>While stocks last</span> : null}
               {promo.closesOn ? <span>{open ? `Order by ${ukDate(promo.closesOn)}` : `Closed ${ukDate(promo.closesOn)}`}</span> : null}
             </div>
           </div>
@@ -76,13 +84,14 @@ export default async function PromotionPage({ params }: { params: Promise<{ toke
       {open ? (
         <BallPrintBuilder
           variant="public"
-          balls={balls.map((b) => ({
+          balls={available.map((b) => ({
             id: b.id,
             brand: b.brand,
             name: b.name,
             colour: b.colour,
             pricePerDozenPence: b.promoPricePence,
             minDozens: Math.max(b.minDozens, promo.minDozens),
+            maxDozens: b.left,
             photoUrl: b.photoKey ? `/api/public/promo-ball-photo/${promo.token}/${b.id}?v=${b.photoKey.slice(-10)}` : null,
           }))}
           setupFeePence={promo.setupFeePence}
@@ -91,7 +100,10 @@ export default async function PromotionPage({ params }: { params: Promise<{ toke
           defaults={{}}
         />
       ) : (
-        <div className="notice warn">This promotion has now closed. Please contact the shop if you’d still like personalised balls.</div>
+        <div className="notice warn">
+          {soldOut ? 'This promotion has sold out — thank you! ' : 'This promotion has now closed. '}Please contact the shop if you’d still like personalised
+          balls.
+        </div>
       )}
 
       <p className="promo-terms">{promo.terms}</p>

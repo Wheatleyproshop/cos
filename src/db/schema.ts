@@ -1060,7 +1060,7 @@ export const salesHistory = pgTable(
 /* ─────────────────────────── Ball promotions ─────────────────────────── */
 
 /** A ball on a promotion: one of the shop's print balls at the promotion's price. */
-export type PromoBall = { ballId: string; pricePerDozenPence: number };
+export type PromoBall = { ballId: string; pricePerDozenPence: number; /** Promotion stock in dozens; designs stop when it runs out. Null = no limit. */ stockDozens?: number | null };
 
 /**
  * A personalised-ball promotion link (e.g. Titleist's "No.1 Gift in Golf"): customers design their

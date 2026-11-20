@@ -16,6 +16,8 @@ const PUBLIC_STEPS = ['Ball', 'Personalise', 'Your details'];
 
 export type BuilderBall = {
   id: string; brand: string; name: string; colour: string; pricePerDozenPence: number; minDozens: number; photoUrl: string | null;
+  /** Promotion stock left, in dozens (no limit when absent). */
+  maxDozens?: number | null;
 };
 
 type Img = HTMLImageElement;
@@ -254,7 +256,7 @@ export function BallPrintBuilder({
   const chooseBall = (b: BuilderBall) => {
     setBallId(b.id);
     setPrice(penceToInput(b.pricePerDozenPence));
-    setDozens((d) => Math.max(d, b.minDozens));
+    setDozens((d) => Math.min(b.maxDozens ?? 500, Math.max(d, b.minDozens)));
     setView('brand');
   };
 
@@ -368,6 +370,7 @@ export function BallPrintBuilder({
                   <small>{b.brand}</small>
                   <b>{b.name}</b>
                   <span>{money(b.pricePerDozenPence)}/dz</span>
+                  {b.maxDozens != null && b.maxDozens <= 10 ? <small>Only {b.maxDozens} dozen left</small> : null}
                 </button>
               ))}
             </div>
@@ -492,14 +495,14 @@ export function BallPrintBuilder({
                   name="dozens"
                   inputMode="numeric"
                   value={dozens}
-                  onChange={(e) => setDozens(Math.max(1, Math.min(500, Number(e.target.value.replace(/\D/g, '')) || 1)))}
+                  onChange={(e) => setDozens(Math.max(1, Math.min(ball?.maxDozens ?? 500, Number(e.target.value.replace(/\D/g, '')) || 1)))}
                   aria-label="Number of dozens"
                 />
-                <button type="button" aria-label="One dozen more" onClick={() => setDozens((d) => Math.min(500, d + 1))}>
+                <button type="button" aria-label="One dozen more" onClick={() => setDozens((d) => Math.min(ball?.maxDozens ?? 500, d + 1))}>
                   +
                 </button>
               </div>
-              <small className="muted">{dozens * 12} balls{ball && ball.minDozens > 1 ? ` · minimum ${ball.minDozens} dozen` : ''}</small>
+              <small className="muted">{dozens * 12} balls{ball && ball.minDozens > 1 ? ` · minimum ${ball.minDozens} dozen` : ''}{ball?.maxDozens != null ? ` · ${ball.maxDozens} dozen left` : ''}</small>
             </div>
             <div className="fields" style={{ marginTop: 14 }}>
               <Field state={state} name="customerName" label="Your name" required autoComplete="name" />
@@ -558,14 +561,14 @@ export function BallPrintBuilder({
                   name="dozens"
                   inputMode="numeric"
                   value={dozens}
-                  onChange={(e) => setDozens(Math.max(1, Math.min(500, Number(e.target.value.replace(/\D/g, '')) || 1)))}
+                  onChange={(e) => setDozens(Math.max(1, Math.min(ball?.maxDozens ?? 500, Number(e.target.value.replace(/\D/g, '')) || 1)))}
                   aria-label="Number of dozens"
                 />
-                <button type="button" aria-label="One dozen more" onClick={() => setDozens((d) => Math.min(500, d + 1))}>
+                <button type="button" aria-label="One dozen more" onClick={() => setDozens((d) => Math.min(ball?.maxDozens ?? 500, d + 1))}>
                   +
                 </button>
               </div>
-              <small className="muted">{dozens * 12} balls{ball && ball.minDozens > 1 ? ` · minimum ${ball.minDozens} dozen` : ''}</small>
+              <small className="muted">{dozens * 12} balls{ball && ball.minDozens > 1 ? ` · minimum ${ball.minDozens} dozen` : ''}{ball?.maxDozens != null ? ` · ${ball.maxDozens} dozen left` : ''}</small>
             </div>
 
             <div className="fields" style={{ marginTop: 14 }}>

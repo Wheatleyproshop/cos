@@ -164,3 +164,52 @@ describe('multi-buy (e.g. £45 a dozen or 2 dozen for £80, free personalisation
     expect(q.specificationText).toContain('1 × 2 dozen for £80.00 + 1 dozen at £45.00');
   });
 });
+
+describe('until stock runs out', () => {
+  it('counts stock down per ball, refuses more than is left, frees stock from declined designs and sells out', async () => {
+    const svc = await import('@/lib/services/ball-promotions');
+    const { getBallRange } = await import('@/lib/services/ball-printing');
+    const range = await getBallRange(org.id);
+    const v1x = range.find((b) => b.name === 'Pro V1x')!;
+    const v1 = range.find((b) => b.name === 'Pro V1')!;
+    const form = {
+      title: 'Stock limited', setupFee: '0', minDozens: '1',
+      [`ball_${v1x.id}`]: 'yes', [`price_${v1x.id}`]: '45.00', [`stock_${v1x.id}`]: '5',
+      [`ball_${v1.id}`]: 'yes', [`price_${v1.id}`]: '45.00', [`stock_${v1.id}`]: '',
+    };
+    await expect(svc.createBallPromotion(manager, { ...form, [`stock_${v1x.id}`]: 'lots' })).rejects.toMatchObject({
+      fieldErrors: { [`stock_${v1x.id}`]: 'Whole dozens, or leave empty for no limit' },
+    });
+    const p = await svc.createBallPromotion(manager, form);
+    const send = (ballId: string, dozens: number, ip: string) =>
+      svc.submitPromotionDesign(
+        p.token,
+        { customerName: 'Stock Test', email: `s${ip.slice(-2)}@example.com`, ballId, artworkType: 'text', textLines: ['ST'], font: 'classic', ink: 'navy', scale: '0.8', dozens: String(dozens) },
+        { logo: null, proof: proof() },
+        { ip },
+      );
+    let found = (await svc.findBallPromotion(p.token))!;
+    expect(found.balls.find((b) => b.id === v1x.id)!.left).toBe(5);
+    expect(found.balls.find((b) => b.id === v1.id)!.left).toBeNull();
+
+    const first = await send(v1x.id, 3, '203.0.113.41');
+    found = (await svc.findBallPromotion(p.token))!;
+    expect(found.balls.find((b) => b.id === v1x.id)!.left).toBe(2);
+    await expect(send(v1x.id, 3, '203.0.113.42')).rejects.toThrow(/only 2 dozen Pro V1x left/);
+
+    // A declined design gives its stock back.
+    await withTenant(org.id, (tx) => tx.update(quotes).set({ status: 'declined' }).where(eq(quotes.id, first.id)));
+    found = (await svc.findBallPromotion(p.token))!;
+    expect(found.balls.find((b) => b.id === v1x.id)!.left).toBe(5);
+
+    await send(v1x.id, 5, '203.0.113.43');
+    found = (await svc.findBallPromotion(p.token))!;
+    expect(found.balls.find((b) => b.id === v1x.id)!.left).toBe(0);
+    await expect(send(v1x.id, 1, '203.0.113.44')).rejects.toThrow(/sold out/);
+    // Pro V1 has no limit, so the promotion as a whole isn't sold out.
+    expect(svc.promoSoldOut(found.balls)).toBe(false);
+    expect(svc.promoSoldOut(found.balls.filter((b) => b.id === v1x.id))).toBe(true);
+    const d = (await svc.ballPromotionDetail(org.id, p.id))!;
+    expect(d.balls.find((b) => b.ballId === v1x.id)).toMatchObject({ stockDozens: 5, left: 0 });
+  });
+});

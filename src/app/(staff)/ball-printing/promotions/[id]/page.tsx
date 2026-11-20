@@ -14,7 +14,14 @@ import { closePromotionAction, updatePromotionAction } from '../actions';
 
 export const metadata: Metadata = { title: 'Ball promotion' };
 
-const QUOTE_STATUS: Record<string, string> = { draft: 'To check', sent: 'Proof sent', accepted: 'Approved', declined: 'Declined', expired: 'Expired', cancelled: 'Cancelled' };
+const QUOTE_STATUS: Record<string, string> = {
+  draft: 'To check',
+  sent: 'Proof sent',
+  accepted: 'Approved',
+  declined: 'Declined',
+  expired: 'Expired',
+  cancelled: 'Cancelled',
+};
 
 export default async function BallPromotionPage({ params }: { params: Promise<{ id: string }> }) {
   const staff = await requireStaff();
@@ -41,8 +48,8 @@ export default async function BallPromotionPage({ params }: { params: Promise<{ 
         <h2>Promotion link {open ? '' : <span className="muted">(closed)</span>}</h2>
         <CopyLink url={url} label="Promotion link" />
         <p className="muted" style={{ marginBottom: 0 }}>
-          Share this on the website, social media or by email. Customers pick one of the promotion balls, add their logo or text, spin the 3D ball to check it and
-          send it. Each design arrives as a ball-printing quote marked “To check”, at the promotion price, and the customer gets a confirmation email.
+          Share this on the website, social media or by email. Customers pick one of the promotion balls, add their logo or text, spin the 3D ball to check it
+          and send it. Each design arrives as a ball-printing quote marked “To check”, at the promotion price, and the customer gets a confirmation email.
           {promo.closesOn ? ` Closes at the end of ${promo.closesOn.split('-').reverse().join('/')}.` : ''}
         </p>
         {manager ? (
@@ -73,6 +80,11 @@ export default async function BallPromotionPage({ params }: { params: Promise<{ 
               <small className="muted">
                 dozen · {b.designs} {b.designs === 1 ? 'design' : 'designs'}
               </small>
+              {b.left !== null ? (
+                <small className={b.left === 0 ? 'err' : 'muted'}>
+                  {b.left === 0 ? `Sold out (${b.stockDozens} dozen)` : `${b.left} of ${b.stockDozens} dozen left`}
+                </small>
+              ) : null}
             </div>
           ))}
         </div>
