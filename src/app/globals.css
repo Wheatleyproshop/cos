@@ -179,7 +179,7 @@ details.section[open] { padding-bottom: 16px; }
 .design-intro { max-width: 680px; margin: 0 0 20px; }
 .design-intro h1 { font-family: var(--brand-heading, inherit); font-size: 28px; margin: 0 0 6px; }
 .design-intro p { margin: 0; color: #4a525e; }
-.promo-banner { display: block; width: 100%; height: auto; max-height: 460px; object-fit: cover; border-radius: 14px; margin: 0 0 22px; }
+.promo-banner { display: block; width: 100%; height: auto; border-radius: 14px; margin: 0 0 22px; }
 .promo-top { display: grid; gap: 22px; align-items: start; }
 .promo-top.has-feature { grid-template-columns: minmax(0, 1fr) minmax(0, 320px); }
 @media (max-width: 760px) { .promo-top.has-feature { grid-template-columns: minmax(0, 1fr); } }
