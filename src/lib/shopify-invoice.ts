@@ -106,7 +106,14 @@ export const KNOWN_PROMO_VARIANTS: ShopifyVariant[] = [
   { handle: 'pro-v1', variantId: 'gid://shopify/ProductVariant/54890192109948', title: 'Titleist Pro V1', pricePence: 4500, compareAtPence: 5000 },
   { handle: 'pro-v1x', variantId: 'gid://shopify/ProductVariant/54890235625852', title: 'Titleist Pro V1x', pricePence: 4500, compareAtPence: 5000 },
   { handle: 'pro-v1x-left-dash', variantId: 'gid://shopify/ProductVariant/54906911981948', title: 'Titleist Pro V1x Left Dash', pricePence: 4500, compareAtPence: 5000 },
+  { handle: 'custom-print-personalisation', variantId: 'gid://shopify/ProductVariant/58241773175164', title: 'Custom print – personalisation', pricePence: 0, compareAtPence: null },
 ];
+
+/**
+ * The hidden £0 Shopify product used for the personalisation line, so it shows the "Custom print"
+ * picture on the invoice, checkout and order (custom lines can't have images). Not on any sales channel.
+ */
+export const PERSONALISATION_HANDLE = 'custom-print-personalisation';
 
 const pounds = (pence: number) => (pence / 100).toFixed(2);
 const gbp = (pence: number): Money => ({ amount: pounds(pence), currencyCode: 'GBP' });
@@ -198,17 +205,24 @@ export function buildDraftOrder(opts: {
       lines.push({ label: `${ballLabel} (dozen)`, quantity: d.dozens, unitPence: d.pricePerDozenPence, shopifyProduct: false, note: 'Custom line: no matching Shopify product' });
     }
 
+    const what = d.personalisation.replace(/^(Text|Logo): /, '');
     const personalAttrs: Attr[] = [
-      { key: 'COS quote', value: d.quoteNumber },
+      { key: d.personalisation.startsWith('Logo') ? 'Logo' : 'Print', value: what.slice(0, 250) },
       { key: 'Ball', value: `${d.dozens} dozen ${ballLabel}` },
-      { key: 'Personalisation', value: d.personalisation.slice(0, 250) },
+      { key: 'COS', value: d.reference ?? d.quoteNumber },
       ...(d.proofUrl ? [{ key: 'Proof image', value: d.proofUrl }] : []),
       ...(d.logoUrl ? [{ key: 'Logo image', value: d.logoUrl }] : []),
     ];
-    const what = d.personalisation.replace(/^(Text|Logo): /, '');
     const title = `${d.setupFeePence ? 'Personalisation' : 'Free personalisation'}: ${what} – ${d.reference ?? d.quoteNumber}`.slice(0, 255);
-    lineItems.push({ title, quantity: 1, originalUnitPriceWithCurrency: gbp(d.setupFeePence), requiresShipping: false, taxable: true, customAttributes: personalAttrs });
-    lines.push({ label: title, quantity: 1, unitPence: d.setupFeePence, shopifyProduct: false });
+    const product = variants.find((v) => v.handle === PERSONALISATION_HANDLE);
+    if (product && product.pricePence === d.setupFeePence) {
+      // The "Custom print" product (with its picture); the print details travel as line properties.
+      lineItems.push({ variantId: product.variantId, quantity: 1, customAttributes: personalAttrs });
+      lines.push({ label: title, quantity: 1, unitPence: product.pricePence, shopifyProduct: true });
+    } else {
+      lineItems.push({ title, quantity: 1, originalUnitPriceWithCurrency: gbp(d.setupFeePence), requiresShipping: false, taxable: true, customAttributes: personalAttrs });
+      lines.push({ label: title, quantity: 1, unitPence: d.setupFeePence, shopifyProduct: false });
+    }
   }
 
   const subtotal = lines.reduce((n, l) => n + l.quantity * l.unitPence, 0);

@@ -15,7 +15,7 @@
 
 import { createHmac } from 'node:crypto';
 import { shopifyAccessToken, shopifyConfig } from './shopify';
-import { e164, handleFor, splitName, type DraftOrderInput, type ShopifyVariant } from './shopify-invoice';
+import { e164, handleFor, PERSONALISATION_HANDLE, splitName, type DraftOrderInput, type ShopifyVariant } from './shopify-invoice';
 import { safeEqual } from './tokens';
 
 export class ShopifyInvoiceError extends Error {}
@@ -82,7 +82,7 @@ const toPence = (v: string | null | undefined) => (v == null || v === '' ? null 
 
 /** Looks up the ball products by handle (e.g. pro-v1, pro-v1x, pro-v1x-left-dash). */
 export async function findVariantsByHandle(ballNames: string[]): Promise<ShopifyVariant[]> {
-  const handles = [...new Set(ballNames.map(handleFor).filter(Boolean))];
+  const handles = [...new Set([...ballNames.map(handleFor).filter(Boolean), PERSONALISATION_HANDLE])];
   if (!handles.length) return [];
   type P = { handle: string; title: string; variants: { nodes: { id: string; title: string; price: string; compareAtPrice: string | null }[] } };
   const data = await gql<{ products: { nodes: P[] } }>(
