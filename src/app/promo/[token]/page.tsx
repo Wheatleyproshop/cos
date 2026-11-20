@@ -27,6 +27,18 @@ export default async function PromotionPage({ params }: { params: Promise<{ toke
   const soldOut = promoSoldOut(balls);
   const open = isPromoOpen(promo, londonToday()) && !soldOut;
   const available = balls.filter((b) => b.left === null || b.left > 0);
+  // Every ball in the picker shows a standard Pro V1 photo: the yellow one for yellow balls, the white one for the rest.
+  const isYellow = (b: { name: string; colour: string }) => {
+    if (/yellow/i.test(b.name)) return true;
+    const m = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(b.colour);
+    if (!m) return false;
+    const [r, g, bl] = m.slice(1).map((h) => parseInt(h, 16));
+    return r > 200 && g > 180 && bl < 120;
+  };
+  const photoOf = (b: (typeof balls)[number]) => (b.photoKey ? `/api/public/promo-ball-photo/${promo.token}/${b.id}?v=${b.photoKey.slice(-10)}` : null);
+  const standard = (yellow: boolean) => balls.find((b) => b.photoKey && isYellow(b) === yellow && /^pro\s*v1(\s+yellow)?$/i.test(b.name.trim()));
+  const whitePhoto = standard(false);
+  const yellowPhoto = standard(true);
   const multiBuy = promoMultiBuy(promo);
   return (
     <PublicShell org={org} wide>
@@ -92,7 +104,10 @@ export default async function PromotionPage({ params }: { params: Promise<{ toke
             pricePerDozenPence: b.promoPricePence,
             minDozens: Math.max(b.minDozens, promo.minDozens),
             maxDozens: b.left,
-            photoUrl: b.photoKey ? `/api/public/promo-ball-photo/${promo.token}/${b.id}?v=${b.photoKey.slice(-10)}` : null,
+            photoUrl: (() => {
+              const ref = isYellow(b) ? yellowPhoto : whitePhoto;
+              return ref ? photoOf(ref) : photoOf(b);
+            })(),
           }))}
           setupFeePence={promo.setupFeePence}
           multiBuy={multiBuy}
