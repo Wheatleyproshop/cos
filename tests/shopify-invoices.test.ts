@@ -40,7 +40,7 @@ describe('pay before print: the Shopify draft order', () => {
     expect(p.input.acceptAutomaticDiscounts).toBe(false);
     expect(p.input.lineItems[0]).toEqual({ variantId: 'gid://shopify/ProductVariant/54890192109948', quantity: 1, customAttributes: [{ key: 'COS quote', value: expect.stringMatching(/^Q-/) }] });
     const personal = p.input.lineItems[1] as { title: string; originalUnitPriceWithCurrency: { amount: string }; customAttributes: { key: string; value: string }[] };
-    expect(personal.title).toMatch(/^Personalisation – free/);
+    expect(personal.title).toBe(`Free personalisation: “Happy Christmas Dad” – ${p.input.lineItems[0].customAttributes[0].value}`);
     expect(personal.originalUnitPriceWithCurrency).toEqual({ amount: '0.00', currencyCode: 'GBP' });
     expect(personal.customAttributes.map((a) => a.key)).toEqual(['COS quote', 'Ball', 'Personalisation', 'Proof image']);
     expect(p.input.customAttributes[0]).toEqual({ key: 'COS invoice', value: '11111111-2222-3333-4444-555555555555' });
@@ -103,14 +103,8 @@ describe('pay before print: the Shopify draft order', () => {
     expect(p.input.note.split('\n')[0]).toMatch(/^PRINT BEFORE POSTING – COS Q-\d+/);
   });
 
-  it('postage: no shipping line by default (customer chooses at checkout); collection or Royal Mail when staff pick it', () => {
-    expect(build([design('Pro V1', 1)]).input.shippingLine).toBeUndefined();
-    const collect = buildDraftOrder({ invoiceId: 'x', customer, designs: [design('Pro V1', 1)], variants: KNOWN_PROMO_VARIANTS, delivery: { mode: 'collect' } });
-    expect(collect.input.shippingLine).toEqual({ title: 'Collect from Wheatley Golf Club pro shop', priceWithCurrency: { amount: '0.00', currencyCode: 'GBP' } });
-    expect(collect.totalPence).toBe(4500);
-    const post = buildDraftOrder({ invoiceId: 'x', customer, designs: [design('Pro V1', 1)], variants: KNOWN_PROMO_VARIANTS, delivery: { mode: 'royal_mail', pricePence: 399 } });
-    expect(post.totalPence).toBe(4899);
-    expect(post.input.shippingLine!.title).toBe('Royal Mail delivery');
+  it('leaves postage to the checkout (no shipping line): Royal Mail or click & collect is the customer’s choice', () => {
+    expect((build([design('Pro V1', 1)]).input as Record<string, unknown>).shippingLine).toBeUndefined();
   });
 
   it('passes the customer through: Shopify customer id, and an address when COS has one', () => {
@@ -126,7 +120,8 @@ describe('pay before print: the Shopify draft order', () => {
   it('reads delivery or collection off the paid order', () => {
     expect(deliveryFromOrder({ shipping_lines: [{ title: 'UK Free shipping', code: 'UK Free shipping', source: 'shopify' }] })).toEqual({ method: 'delivery', label: 'UK Free shipping' });
     expect(deliveryFromOrder({ shipping_lines: [{ title: 'Wheatley Golf Club', code: 'Pickup', source: 'shopify' }] }).method).toBe('collection');
-    expect(deliveryFromOrder({ shipping_lines: [{ title: 'Collect from Wheatley Golf Club pro shop' }] }).method).toBe('collection');
+    expect(deliveryFromOrder({ shipping_lines: [{ title: 'Click & collect - Wheatley Golf Club pro shop, Doncaster (free)', code: 'Click & collect', source: 'shopify' }] }).method).toBe('collection');
+    expect(deliveryFromOrder({ shipping_lines: [{ title: 'Royal Mail Tracked 48', code: 'Tracked 48', source: 'shopify' }] }).method).toBe('delivery');
     expect(deliveryFromOrder({ shipping_lines: [] }).method).toBe('unknown');
   });
 
@@ -284,5 +279,50 @@ describe('pay before print: approve, invoice, paid', () => {
     expect(await (await call(good)).json()).toMatchObject({ matched: true, already: true });
     const again = await withTenant(org.id, (tx) => tx.select().from(payments).where(inArray(payments.orderId, os.map((o) => o.id))));
     expect(again).toHaveLength(ps.length);
+  });
+});
+
+describe('pay before print: approving never starts print unpaid', () => {
+  it('staff can’t approve an online ball design into print without payment; “Mark paid in store” records it', async () => {
+    const quotesSvc = await import('@/lib/services/quotes');
+    const [a, b] = await promoWithTwoDesigns('till@example.com');
+    await expect(quotesSvc.acceptQuoteInStore(manager, a.id, 'Gift Buyer')).rejects.toThrow(/paid before it’s printed/);
+    await expect(quotesSvc.acceptQuoteForCustomer(manager, b.id)).rejects.toThrow(/paid before it’s printed/);
+    const order = await quotesSvc.acceptQuoteInStore(manager, a.id, 'Gift Buyer', { paidInStore: { method: 'cash' } });
+    const ps = await withTenant(org.id, (tx) => tx.select().from(payments).where(eq(payments.orderId, order.id)));
+    expect(ps).toMatchObject([{ amountPence: 4500, method: 'cash', reference: 'Paid in store (no Shopify invoice)' }]);
+  });
+
+  it('the customer approving on their emailed link creates the invoice instead of an order', async () => {
+    vi.stubEnv('SHOPIFY_INVOICES', '');
+    const quotesSvc = await import('@/lib/services/quotes');
+    const svc = await import('@/lib/services/shopify-invoices');
+    const [a] = await promoWithTwoDesigns('link@example.com');
+    const url = await quotesSvc.createApprovalLink(manager, a.id);
+    const token = url.split('/q/')[1];
+    await expect(quotesSvc.acceptQuoteByToken(token, 'Gift Buyer', {})).rejects.toThrow(/payment link/);
+    const found = (await quotesSvc.findQuoteByToken(token))!;
+    const r = await svc.approveByCustomerAndInvoice(found, 'Gift Buyer');
+    expect(r.mode).toBe('dry_run');
+    const [q] = await withTenant(org.id, (tx) => tx.select().from(quotes).where(eq(quotes.id, a.id)));
+    expect(q.status).toBe('sent');
+    expect(q.convertedOrderId).toBeNull();
+    expect((await svc.latestInvoiceForQuote(org.id, a.id))!.status).toBe('dry_run');
+  });
+
+  it('an order approved before pay-before-print (like COS-1043) can be sent a Shopify invoice for what’s owed', async () => {
+    vi.stubEnv('SHOPIFY_INVOICES', '');
+    const quotesSvc = await import('@/lib/services/quotes');
+    const svc = await import('@/lib/services/shopify-invoices');
+    const [a] = await promoWithTwoDesigns('legacy@example.com');
+    // Simulate the old in-store approval (straight into print, nothing paid).
+    const ctx = { ...manager, org: { ...org, slug: 'some-other-shop' } };
+    const order = await quotesSvc.acceptQuoteInStore(ctx, a.id, 'Gift Buyer');
+    const r = await svc.sendInvoiceForOrder(manager, order.id);
+    expect(r.plan.totalPence).toBe(4500);
+    expect(r.plan.input.note).toContain(`PRINT BEFORE POSTING – COS ${order.orderNumber}`);
+    expect(r.plan.input.note).toContain(`/orders/${order.orderNumber}`);
+    const personal = r.plan.input.lineItems[1] as { title: string };
+    expect(personal.title).toBe(`Free personalisation: “Happy Christmas Dad” (Classic serif, Navy ink) – ${order.orderNumber}`);
   });
 });

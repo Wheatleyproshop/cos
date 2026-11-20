@@ -1,11 +1,12 @@
-import { approveAndInvoiceAction } from '@/app/(staff)/actions';
+import { approveAndInvoiceAction, markPaidInStoreAction, sendOrderInvoiceAction } from '@/app/(staff)/actions';
+import { ActionButton } from './forms';
 import type { Quote } from '@/db/schema';
 import { asBallPrintSpec } from '@/lib/ball-print';
 import { money, stamp } from '@/lib/format';
 import { invoiceMode } from '@/lib/shopify-admin';
 import type { DraftOrderInput } from '@/lib/shopify-invoice';
 import { invoiceCompanions, latestInvoiceForQuote, payStateOf } from '@/lib/services/shopify-invoices';
-import { ApproveInvoiceForm } from './misc-forms';
+import { ApproveInvoiceForm, MarkPaidInStoreForm } from './misc-forms';
 
 const shopifyAdminDraftUrl = (gid: string | null) => {
   const id = gid?.split('/').pop();
@@ -60,7 +61,7 @@ function PayloadView({ input }: { input: DraftOrderInput }) {
 }
 
 /** Pay before print on the quote screen: the invoice's state, or the "Approve and send invoice" button. */
-export async function InvoicePanel({ orgId, quote, email, tz }: { orgId: string; quote: Quote; email: string; tz: string }) {
+export async function InvoicePanel({ orgId, quote, email, name, tz }: { orgId: string; quote: Quote; email: string; name: string; tz: string }) {
   if (!asBallPrintSpec(quote.specificationJson)) return null;
   const latest = await latestInvoiceForQuote(orgId, quote.id);
   const state = latest ? payStateOf(latest) : null;
@@ -93,6 +94,13 @@ export async function InvoicePanel({ orgId, quote, email, tz }: { orgId: string;
           </div>
           {state.warnings.length ? <div className="muted">{state.warnings.join(' ')}</div> : null}
         </div>
+        {state.status === 'awaiting_payment' && open ? (
+          <details className="section">
+            <summary>Paid at the till instead?</summary>
+            <MarkPaidInStoreForm action={markPaidInStoreAction.bind(null, quote.id)} defaultName={name} total={money(quote.totalGrossPence)} />
+            <div className="muted">Then delete draft order {latest.draftOrderName} in Shopify so they aren’t asked to pay twice.</div>
+          </details>
+        ) : null}
       </>
     );
   }
@@ -104,7 +112,7 @@ export async function InvoicePanel({ orgId, quote, email, tz }: { orgId: string;
     <>
       <h3>Pay before print</h3>
       <p className="muted" style={{ marginTop: 0 }}>
-        Happy with the logo and proof? Approve it here and Shopify emails {email || 'the customer'} an invoice. Once they pay, it moves to “Paid – ready to print”.
+        Happy with the logo and proof? Approve it here and Shopify emails {email || 'the customer'} an invoice; at checkout they choose Royal Mail or click & collect. It’s printed once they pay (“Paid – ready to print”).
         {live ? '' : ' Test mode is on: nothing is sent to Shopify or the customer until SHOPIFY_INVOICES is set to “live”.'}
       </p>
       <ApproveInvoiceForm
@@ -113,6 +121,10 @@ export async function InvoicePanel({ orgId, quote, email, tz }: { orgId: string;
         live={live}
         email={email}
       />
+      <details className="section" style={{ marginTop: 12 }}>
+        <summary>Paying at the till? Mark paid in store / skip invoice</summary>
+        <MarkPaidInStoreForm action={markPaidInStoreAction.bind(null, quote.id)} defaultName={name} total={money(quote.totalGrossPence)} />
+      </details>
       {latest && state?.status === 'dry_run' ? (
         <div className="detailbox" style={{ marginTop: 12 }}>
           <small>
@@ -148,6 +160,37 @@ export async function OrderPaidNotice({ orgId, quoteId, tz }: { orgId: string; q
         : inv.deliveryMethod === 'collection'
           ? 'Collecting from the shop.'
           : 'Delivery or collection not stated on the Shopify order: check it in Shopify.'}
+    </div>
+  );
+}
+
+/** On an approved but unpaid ball-design order (e.g. approved before pay-before-print): send a Shopify invoice. */
+export async function OrderInvoiceButton({ orgId, quoteId, orderId, unpaid }: { orgId: string; quoteId: string; orderId: string; unpaid: boolean }) {
+  if (!unpaid) return null;
+  const inv = await latestInvoiceForQuote(orgId, quoteId);
+  if (inv?.status === 'awaiting_payment') {
+    return (
+      <div className="notice warn">
+        <b>Awaiting payment</b>
+        Shopify invoice {inv.draftOrderName} for {money(inv.totalPence)} sent. Hold printing until it’s paid.
+      </div>
+    );
+  }
+  if (inv?.status === 'paid') return null;
+  const live = invoiceMode() === 'live';
+  return (
+    <div className="notice warn">
+      <b>Not paid yet</b>
+      This design should be paid before printing. Send the customer a Shopify invoice (they choose Royal Mail or click & collect at checkout).
+      <div style={{ marginTop: 8 }}>
+        <ActionButton
+          action={sendOrderInvoiceAction.bind(null, orderId)}
+          className="btn small primary"
+          confirm={live ? 'Have Shopify email this customer an invoice for what’s owed?' : 'Test mode: work out the Shopify invoice only. Nothing is sent. Carry on?'}
+        >
+          {live ? 'Send Shopify invoice' : 'Send Shopify invoice (test mode)'}
+        </ActionButton>
+      </div>
     </div>
   );
 }

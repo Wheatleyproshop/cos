@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { and, eq, inArray, isNull, sql } from 'drizzle-orm';
 import { systemDb, withTenant } from '@/db';
-import { ballPromotions, customers, orders, organisations, quotes, shopifyInvoices, type BallPromotion, type Quote, type ShopifyInvoice } from '@/db/schema';
+import { ballPromotions, customers, orders, organisations, quotes, shopifyInvoices, type BallPromotion, type Organisation, type Quote, type ShopifyInvoice } from '@/db/schema';
 import { recordEvent, type Actor } from '../audit';
 import { asBallPrintSpec, INK_COLOURS, PRINT_FONTS } from '../ball-print';
 import { dispatchMessages } from '../email/outbox';
@@ -9,9 +9,9 @@ import { money } from '../format';
 import {
   createDraftOrder, deleteDraftOrder, findOrCreateCustomer, findVariantsByHandle, invoiceMode, invoiceSetupProblems, sendDraftOrderInvoice, ShopifyInvoiceError, type InvoiceMode,
 } from '../shopify-admin';
-import { buildDraftOrder, COS_INVOICE_ATTR, deliveryFromOrder, KNOWN_PROMO_VARIANTS, type DeliveryChoice, type InvoiceDesign, type InvoicePlan, type OrderShipping } from '../shopify-invoice';
+import { buildDraftOrder, COS_INVOICE_ATTR, deliveryFromOrder, KNOWN_PROMO_VARIANTS, type InvoiceDesign, type InvoicePlan, type OrderShipping } from '../shopify-invoice';
 import { appUrl, signValue } from '../tokens';
-import { ServiceError, type Ctx } from './common';
+import { paidPence, ServiceError, type Ctx } from './common';
 import { insertPayment } from './orders';
 import { acceptAndConvert, proofPathFor } from './quotes';
 
@@ -36,19 +36,28 @@ function personalisationText(q: Pick<Quote, 'specificationJson'>) {
 }
 
 /** The quote as a design line for the invoice, with the promotion's multi-buy if it has one. */
-async function toDesigns(orgId: string, rows: Quote[]): Promise<InvoiceDesign[]> {
+async function toDesigns(orgId: string, rows: Quote[], orderFor: Map<string, { orderNumber: string; owedPence: number }>): Promise<InvoiceDesign[]> {
   const promoIds = [...new Set(rows.map((q) => asBallPrintSpec(q.specificationJson)?.promo?.id).filter((x): x is string => Boolean(x)))];
   const promos = promoIds.length ? await withTenant(orgId, (tx) => tx.select().from(ballPromotions).where(inArray(ballPromotions.id, promoIds))) : [];
-  return rows.map((q) => designFromQuote(q, promos));
+  return rows.map((q) => {
+    const o = orderFor.get(q.id);
+    return designFromQuote(o ? { ...q, totalGrossPence: o.owedPence } : q, promos, o?.orderNumber);
+  });
 }
 
 /** One quote as an invoice design line (pure apart from building the signed image links). */
-export function designFromQuote(q: Pick<Quote, 'id' | 'quoteNumber' | 'totalGrossPence' | 'specificationJson'>, promos: Pick<BallPromotion, 'id' | 'multiBuyDozens' | 'multiBuyPricePence'>[]): InvoiceDesign {
+export function designFromQuote(
+  q: Pick<Quote, 'id' | 'quoteNumber' | 'totalGrossPence' | 'specificationJson'>,
+  promos: Pick<BallPromotion, 'id' | 'multiBuyDozens' | 'multiBuyPricePence'>[],
+  orderNumber?: string,
+): InvoiceDesign {
   const s = asBallPrintSpec(q.specificationJson)!;
   const p = s.promo ? promos.find((x) => x.id === s.promo!.id) : undefined;
   return {
     quoteId: q.id, quoteNumber: q.quoteNumber, ball: { brand: s.ball.brand, name: s.ball.name }, dozens: s.dozens, pricePerDozenPence: s.pricePerDozenPence,
     setupFeePence: s.setupFeePence, quoteTotalPence: q.totalGrossPence, personalisation: personalisationText(q),
+    reference: orderNumber ?? q.quoteNumber,
+    cosUrl: appUrl(orderNumber ? `/orders/${orderNumber}` : `/quotes/${q.quoteNumber}`),
     proofUrl: appUrl(proofPathFor(q.id)), logoUrl: s.artwork.type === 'logo' ? appUrl(logoPathFor(q.id)) : null,
     promo: s.promo
       ? { id: s.promo.id, title: s.promo.title, multiBuy: p?.multiBuyDozens && p.multiBuyPricePence ? { dozens: p.multiBuyDozens, pricePence: p.multiBuyPricePence } : null }
@@ -94,7 +103,7 @@ export async function approveAndSendInvoice(
   ctx: Ctx,
   quoteId: string,
   companionIds: string[] = [],
-  opts: { mode?: InvoiceMode; delivery?: DeliveryChoice } = {},
+  opts: { mode?: InvoiceMode } = {},
 ): Promise<InvoiceResult> {
   if (!ctx.userId) throw new ServiceError('Invoices must be sent by a signed-in staff member.');
   const mode = opts.mode ?? invoiceMode();
@@ -112,12 +121,25 @@ export async function approveAndSendInvoice(
   for (const q of rows) {
     if (!asBallPrintSpec(q.specificationJson)) throw new ServiceError(`${q.quoteNumber} isn’t a ball design.`);
     if (q.customerId !== customer.id) throw new ServiceError(`${q.quoteNumber} is for a different customer.`);
-    if (!(OPEN as readonly string[]).includes(q.status) || q.archivedAt) throw new ServiceError(`${q.quoteNumber} is already ${q.status}.`);
     if (q.shopifyInvoiceId && live.has(q.shopifyInvoiceId)) throw new ServiceError(`${q.quoteNumber} already has a Shopify invoice.`);
+    if (q.archivedAt) throw new ServiceError(`${q.quoteNumber} was deleted.`);
+    const approvedUnpaid = q.status === 'accepted' && q.convertedOrderId;
+    if (!(OPEN as readonly string[]).includes(q.status) && !approvedUnpaid) throw new ServiceError(`${q.quoteNumber} is already ${q.status}.`);
+  }
+  // Already approved and made into an order (e.g. approved in store before pay-before-print): invoice what's owed.
+  const orderFor = new Map<string, { orderNumber: string; owedPence: number }>();
+  for (const q of rows.filter((r) => r.status === 'accepted')) {
+    const o = await withTenant(ctx.org.id, async (tx) => {
+      const [row] = await tx.select().from(orders).where(eq(orders.id, q.convertedOrderId!)).limit(1);
+      return row ? { row, paid: await paidPence(tx, row.id) } : null;
+    });
+    if (!o || o.row.removedAt) throw new ServiceError(`The order for ${q.quoteNumber} couldn’t be found.`);
+    if (o.paid > 0) throw new ServiceError(`${o.row.orderNumber} already has ${money(o.paid)} paid, so it can’t go on a Shopify invoice. Take the rest in store.`);
+    orderFor.set(q.id, { orderNumber: o.row.orderNumber, owedPence: o.row.totalGrossPence });
   }
   if (!customer.email) throw new ServiceError('Add the customer’s email address first: Shopify emails the invoice to it.');
 
-  const designs = await toDesigns(ctx.org.id, rows);
+  const designs = await toDesigns(ctx.org.id, rows, orderFor);
   const invoiceId = randomUUID();
   if (mode === 'live') {
     const problems = invoiceSetupProblems();
@@ -126,7 +148,7 @@ export async function approveAndSendInvoice(
   const variants = mode === 'live' ? await findVariantsByHandle(designs.map((d) => d.ball.name)) : KNOWN_PROMO_VARIANTS;
   const shopifyCustomer = mode === 'live' ? await findOrCreateCustomer(customer) : null;
   const plan = buildDraftOrder({
-    invoiceId, customer: { name: customer.name, email: customer.email, phone: customer.phone }, designs, variants, delivery: opts.delivery, shopifyCustomerId: shopifyCustomer?.id ?? null,
+    invoiceId, customer: { name: customer.name, email: customer.email, phone: customer.phone }, designs, variants, shopifyCustomerId: shopifyCustomer?.id ?? null,
   });
   if (mode === 'dry_run') plan.warnings.push(`Shopify customer: found by ${customer.email}, or created as ${customer.name} with that email${customer.phone ? ' and phone' : ''}.`);
   const base = {
@@ -254,10 +276,6 @@ export async function markShopifyOrderPaid(order: ShopifyOrderWebhook): Promise<
         const customer = cs.find((c) => c.id === q.customerId)!;
         const r = await acceptAndConvert(tx, ctx, q, customer, `Paid online (Shopify ${shopifyOrderName})`, { shopifyOrder: shopifyOrderName, invoiceId: inv.id }, { ignoreExpiry: true });
         orderId = r.order.id;
-        await tx
-          .update(orders)
-          .set({ internalNotes: [r.order.internalNotes, jobNote].filter(Boolean).join('\n\n') })
-          .where(eq(orders.id, r.order.id));
         orderNumbers.push(r.order.orderNumber);
         messages.push(r.messageId);
       } else if (!orderId) {
@@ -265,6 +283,10 @@ export async function markShopifyOrderPaid(order: ShopifyOrderWebhook): Promise<
         continue;
       }
       orderFor.set(q.id, orderId);
+      await tx
+        .update(orders)
+        .set({ internalNotes: sql`case when ${orders.internalNotes} = '' then ${jobNote} else ${orders.internalNotes} || ${`\n\n${jobNote}`} end` })
+        .where(eq(orders.id, orderId));
       if (share > 0) await insertPayment(tx, ctx, orderId, { kind: 'payment', amountPence: share, method: 'card', reference: `Shopify ${shopifyOrderName}`.trim() });
     }
     await tx
@@ -337,4 +359,23 @@ export async function awaitingPayment(orgId: string) {
   const ids = rows.flatMap((r) => r.inv.quoteIds);
   const nums = ids.length ? await withTenant(orgId, (tx) => tx.select({ id: quotes.id, n: quotes.quoteNumber }).from(quotes).where(inArray(quotes.id, ids))) : [];
   return rows.map((r) => ({ ...payStateOf(r.inv), customer: r.customer, quoteNumbers: r.inv.quoteIds.map((id) => nums.find((x) => x.id === id)?.n ?? '?') }));
+}
+
+/** "Send Shopify invoice" on an order that was approved but not paid (e.g. approved in store). */
+export async function sendInvoiceForOrder(ctx: Ctx, orderId: string, opts: { mode?: InvoiceMode } = {}) {
+  const [o] = await withTenant(ctx.org.id, (tx) => tx.select({ quoteId: orders.quoteId }).from(orders).where(eq(orders.id, orderId)).limit(1));
+  if (!o?.quoteId) throw new ServiceError('Only orders made from a ball design can be invoiced through Shopify.');
+  return approveAndSendInvoice(ctx, o.quoteId, [], opts);
+}
+
+/**
+ * The customer approves the proof on their emailed link. For pay-before-print designs that sends the
+ * Shopify invoice instead of starting print; returns the payment link (live) so they can pay now.
+ */
+export async function approveByCustomerAndInvoice(found: { org: Organisation; quote: Quote }, name: string) {
+  const ctx: Ctx = { org: found.org, actor: { type: 'customer', name }, userId: found.quote.createdByUserId, role: null };
+  const existing = await latestInvoiceForQuote(found.org.id, found.quote.id);
+  if (existing?.status === 'awaiting_payment') return { invoiceUrl: existing.invoiceUrl, mode: invoiceMode() };
+  const r = await approveAndSendInvoice(ctx, found.quote.id);
+  return { invoiceUrl: r.invoice.invoiceUrl, mode: r.mode };
 }

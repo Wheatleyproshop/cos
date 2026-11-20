@@ -42,7 +42,8 @@ import { CancelButton } from './cancel-button';
 import { CloseButton } from './chrome';
 import { ActionButton, LinkGenerator } from './forms';
 import { AcceptInStoreForm, EditQuoteForm } from './misc-forms';
-import { InvoicePanel, OrderPaidNotice } from './invoice-panel';
+import { InvoicePanel, OrderInvoiceButton, OrderPaidNotice } from './invoice-panel';
+import { payBeforePrint } from '@/lib/shopify-invoice';
 import { AttachmentForm, CreateRequestForm, EditOrderForm, NoteForm, PaymentForm, ProgressForm, VoidPaymentForm, type RequestDefaults } from './order-forms';
 import { SpecView } from './spec-view';
 import { InternalNotesForm } from './workshop-forms';
@@ -262,6 +263,9 @@ export async function OrderDetail({ staff, number, inModal }: { staff: Staff; nu
         </p>
       ) : null}
       {o.quoteId ? <OrderPaidNotice orgId={staff.organisationId} quoteId={o.quoteId} tz={staff.org.timezone} /> : null}
+      {o.quoteId && !o.removedAt && o.status !== 'collected' && payBeforePrint(staff.org, o.specificationJson) ? (
+        <OrderInvoiceButton orgId={staff.organisationId} quoteId={o.quoteId} orderId={o.id} unpaid={d.paid === 0 && o.totalGrossPence > 0} />
+      ) : null}
       {o.internalNotes ? (
         <div className="notice" style={{ background: '#f7f8f5', color: '#3b4339' }}>
           <b>Internal notes</b>
@@ -504,6 +508,7 @@ export async function QuoteDetail({ staff, number, inModal }: { staff: Staff; nu
   const quoteNotesCanRestore =
     !q.internalNotes && Boolean((lastNotes?.oldValueJson as { notes?: string } | null)?.notes) && !(lastNotes?.newValueJson as { notes?: string } | null)?.notes;
   const onlineDesign = Boolean((asBallPrintSpec(q.specificationJson) ?? asCrestSpec(q.specificationJson))?.submittedOnline);
+  const payFirst = payBeforePrint(staff.org, q.specificationJson);
 
   return (
     <>
@@ -536,7 +541,9 @@ export async function QuoteDetail({ staff, number, inModal }: { staff: Staff; nu
           <b>Designed online by {c.name}</b>
           {asCrestSpec(q.specificationJson)
             ? 'The price covers the cresting only. Add the garment price under Edit quote if you’re supplying them, check the artwork and sizes, then email the proof back for approval or approve it in store.'
-            : 'Check the artwork, quantity and price. Approve it in store below to put it into print, or edit it and email a proof back for them to approve.'}
+            : payFirst
+              ? 'Check the artwork, quantity and price, then approve it and send the Shopify invoice. It goes into print once paid. Or edit it and email a proof back: when they approve it, they’re taken to pay.'
+              : 'Check the artwork, quantity and price. Approve it in store below to put it into print, or edit it and email a proof back for them to approve.'}
         </div>
       ) : null}
       <BallProof quoteId={q.id} spec={q.specificationJson} />
@@ -573,7 +580,7 @@ export async function QuoteDetail({ staff, number, inModal }: { staff: Staff; nu
         </div>
       </div>
 
-      <InvoicePanel orgId={staff.organisationId} quote={q} email={c.email} tz={tz} />
+      <InvoicePanel orgId={staff.organisationId} quote={q} email={c.email} name={c.name} tz={tz} />
 
       {open ? (
         <>
@@ -588,9 +595,11 @@ export async function QuoteDetail({ staff, number, inModal }: { staff: Staff; nu
               note="Secure, single-use link. Generating a new one revokes earlier links."
             />
           </div>
-          <div style={{ marginTop: 16 }}>
-            <AcceptInStoreForm action={acceptInStoreAction.bind(null, q.id)} defaultName={c.name} />
-          </div>
+          {payFirst ? null : (
+            <div style={{ marginTop: 16 }}>
+              <AcceptInStoreForm action={acceptInStoreAction.bind(null, q.id)} defaultName={c.name} />
+            </div>
+          )}
           <details className="section">
             <summary>Edit quote</summary>
             <EditQuoteForm

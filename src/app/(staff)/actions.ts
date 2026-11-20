@@ -2,7 +2,6 @@
 
 import { redirect, RedirectType } from 'next/navigation';
 import { act, type FormState } from '@/lib/action-utils';
-import { ServiceError } from '@/lib/services/common';
 import { logout } from '@/lib/auth';
 import type { BackupProvider, EmailAutomationKey } from '@/db/schema';
 import {
@@ -1041,13 +1040,31 @@ export async function approveAndInvoiceAction(quoteId: string, _: FormState, fd:
   const { approveAndSendInvoice } = await import('@/lib/services/shopify-invoices');
   const { money } = await import('@/lib/format');
   return act('staff', async (ctx) => {
-    const { parseMoneyToPence } = await import('@/lib/format');
-    const how = String(fd.get('delivery') ?? 'checkout');
-    const postage = parseMoneyToPence(String(fd.get('postage') ?? '') || '0');
-    if (how === 'royal_mail' && (postage === null || postage < 0 || postage > 5000)) throw new ServiceError('Enter the postage, e.g. 0.00 or 3.99', { postage: 'Amount' });
-    const delivery = how === 'collect' ? { mode: 'collect' as const } : how === 'royal_mail' ? { mode: 'royal_mail' as const, pricePence: postage ?? 0 } : { mode: 'checkout' as const };
-    const r = await approveAndSendInvoice(ctx, quoteId, fd.getAll('with').map(String), { delivery });
+    const r = await approveAndSendInvoice(ctx, quoteId, fd.getAll('with').map(String));
     if (r.mode === 'dry_run') return `Test mode: nothing was sent to Shopify or the customer. The invoice would be ${money(r.plan.totalPence)} (details below).`;
     return `Invoice ${r.invoice.draftOrderName ?? ''} for ${money(r.plan.totalPence)} emailed to the customer by Shopify. It moves to “Paid – ready to print” when they pay.`;
   }, fd);
+}
+
+/** Pay before print override: the customer paid at the till, so approve and put it into print without a Shopify invoice. */
+export async function markPaidInStoreAction(quoteId: string, _: FormState, fd: FormData): Promise<FormState> {
+  let target = '';
+  const res = await act('staff', async (ctx) => {
+    const method = fd.get('method') === 'cash' ? 'cash' : 'card';
+    const order = await acceptQuoteInStore(ctx, quoteId, String(fd.get('acceptedName') ?? ''), { paidInStore: { method } });
+    target = `/?added=${order.orderNumber}&to=${order.status}`;
+  }, fd);
+  if (res?.ok && target) redirect(target, RedirectType.replace);
+  return res;
+}
+
+/** An order approved before pay-before-print (or in store) but not paid: send it a Shopify invoice. */
+export async function sendOrderInvoiceAction(orderId: string): Promise<FormState> {
+  const { sendInvoiceForOrder } = await import('@/lib/services/shopify-invoices');
+  const { money } = await import('@/lib/format');
+  return act('staff', async (ctx) => {
+    const r = await sendInvoiceForOrder(ctx, orderId);
+    if (r.mode === 'dry_run') return `Test mode: nothing was sent to Shopify or the customer. The invoice would be ${money(r.plan.totalPence)}.`;
+    return `Invoice ${r.invoice.draftOrderName ?? ''} for ${money(r.plan.totalPence)} emailed to the customer by Shopify.`;
+  });
 }

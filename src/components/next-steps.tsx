@@ -30,11 +30,13 @@ export function OrderNextStep({
 }
 
 export function QuoteNextStep({
-  q, customerName, email,
+  q, customerName, email, payFirst = false,
 }: {
   q: { id: string; quoteNumber: string; status: QuoteStatus; totalGrossPence: number };
   customerName: string;
   email: string;
+  /** Pay-before-print design: approval goes through the Shopify invoice on the quote screen. */
+  payFirst?: boolean;
 }) {
   if (!['draft', 'sent'].includes(q.status)) return null;
   return (
@@ -42,6 +44,11 @@ export function QuoteNextStep({
       <StepQuick action={sendQuoteAction.bind(null, q.id)} primary={q.status === 'draft'} confirm={`${q.status === 'draft' ? 'Email' : 'Re-send'} the approval link to ${email}?`}>
         {q.status === 'draft' ? 'Send ▸' : 'Resend'}
       </StepQuick>
+      {payFirst ? (
+        <Link href={`/quotes/${q.quoteNumber}`} className="btn small primary" scroll={false}>
+          Check & invoice ▸
+        </Link>
+      ) : (
       <StepQuick
         action={quickApproveAction.bind(null, q.id)}
         primary={q.status === 'sent'}
@@ -49,6 +56,7 @@ export function QuoteNextStep({
       >
         Approved ✓
       </StepQuick>
+      )}
       <StepQuick action={closeQuoteAction.bind(null, q.id, 'declined')} confirm={`Mark ${q.quoteNumber} as declined by ${customerName}?`}>
         Declined
       </StepQuick>

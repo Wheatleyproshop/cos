@@ -3,6 +3,7 @@ import { InvalidLink } from '@/components/public-shell';
 import { QuoteView } from '@/components/quote-view';
 import { money } from '@/lib/format';
 import { proofOf } from '@/lib/proofs';
+import { payBeforePrint } from '@/lib/shopify-invoice';
 import { findQuoteByToken, isExpired, proofPathFor } from '@/lib/services/quotes';
 import { AcceptForm } from './accept-form';
 
@@ -28,7 +29,7 @@ export default async function QuotePage({ params }: { params: Promise<{ token: s
   ) : expired ? (
     <div className="notice warn">This quote has expired. Please contact the shop for an updated price.</div>
   ) : (
-    <AcceptForm token={token} defaultName={c.name} total={money(q.totalGrossPence)} />
+    <AcceptForm token={token} defaultName={c.name} total={money(q.totalGrossPence)} payFirst={payBeforePrint(org, q.specificationJson)} />
   );
   return <QuoteView org={org} quote={q} customerName={c.name} action={action} previewUrl={proofOf(q.specificationJson) ? proofPathFor(q.id) : null} />;
 }

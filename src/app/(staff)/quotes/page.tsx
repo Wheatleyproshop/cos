@@ -14,6 +14,7 @@ import { CopyLink } from '@/components/copy-link';
 import { listOpenRequests } from '@/lib/services/order-requests';
 import { appUrl } from '@/lib/tokens';
 import { QuoteNextStep } from '@/components/next-steps';
+import { payBeforePrint } from '@/lib/shopify-invoice';
 import { awaitingPayment, payStatesForQuotes, UNPAID_FLAG_DAYS } from '@/lib/services/shopify-invoices';
 
 export const metadata: Metadata = { title: 'Quotes' };
@@ -180,7 +181,7 @@ export default async function QuotesPage({ searchParams }: { searchParams: Promi
                     ) : qt.status === 'accepted' && qt.convertedOrderId ? (
                       <span className="muted">Now an order</span>
                     ) : (
-                      <QuoteNextStep q={qt} customerName={c.name} email={c.email} />
+                      <QuoteNextStep q={qt} customerName={c.name} email={c.email} payFirst={payBeforePrint(staff.org, qt.specificationJson)} />
                     )}
                   </td>
                 </RowLink>

@@ -10,7 +10,7 @@
  * customer pays the promotion price for the lot (never more than COS showed them).
  */
 
-import { ballsPrice, type MultiBuy } from './ball-print';
+import { asBallPrintSpec, ballsPrice, type MultiBuy } from './ball-print';
 
 /** A ball design (COS quote) going on the invoice. */
 export type InvoiceDesign = {
@@ -24,6 +24,10 @@ export type InvoiceDesign = {
   quoteTotalPence: number;
   /** "Text: Happy Christmas Dad" or "Logo: club-crest.png". */
   personalisation: string;
+  /** The COS reference on the invoice: the order number once there is one (e.g. COS-1043), else the quote. */
+  reference?: string;
+  /** Link back to the job in COS. */
+  cosUrl?: string;
   proofUrl: string | null;
   logoUrl: string | null;
   promo?: { id: string; title: string; multiBuy?: MultiBuy | null } | null;
@@ -48,8 +52,6 @@ export type DraftOrderInput = {
   customAttributes: Attr[];
   lineItems: DraftLineItem[];
   appliedDiscount?: { title: string; description: string; value: number; valueType: 'FIXED_AMOUNT' };
-  /** Only when staff pick collection or a fixed postage charge; otherwise the customer chooses at checkout. */
-  shippingLine?: { title: string; priceWithCurrency: Money };
   shippingAddress?: ShippingAddress;
   /** The Shopify customer (found or created from the COS details), so nothing is retyped. */
   purchasingEntity?: { customerId: string };
@@ -61,13 +63,6 @@ export type ShippingAddress = {
   firstName: string; lastName: string; address1: string; address2?: string; city: string; zip: string; countryCode: string; phone?: string;
 };
 
-/**
- * Postage. "checkout" (default): no shipping line, so the customer picks delivery or collection from
- * the store's own options at checkout (e.g. "UK Free shipping" over £50, or pick up in store).
- * "collect" / "royal_mail": staff set it on the approval screen instead.
- */
-export type DeliveryChoice = { mode: 'checkout' } | { mode: 'collect' } | { mode: 'royal_mail'; pricePence: number };
-export const COLLECT_TITLE = 'Collect from Wheatley Golf Club pro shop';
 export const PRINT_TAG = 'personalised-print';
 
 /** First name / last name for Shopify from a single COS name. */
@@ -85,9 +80,7 @@ export type InvoicePlan = {
   lines: InvoiceLine[];
   subtotalPence: number;
   discountPence: number;
-  /** Postage set on the draft (0 when the customer chooses at checkout). */
-  shippingPence: number;
-  /** What the customer will pay on Shopify, before any postage they choose at checkout. */
+  /** What the customer will pay on Shopify, before the postage or collection they choose at checkout. */
   totalPence: number;
   /** The sum of the COS quote totals the customer was shown. */
   cosTotalPence: number;
@@ -177,12 +170,10 @@ export function buildDraftOrder(opts: {
   customer: InvoiceCustomer;
   designs: InvoiceDesign[];
   variants: ShopifyVariant[];
-  delivery?: DeliveryChoice;
   /** Shopify customer id (gid), when known. */
   shopifyCustomerId?: string | null;
 }): InvoicePlan {
   const { invoiceId, customer, designs, variants } = opts;
-  const delivery = opts.delivery ?? { mode: 'checkout' };
   if (!designs.length) throw new Error('No designs to invoice.');
   const warnings: string[] = [];
   const lineItems: DraftLineItem[] = [];
@@ -214,7 +205,8 @@ export function buildDraftOrder(opts: {
       ...(d.proofUrl ? [{ key: 'Proof image', value: d.proofUrl }] : []),
       ...(d.logoUrl ? [{ key: 'Logo image', value: d.logoUrl }] : []),
     ];
-    const title = d.setupFeePence ? `Personalisation – artwork setup (${d.quoteNumber})` : `Personalisation – free (${d.quoteNumber})`;
+    const what = d.personalisation.replace(/^(Text|Logo): /, '');
+    const title = `${d.setupFeePence ? 'Personalisation' : 'Free personalisation'}: ${what} – ${d.reference ?? d.quoteNumber}`.slice(0, 255);
     lineItems.push({ title, quantity: 1, originalUnitPriceWithCurrency: gbp(d.setupFeePence), requiresShipping: false, taxable: true, customAttributes: personalAttrs });
     lines.push({ label: title, quantity: 1, unitPence: d.setupFeePence, shopifyProduct: false });
   }
@@ -247,12 +239,7 @@ export function buildDraftOrder(opts: {
       : 'Price agreed on your COS quote';
 
   const phone = e164(customer.phone);
-  const shipping =
-    delivery.mode === 'collect'
-      ? { title: COLLECT_TITLE, priceWithCurrency: gbp(0) }
-      : delivery.mode === 'royal_mail'
-        ? { title: 'Royal Mail delivery', priceWithCurrency: gbp(delivery.pricePence) }
-        : null;
+
   const designNotes = designs.map((d) =>
     [
       `${d.quoteNumber}: ${d.dozens} dozen ${d.ball.brand} ${d.ball.name}`,
@@ -261,11 +248,10 @@ export function buildDraftOrder(opts: {
       ...(d.logoUrl ? [`  Logo: ${d.logoUrl}`] : []),
     ].join('\n'),
   );
-  const deliveryNote =
-    delivery.mode === 'collect' ? `Delivery: collect from the pro shop` : delivery.mode === 'royal_mail' ? `Delivery: Royal Mail (${fmt(delivery.pricePence)})` : 'Delivery: customer chooses at checkout';
   const note = [
-    `PRINT BEFORE POSTING – COS ${refs}. Personalised golf balls: hold this order until the balls are printed.`,
-    `Pay before print: the proof has been approved; printing starts once this is paid. ${deliveryNote}.`,
+    `PRINT BEFORE POSTING – COS ${designs.map((d) => d.reference ?? d.quoteNumber).join(', ')}. Personalised golf balls: hold this order until the balls are printed.`,
+    ...designs.filter((d) => d.cosUrl).map((d) => `COS: ${d.cosUrl}`),
+    `Pay before print: the proof has been approved; printing starts once this is paid.`,
     `Customer: ${customer.name}${customer.phone ? `, ${customer.phone}` : ''}`,
     ...(titles.length || multi ? [`Promotion: ${(multi?.title ?? titles[0])}`] : []),
     '',
@@ -288,13 +274,11 @@ export function buildDraftOrder(opts: {
     ...(discount > 0
       ? { appliedDiscount: { title: discountTitle.slice(0, 255), description: `COS ${refs}`.slice(0, 255), value: Number(pounds(discount)), valueType: 'FIXED_AMOUNT' as const } }
       : {}),
-    ...(shipping ? { shippingLine: shipping } : {}),
     ...(customer.address ? { shippingAddress: { ...splitName(customer.name), ...customer.address, ...(phone ? { phone } : {}) } } : {}),
     ...(opts.shopifyCustomerId ? { purchasingEntity: { customerId: opts.shopifyCustomerId } } : {}),
     acceptAutomaticDiscounts: false,
   };
-  const shippingPence = delivery.mode === 'royal_mail' ? delivery.pricePence : 0;
-  return { input, lines, subtotalPence, discountPence: discount, shippingPence, totalPence: subtotalPence - discount + shippingPence, cosTotalPence: cosTotal, warnings };
+  return { input, lines, subtotalPence, discountPence: discount, totalPence: subtotalPence - discount, cosTotalPence: cosTotal, warnings };
 }
 
 /** The bits of a paid Shopify order (REST webhook) that say how it reaches the customer. */
@@ -314,4 +298,13 @@ export function deliveryFromOrder(o: OrderShipping): { method: 'delivery' | 'col
   }
   if (o.shipping_address) return { method: 'delivery', label: 'Delivery' };
   return { method: 'unknown', label: 'No delivery method on the Shopify order' };
+}
+
+/**
+ * Pay before print applies to ball designs customers send online (the design page or a promotion),
+ * for the shop linked to Shopify. Approving those sends a Shopify invoice; print starts once paid.
+ */
+export function payBeforePrint(org: { slug: string }, specificationJson: unknown) {
+  const s = asBallPrintSpec(specificationJson);
+  return Boolean(s && (s.submittedOnline || s.promo) && org.slug === (process.env.SHOPIFY_COS_ORG?.trim() || 'desirable-golf'));
 }

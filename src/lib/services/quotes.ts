@@ -1,9 +1,10 @@
 import { and, desc, eq, isNotNull } from 'drizzle-orm';
 import { systemDb, withTenant, type DB } from '@/db';
-import { auditEvents, customers, organisations, orders, quotes, type Customer, type Organisation, type Quote } from '@/db/schema';
+import { auditEvents, customers, organisations, orders, quotes, shopifyInvoices, type Customer, type Organisation, type Quote } from '@/db/schema';
 import { recordEvent, type Actor } from '../audit';
 import { dispatchMessages, enqueueEmail } from '../email/outbox';
 import { proofOf } from '../proofs';
+import { payBeforePrint } from '../shopify-invoice';
 import { fitSpec } from '../fit-spec';
 import { parseMoneyToPence, todayInTz } from '../format';
 import { composeSpec, withUnitTotal } from '../order-details';
@@ -11,7 +12,7 @@ import { inHouse, journeyFor } from '../status';
 import { appUrl, hashToken, newToken, signValue } from '../tokens';
 import { noteSchema, parse, quoteCreateSchema, quoteEditSchema } from '../validation';
 import { findOrCreateCustomer, issueTrackingLink, nextNumber, requireRole, ServiceError, type Ctx } from './common';
-import { itemsOrError, noteDeletedState, orderEmailContext } from './orders';
+import { insertPayment, itemsOrError, noteDeletedState, orderEmailContext } from './orders';
 
 async function loadQuote(tx: DB, orgId: string, quoteId: string) {
   const [row] = await tx
@@ -323,12 +324,31 @@ export async function acceptAndConvert(
 }
 
 /** Staff record an approval given in person / by phone. */
-export async function acceptQuoteInStore(ctx: Ctx, quoteId: string, acceptedName: string) {
+export const PAY_FIRST_MESSAGE =
+  'This design is paid before it’s printed: use “Approve and send invoice”, or “Mark paid in store” if they’ve paid at the till.';
+
+/**
+ * Staff record an approval given in person / by phone. Pay-before-print designs (ball designs sent
+ * online) only go into print here when they've been paid at the till (`paidInStore`); otherwise
+ * they must go through the Shopify invoice.
+ */
+export async function acceptQuoteInStore(ctx: Ctx, quoteId: string, acceptedName: string, opts: { paidInStore?: { method: 'card' | 'cash' } } = {}) {
   const name = acceptedName.trim().slice(0, 120);
   if (!name) throw new ServiceError('Enter the name of the person who approved the quote.', { acceptedName: 'Required' });
   const { order, messageId } = await withTenant(ctx.org.id, async (tx) => {
     const { quote, customer } = await loadQuote(tx, ctx.org.id, quoteId);
-    return acceptAndConvert(tx, ctx, quote, customer, name, { recordedByStaff: true });
+    if (payBeforePrint(ctx.org, quote.specificationJson) && !opts.paidInStore) throw new ServiceError(PAY_FIRST_MESSAGE);
+    const r = await acceptAndConvert(tx, ctx, quote, customer, name, { recordedByStaff: true, ...(opts.paidInStore ? { paidInStore: true } : {}) });
+    if (opts.paidInStore) {
+      if (quote.totalGrossPence > 0) {
+        await insertPayment(tx, ctx, r.order.id, { kind: 'payment', amountPence: quote.totalGrossPence, method: opts.paidInStore.method, reference: 'Paid in store (no Shopify invoice)' });
+      }
+      // Any Shopify invoice still waiting is no longer needed (staff should delete the draft in Shopify).
+      if (quote.shopifyInvoiceId) {
+        await tx.update(shopifyInvoices).set({ status: 'cancelled' }).where(and(eq(shopifyInvoices.id, quote.shopifyInvoiceId), eq(shopifyInvoices.status, 'awaiting_payment')));
+      }
+    }
+    return r;
   });
   await dispatchMessages(ctx.org, [messageId]);
   return order;
@@ -475,6 +495,8 @@ export async function acceptQuoteByToken(token: string, acceptedName: string, me
   const ctx: Ctx = { org: found.org, actor, userId: null, role: null };
   const { order, messageId, trackingUrl } = await withTenant(found.org.id, async (tx) => {
     const { quote, customer } = await loadQuote(tx, found.org.id, found.quote.id);
+    // Pay-before-print designs go to the Shopify invoice instead (see approveByCustomerAndInvoice).
+    if (payBeforePrint(found.org, quote.specificationJson)) throw new ServiceError('Please use the payment link to approve this design.');
     return acceptAndConvert(tx, ctx, quote, customer, name, { channel: 'online', ip: meta.ip ?? null, userAgent: meta.userAgent ?? null });
   });
   await dispatchMessages(found.org, [messageId]);

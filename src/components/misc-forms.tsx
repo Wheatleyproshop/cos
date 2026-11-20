@@ -57,11 +57,11 @@ export function AcceptInStoreForm({ action, defaultName }: { action: BoundAction
 
 /* ── Pay before print ────────────────────────────────────────────────── */
 
-function InvoiceSubmit({ confirmText, label }: { confirmText: string; label: string }) {
+function InvoiceSubmit({ confirmText, label, className = 'btn primary' }: { confirmText: string; label: string; className?: string }) {
   const { pending } = useFormStatus();
   return (
     <button
-      className="btn primary"
+      className={className}
       type="submit"
       disabled={pending}
       aria-busy={pending}
@@ -100,21 +100,32 @@ export function ApproveInvoiceForm({
               ))}
             </fieldset>
           ) : null}
-          <fieldset style={{ border: 0, padding: 0, margin: '0 0 10px' }}>
-            <legend className="muted">Postage</legend>
-            <label style={{ display: 'block' }}>
-              <input type="radio" name="delivery" value="checkout" defaultChecked /> Customer chooses at checkout: collect from the shop or Royal Mail delivery (the shop’s usual rates)
-            </label>
-            <label style={{ display: 'block' }}>
-              <input type="radio" name="delivery" value="collect" /> Collecting from the pro shop (no postage)
-            </label>
-            <label style={{ display: 'block' }}>
-              <input type="radio" name="delivery" value="royal_mail" /> Royal Mail delivery, postage £{' '}
-              <input name="postage" inputMode="decimal" placeholder="0.00" style={{ width: 70 }} aria-label="Postage in pounds" />
-            </label>
-            {s?.fieldErrors?.postage ? <span className="err">{s.fieldErrors.postage}</span> : null}
-          </fieldset>
           <InvoiceSubmit confirmText={confirmText} label={live ? 'Approve and send invoice' : 'Approve and send invoice (test mode)'} />
+          <FormMessage state={s} />
+        </>
+      )}
+    </ActionForm>
+  );
+}
+
+/** Pay before print override: paid at the till, so approve and print without a Shopify invoice. */
+export function MarkPaidInStoreForm({ action, defaultName, total }: { action: BoundAction; defaultName: string; total: string }) {
+  return (
+    <ActionForm action={action}>
+      {(s) => (
+        <>
+          <div className="inline-form">
+            <Field state={s} name="acceptedName" label="Approved by (customer name)" required defaultValue={defaultName} />
+            <label className="field">
+              <span>Paid by</span>
+              <select name="method" defaultValue="card">
+                <option value="card">Card at the till</option>
+                <option value="cash">Cash</option>
+              </select>
+            </label>
+            <InvoiceSubmit confirmText={`Record ${total} paid in store and put this into print? No Shopify invoice is sent.`} label="Mark paid in store →" className="btn" />
+          </div>
+          <div className="muted">Skips the Shopify invoice: records the payment and puts the design into print.</div>
           <FormMessage state={s} />
         </>
       )}
