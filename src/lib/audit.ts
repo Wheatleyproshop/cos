@@ -104,6 +104,9 @@ export type EventType =
   | 'ball_promotion_changed'
   | 'ball_promotion_closed'
   | 'ball_promotion_reopened'
+  | 'shopify_invoice_sent'
+  | 'shopify_invoice_test'
+  | 'shopify_invoice_paid'
   | 'business_unlocked'
   | 'business_unlock_failed'
   | 'staff_profile_saved'
@@ -193,6 +196,12 @@ export function describeEvent(e: Pick<AuditEvent, 'eventType' | 'oldValueJson' |
       return `Item ${n.index}: ${n.item}${o.status !== n.status ? ` · ${o.statusLabel ?? o.status} → ${n.statusLabel ?? n.status}` : ''}${(o.etaDate ?? null) !== (n.etaDate ?? null) ? ` · expected ${n.etaDate ?? 'not set'}` : ''}${(o.supplierReference ?? '') !== (n.supplierReference ?? '') ? ` · supplier ref ${n.supplierReference || 'removed'}` : ''}`;
     case 'ball_design_submitted':
       return 'Ball design submitted online by the customer';
+    case 'shopify_invoice_sent':
+      return `Proof approved · Shopify invoice ${n.draftOrderName ?? ''} for ${money(n.totalPence ?? 0)} emailed to ${n.email ?? 'the customer'}`;
+    case 'shopify_invoice_test':
+      return `Test mode: Shopify invoice for ${money(n.totalPence ?? 0)} worked out (nothing sent)`;
+    case 'shopify_invoice_paid':
+      return `Paid on Shopify (order ${n.shopifyOrderName ?? ''}, ${money(n.paidPence ?? 0)}) · ${n.delivery === 'delivery' ? `post: ${n.deliveryLabel}` : n.delivery === 'collection' ? 'collection' : 'delivery not stated'} · ready to print`;
     case 'crest_design_submitted':
       return 'Cresting design submitted online by the customer';
     case 'mat_design_submitted':

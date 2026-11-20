@@ -9,6 +9,7 @@ import { hasRole, requireStaff } from '@/lib/auth';
 import { money } from '@/lib/format';
 import { getBallRange } from '@/lib/services/ball-printing';
 import { ballPromotionDetail, DEFAULT_PROMO_TERMS, isPromoOpen, londonToday } from '@/lib/services/ball-promotions';
+import { payStatesForQuotes } from '@/lib/services/shopify-invoices';
 import { appUrl } from '@/lib/tokens';
 import { closePromotionAction, updatePromotionAction } from '../actions';
 
@@ -28,6 +29,7 @@ export default async function BallPromotionPage({ params }: { params: Promise<{ 
   const { id } = await params;
   const [d, range] = await Promise.all([ballPromotionDetail(staff.organisationId, id), getBallRange(staff.organisationId)]);
   if (!d) notFound();
+  const pay = await payStatesForQuotes(staff.organisationId, d.designs.map((x) => x.id));
   const { promo } = d;
   const open = isPromoOpen(promo, londonToday());
   const manager = hasRole(staff, 'manager');
@@ -118,7 +120,15 @@ export default async function BallPromotionPage({ params }: { params: Promise<{ 
                     <td className="num">{x.dozens}</td>
                     <td>{x.artwork}</td>
                     <td className="num">{money(x.totalGrossPence)}</td>
-                    <td>{x.convertedOrderId ? 'Ordered' : (QUOTE_STATUS[x.status] ?? x.status)}</td>
+                    <td>
+                      {pay.get(x.id) ? (
+                        <span className={pay.get(x.id)!.overdue ? 'flag' : undefined}>{pay.get(x.id)!.label}</span>
+                      ) : x.convertedOrderId ? (
+                        'Ordered'
+                      ) : (
+                        (QUOTE_STATUS[x.status] ?? x.status)
+                      )}
+                    </td>
                   </tr>
                 ))}
               </tbody>

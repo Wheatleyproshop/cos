@@ -337,6 +337,20 @@
       "when": 1795175069031,
       "tag": "0047_ball_promotion_multibuy",
       "breakpoints": true
+    },
+    {
+      "idx": 48,
+      "version": "7",
+      "when": 1795185681104,
+      "tag": "0048_shopify_invoices",
+      "breakpoints": true
+    },
+    {
+      "idx": 49,
+      "version": "7",
+      "when": 1795186528085,
+      "tag": "0049_shopify_invoice_delivery",
+      "breakpoints": true
     }
   ]
 }

@@ -207,7 +207,7 @@ function actorName(ctx: Ctx) {
   return ctx.actor.type === 'user' ? ctx.actor.name : 'COS';
 }
 
-async function insertPayment(
+export async function insertPayment(
   tx: DB,
   ctx: Ctx,
   orderId: string,

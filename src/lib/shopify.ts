@@ -12,8 +12,13 @@ import { organisations } from '@/db/schema';
 import { decryptSecret, encryptSecret, safeEqual } from './tokens';
 
 const API_VERSION = '2026-10';
-/** Read-only: products and costs, stock levels, and orders (for sales). */
-export const SHOPIFY_SCOPES = 'read_products,read_inventory,read_orders,read_all_orders';
+/**
+ * Read-only: products and costs, stock levels, and orders (for sales). SHOPIFY_EXTRA_SCOPES adds more
+ * when the owner reconnects, e.g. "write_draft_orders" for pay-before-print invoices.
+ */
+export const SHOPIFY_SCOPES = ['read_products,read_inventory,read_orders,read_all_orders', process.env.SHOPIFY_EXTRA_SCOPES?.replace(/\s+/g, '')]
+  .filter(Boolean)
+  .join(',');
 
 export function shopifyConfig() {
   const shop = process.env.SHOPIFY_SHOP?.trim().replace(/\.myshopify\.com$/, '');
@@ -40,6 +45,11 @@ export async function shopifyAuthorised() {
  * Two ways in: the token saved by the one-time approval (works for any store), or — when the app and
  * the store are in the same Shopify organisation — a 24-hour token from the client credentials grant.
  */
+/** A token for Admin API calls (exported for the pay-before-print invoices). */
+export async function shopifyAccessToken() {
+  return accessToken();
+}
+
 async function accessToken() {
   const cfg = shopifyConfig();
   if (!cfg) throw new ShopifyError('Shopify isn’t connected yet.');
