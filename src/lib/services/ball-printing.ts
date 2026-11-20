@@ -23,6 +23,9 @@ import { requireRole, ServiceError, type Ctx } from './common';
 import { checkDesignLimits, customerDesignCtx, designSubmitted } from './online-designs';
 import { createQuote } from './quotes';
 
+/** What a ball promotion sets for a design submitted through it. */
+export type PromoTerms = { id: string; title: string; pricePerDozenPence: number; setupFeePence: number; minDozens: number };
+
 export async function getBallRange(orgId: string, opts: { includeInactive?: boolean } = {}) {
   return withTenant(orgId, (tx) =>
     tx
@@ -216,7 +219,7 @@ export async function createBallPrintQuote(
   ctx: Ctx,
   raw: unknown,
   files: { logo: File | null; proof: File | null },
-  opts: { send: boolean; source?: 'staff' | 'customer' },
+  opts: { send: boolean; source?: 'staff' | 'customer'; promo?: PromoTerms },
 ) {
   const fromCustomer = opts.source === 'customer';
   const input = parse(printSchema, raw);
@@ -224,8 +227,9 @@ export async function createBallPrintQuote(
     tx.select().from(printBalls).where(and(eq(printBalls.id, input.ballId), eq(printBalls.active, true))).limit(1),
   );
   if (!ball) throw new ServiceError('That ball is no longer in your range.', { ballId: 'Choose another ball' });
-  if (input.dozens < ball.minDozens) {
-    throw new ServiceError(`The ${ball.name} has a minimum of ${ball.minDozens} dozen.`, { dozens: `Minimum ${ball.minDozens}` });
+  const minDozens = Math.max(ball.minDozens, opts.promo?.minDozens ?? 1);
+  if (input.dozens < minDozens) {
+    throw new ServiceError(`The ${ball.name} has a minimum of ${minDozens} dozen.`, { dozens: `Minimum ${minDozens}` });
   }
   // Customers designing online always get the shop's list price; staff can adjust it when reviewing.
   if (fromCustomer) {
@@ -233,6 +237,11 @@ export async function createBallPrintQuote(
     input.setupFeePence = ctx.org.ballSetupFeePence;
     input.validUntil = '';
     input.customerId = null;
+  }
+  // A promotion fixes its own price and setup fee for its balls.
+  if (opts.promo) {
+    input.pricePerDozenPence = opts.promo.pricePerDozenPence;
+    input.setupFeePence = opts.promo.setupFeePence;
   }
 
   const lines = input.textLines.filter(Boolean);
@@ -260,6 +269,7 @@ export async function createBallPrintQuote(
   const fontLabel = PRINT_FONTS.find((f) => f.key === input.font)!.label;
   const inkLabel = INK_COLOURS.find((c) => c.key === input.ink)!.label;
   const specLines = [
+    ...(opts.promo ? [`Promotion: ${opts.promo.title}`] : []),
     `Ball: ${ball.brand} ${ball.name}`,
     artwork.type === 'logo' ? `Personalisation: customer logo (${artwork.filename})` : `Personalisation: “${lines.join(' / ')}” — ${fontLabel}, ${inkLabel} ink`,
     `Quantity: ${input.dozens} dozen (${input.dozens * 12} balls) at ${money(input.pricePerDozenPence)} per dozen`,
@@ -278,6 +288,7 @@ export async function createBallPrintQuote(
     notes: input.notes,
     totalPence: total,
     ...(fromCustomer ? { submittedOnline: true } : {}),
+    ...(opts.promo ? { promo: { id: opts.promo.id, title: opts.promo.title } } : {}),
   };
   const days = ball.leadTimeDays ?? 0;
 
@@ -296,7 +307,9 @@ export async function createBallPrintQuote(
       depositRequiredPence: '0',
       estimatedLeadTime: days ? `About ${Math.ceil(days / 7)} week${days > 7 ? 's' : ''}` : '',
       validUntil: input.validUntil,
-      internalNotes: fromCustomer
+      internalNotes: opts.promo
+        ? `${opts.promo.title}: designed and submitted online at the promotion price. Check the artwork, then approve it in store to put it into print, or edit it and email a proof back.`
+        : fromCustomer
         ? 'Designed and submitted online by the customer. Check the artwork, then approve it in store to put it into print, or edit it and email a proof back.'
         : 'Created with Ball Printing.',
     },

@@ -179,6 +179,20 @@ details.section[open] { padding-bottom: 16px; }
 .design-intro { max-width: 680px; margin: 0 0 20px; }
 .design-intro h1 { font-family: var(--brand-heading, inherit); font-size: 28px; margin: 0 0 6px; }
 .design-intro p { margin: 0; color: #4a525e; }
+.promo-banner { display: block; width: 100%; height: auto; max-height: 460px; object-fit: cover; border-radius: 14px; margin: 0 0 22px; }
+.promo-top { display: grid; gap: 22px; align-items: start; }
+.promo-top.has-feature { grid-template-columns: minmax(0, 1fr) minmax(0, 320px); }
+@media (max-width: 760px) { .promo-top.has-feature { grid-template-columns: minmax(0, 1fr); } }
+.promo-feature { width: 100%; height: auto; max-height: 420px; object-fit: cover; border-radius: 14px; }
+.promo-eyebrow { font-size: 12px !important; letter-spacing: .12em; text-transform: uppercase; font-weight: 700; color: var(--brand-accent, #2f6bff) !important; margin-bottom: 4px !important; }
+.promo-offer { display: flex; flex-wrap: wrap; gap: 10px; margin: 0 0 22px; align-items: stretch; }
+.promo-ball { display: flex; gap: 10px; align-items: center; border: 1px solid #e3e7ec; border-radius: 12px; padding: 10px 14px; background: #fff; }
+.promo-ball b { display: block; }
+.promo-swatch { width: 28px; height: 28px; border-radius: 50%; border: 1px solid #cfd5dd; box-shadow: inset -4px -4px 8px rgba(0,0,0,.12); flex: none; }
+.promo-was { color: #7a828e; text-decoration: line-through; margin-left: 6px; font-size: 13px; }
+.promo-facts { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; flex-basis: 100%; }
+.promo-facts span { background: #eef3ff; color: #1d3f8f; border-radius: 999px; padding: 4px 12px; font-size: 13px; font-weight: 600; }
+.promo-terms { color: #5a6270; font-size: 13px; margin: 22px 0 0; max-width: 760px; }
 .bp-hp { position: absolute; left: -9999px; width: 1px; height: 1px; overflow: hidden; }
 .bp-thanks { text-align: center; padding: 28px 8px; }
 .bp-thanks-tick { display: inline-grid; place-items: center; width: 56px; height: 56px; border-radius: 50%; background: var(--green); color: #fff; font-size: 28px; margin-bottom: 10px; }

@@ -60,6 +60,8 @@ export type BallPrintSpec = {
   totalPence: number;
   /** Designed by the customer on the public design page. */
   submittedOnline?: boolean;
+  /** Ordered through a ball promotion link (e.g. Titleist's No.1 Gift in Golf). */
+  promo?: { id: string; title: string };
 };
 
 export function asBallPrintSpec(json: unknown): BallPrintSpec | null {

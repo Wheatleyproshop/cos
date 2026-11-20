@@ -30,9 +30,14 @@ export default async function BallPrintingPage({ searchParams }: { searchParams:
         title="Ball Printing"
         sub="Personalised golf balls: choose a ball, add a logo or text, and email a proof for approval."
         actions={
-          <Link href="/ball-printing/range" className="btn">
-            Manage ball range
-          </Link>
+          <>
+            <Link href="/ball-printing/promotions" className="btn">
+              Promotions
+            </Link>
+            <Link href="/ball-printing/range" className="btn">
+              Manage ball range
+            </Link>
+          </>
         }
       />
       <InHouseWork

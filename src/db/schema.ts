@@ -1057,6 +1057,43 @@ export const salesHistory = pgTable(
   (t) => [uniqueIndex('sales_history_unique').on(t.organisationId, t.month, t.months, t.dimension, t.name)],
 );
 
+/* ─────────────────────────── Ball promotions ─────────────────────────── */
+
+/** A ball on a promotion: one of the shop's print balls at the promotion's price. */
+export type PromoBall = { ballId: string; pricePerDozenPence: number };
+
+/**
+ * A personalised-ball promotion link (e.g. Titleist's "No.1 Gift in Golf"): customers design their
+ * logo ball on a page showing only the promotion's balls, at promotion prices, until it closes.
+ * Each design becomes a normal ball-print quote tagged with the promotion.
+ */
+export const ballPromotions = pgTable(
+  'ball_promotions',
+  {
+    id: id(),
+    organisationId: orgId(),
+    token: text('token').notNull().unique(),
+    title: text('title').notNull(),
+    headline: text('headline').notNull().default(''),
+    description: text('description').notNull().default(''),
+    balls: jsonb('balls').$type<PromoBall[]>().notNull().default([]),
+    setupFeePence: integer('setup_fee_pence').notNull().default(0),
+    minDozens: integer('min_dozens').notNull().default(1),
+    terms: text('terms').notNull().default(''),
+    closesOn: date('closes_on', { mode: 'string' }),
+    closedAt: timestamp('closed_at', { withTimezone: true }),
+    /** Campaign banner across the top of the page, and a feature image beside the offer (private storage). */
+    bannerKey: text('banner_key'),
+    bannerMime: text('banner_mime'),
+    featureKey: text('feature_key'),
+    featureMime: text('feature_mime'),
+    createdByUserId: uuid('created_by_user_id').notNull().references(() => users.id),
+    createdAt: createdAt(),
+  },
+  (t) => [index('ball_promotions_org_idx').on(t.organisationId)],
+);
+export type BallPromotion = typeof ballPromotions.$inferSelect;
+
 /* ───────────────────────────── Team orders ──────────────────────────────── */
 
 /**

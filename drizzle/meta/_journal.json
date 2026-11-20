@@ -316,6 +316,20 @@
       "when": 1794846794843,
       "tag": "0044_team_order_items",
       "breakpoints": true
+    },
+    {
+      "idx": 45,
+      "version": "7",
+      "when": 1795174426749,
+      "tag": "0045_ball_promotions",
+      "breakpoints": true
+    },
+    {
+      "idx": 46,
+      "version": "7",
+      "when": 1795174703654,
+      "tag": "0046_ball_promotion_images",
+      "breakpoints": true
     }
   ]
 }
