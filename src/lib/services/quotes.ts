@@ -239,16 +239,18 @@ function snapshot(q: Quote) {
  * Accepts a quote and converts it into an order without re-keying anything.
  * The acceptance event stores an exact snapshot of what the customer approved.
  */
-async function acceptAndConvert(
+export async function acceptAndConvert(
   tx: DB,
   ctx: Ctx,
   quote: Quote,
   customer: Customer,
   acceptedName: string,
   meta: Record<string, unknown>,
+  /** Paid already (pay before print): an expiry date no longer matters. */
+  opts: { ignoreExpiry?: boolean } = {},
 ) {
   assertOpen(quote);
-  if (isExpired(quote, ctx.org.timezone)) throw new ServiceError('This quote has expired.');
+  if (!opts.ignoreExpiry && isExpired(quote, ctx.org.timezone)) throw new ServiceError('This quote has expired.');
   const now = new Date();
   const print = inHouse(journeyFor(quote.specificationJson));
   const orderNumber = await nextNumber(tx, ctx.org.id, 'order');

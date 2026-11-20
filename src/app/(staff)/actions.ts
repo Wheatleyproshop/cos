@@ -1034,3 +1034,14 @@ export async function restoreAccountNotesAction(accountId: string) {
     return 'Notes restored.';
   });
 }
+
+/** Pay before print: approve the proof and have Shopify email the customer an invoice (test mode: work it out only). */
+export async function approveAndInvoiceAction(quoteId: string, _: FormState, fd: FormData): Promise<FormState> {
+  const { approveAndSendInvoice } = await import('@/lib/services/shopify-invoices');
+  const { money } = await import('@/lib/format');
+  return act('staff', async (ctx) => {
+    const r = await approveAndSendInvoice(ctx, quoteId, fd.getAll('with').map(String));
+    if (r.mode === 'dry_run') return `Test mode: nothing was sent to Shopify or the customer. The invoice would be ${money(r.plan.totalPence)} (details below).`;
+    return `Invoice ${r.invoice.draftOrderName ?? ''} for ${money(r.plan.totalPence)} emailed to the customer by Shopify. It moves to “Paid – ready to print” when they pay.`;
+  }, fd);
+}

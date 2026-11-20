@@ -42,6 +42,7 @@ import { CancelButton } from './cancel-button';
 import { CloseButton } from './chrome';
 import { ActionButton, LinkGenerator } from './forms';
 import { AcceptInStoreForm, EditQuoteForm } from './misc-forms';
+import { InvoicePanel } from './invoice-panel';
 import { AttachmentForm, CreateRequestForm, EditOrderForm, NoteForm, PaymentForm, ProgressForm, VoidPaymentForm, type RequestDefaults } from './order-forms';
 import { SpecView } from './spec-view';
 import { InternalNotesForm } from './workshop-forms';
@@ -570,6 +571,8 @@ export async function QuoteDetail({ staff, number, inModal }: { staff: Staff; nu
           ) : null}
         </div>
       </div>
+
+      <InvoicePanel orgId={staff.organisationId} quote={q} email={c.email} tz={tz} />
 
       {open ? (
         <>

@@ -14,6 +14,7 @@ import { CopyLink } from '@/components/copy-link';
 import { listOpenRequests } from '@/lib/services/order-requests';
 import { appUrl } from '@/lib/tokens';
 import { QuoteNextStep } from '@/components/next-steps';
+import { awaitingPayment, payStatesForQuotes, UNPAID_FLAG_DAYS } from '@/lib/services/shopify-invoices';
 
 export const metadata: Metadata = { title: 'Quotes' };
 
@@ -26,6 +27,7 @@ export default async function QuotesPage({ searchParams }: { searchParams: Promi
     listDeletedQuotes(staff.organisationId),
     listOpenRequests(staff.organisationId),
   ]);
+  const [pay, unpaid] = await Promise.all([payStatesForQuotes(staff.organisationId, rows.map((r) => r.quote.id)), awaitingPayment(staff.organisationId)]);
   const requestOn = staff.org.orderRequestLink;
   const manager = hasRole(staff, 'manager');
   const tz = staff.org.timezone;
@@ -83,6 +85,30 @@ export default async function QuotesPage({ searchParams }: { searchParams: Promi
           </div>
         ) : null}
       </section>
+      {unpaid.length ? (
+        <section className="panel" aria-labelledby="awaiting-payment">
+          <div className="panel-head">
+            <h2 id="awaiting-payment">Awaiting payment (Shopify invoices)</h2>
+            <span className="badge">{unpaid.length}</span>
+          </div>
+          <ul className="attention">
+            {unpaid.map((u) => (
+              <li key={u.invoiceId}>
+                <span>
+                  <Link href={`/quotes/${u.quoteNumbers[0]}`} className="rowtitle">
+                    {u.quoteNumbers.join(', ')} · {u.customer}
+                  </Link>
+                  <span className="muted" style={{ marginLeft: 8 }}>
+                    {u.draftOrderName} · {money(u.totalPence)}
+                  </span>
+                  {u.overdue ? <span className="flag">Unpaid over {UNPAID_FLAG_DAYS} days</span> : null}
+                </span>
+                <span className="muted">sent {u.sentAt ? stamp(u.sentAt, tz) : ''}</span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
       <div className="toolbar">
         <Suspense>
           <SearchBox placeholder="Search quotes by customer, email, phone, quote ID, brand, product or SKU…" />
@@ -142,9 +168,16 @@ export default async function QuotesPage({ searchParams }: { searchParams: Promi
                   </td>
                   <td>
                     <Badge status="quote" text={QUOTE_STATUS_LABELS[qt.status]} />
+                    {pay.get(qt.id) ? (
+                      <div>
+                        <span className={pay.get(qt.id)!.status === 'paid' ? 'badge ready' : pay.get(qt.id)!.overdue ? 'flag' : 'badge'}>{pay.get(qt.id)!.label}</span>
+                      </div>
+                    ) : null}
                   </td>
                   <td>
-                    {qt.status === 'accepted' && qt.convertedOrderId ? (
+                    {pay.get(qt.id)?.status === 'awaiting_payment' ? (
+                      <span className="muted">Waiting for the customer to pay the Shopify invoice</span>
+                    ) : qt.status === 'accepted' && qt.convertedOrderId ? (
                       <span className="muted">Now an order</span>
                     ) : (
                       <QuoteNextStep q={qt} customerName={c.name} email={c.email} />

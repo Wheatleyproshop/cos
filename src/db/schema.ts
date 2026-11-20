@@ -254,6 +254,8 @@ export const quotes = pgTable(
     acceptedAt: timestamp('accepted_at', { withTimezone: true }),
     acceptedName: text('accepted_name'),
     convertedOrderId: uuid('converted_order_id'),
+    /** Pay before print: the Shopify invoice this design is on (see `shopify_invoices`). */
+    shopifyInvoiceId: uuid('shopify_invoice_id'),
     archivedAt: timestamp('archived_at', { withTimezone: true }),
   },
   (t) => [
@@ -1096,6 +1098,45 @@ export const ballPromotions = pgTable(
   (t) => [index('ball_promotions_org_idx').on(t.organisationId)],
 );
 export type BallPromotion = typeof ballPromotions.$inferSelect;
+
+/* ──────────────────── Pay before print (Shopify invoices) ──────────────────── */
+
+export const SHOPIFY_INVOICE_STATUSES = ['awaiting_payment', 'paid', 'cancelled', 'dry_run'] as const;
+export type ShopifyInvoiceStatus = (typeof SHOPIFY_INVOICE_STATUSES)[number];
+
+/**
+ * A Shopify draft order + invoice email for one or more approved ball designs (quotes) from the same
+ * customer. When Shopify says it's paid, the designs become orders "Paid – ready to print".
+ * `dry_run` rows record a payload built without calling Shopify.
+ */
+export const shopifyInvoices = pgTable(
+  'shopify_invoices',
+  {
+    id: id(),
+    organisationId: orgId(),
+    customerId: uuid('customer_id').notNull().references(() => customers.id),
+    quoteIds: jsonb('quote_ids').$type<string[]>().notNull().default([]),
+    status: text('status', { enum: SHOPIFY_INVOICE_STATUSES }).notNull().default('awaiting_payment'),
+    totalPence: integer('total_pence').notNull(),
+    /** What COS showed the customer for these designs (before any combined multi-buy). */
+    cosTotalPence: integer('cos_total_pence').notNull(),
+    draftOrderId: text('draft_order_id'),
+    draftOrderName: text('draft_order_name'),
+    invoiceUrl: text('invoice_url'),
+    /** The exact draftOrderCreate input sent (or that would have been sent, in dry-run mode). */
+    payload: jsonb('payload').notNull(),
+    /** Lines with no matching Shopify product (sent as custom lines at the COS price). */
+    warnings: jsonb('warnings').$type<string[]>().notNull().default([]),
+    sentAt: timestamp('sent_at', { withTimezone: true }),
+    paidAt: timestamp('paid_at', { withTimezone: true }),
+    shopifyOrderId: text('shopify_order_id'),
+    shopifyOrderName: text('shopify_order_name'),
+    createdByUserId: uuid('created_by_user_id').notNull().references(() => users.id),
+    createdAt: createdAt(),
+  },
+  (t) => [index('shopify_invoices_org_idx').on(t.organisationId, t.status), uniqueIndex('shopify_invoices_draft_unique').on(t.draftOrderId)],
+);
+export type ShopifyInvoice = typeof shopifyInvoices.$inferSelect;
 
 /* ───────────────────────────── Team orders ──────────────────────────────── */
 

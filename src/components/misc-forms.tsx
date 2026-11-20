@@ -1,6 +1,7 @@
 'use client';
 
 import { useTransition, useState } from 'react';
+import { useFormStatus } from 'react-dom';
 import type { FormState } from '@/lib/action-utils';
 import { ActionForm, Field, FormMessage, Submit, type BoundAction } from './forms';
 import { BrandSelect, CATEGORY_OPTIONS } from './order-forms';
@@ -47,6 +48,59 @@ export function AcceptInStoreForm({ action, defaultName }: { action: BoundAction
             </Submit>
           </div>
           <div className="muted">Use when the customer approves in person or by phone. The order is created from this quote with no re-keying.</div>
+          <FormMessage state={s} />
+        </>
+      )}
+    </ActionForm>
+  );
+}
+
+/* ── Pay before print ────────────────────────────────────────────────── */
+
+function InvoiceSubmit({ confirmText, label }: { confirmText: string; label: string }) {
+  const { pending } = useFormStatus();
+  return (
+    <button
+      className="btn primary"
+      type="submit"
+      disabled={pending}
+      aria-busy={pending}
+      onClick={(e) => {
+        if (!window.confirm(confirmText)) e.preventDefault();
+      }}
+    >
+      {pending ? 'Working…' : label}
+    </button>
+  );
+}
+
+/** "Approve and send invoice": optional other designs from the same customer go on the same invoice. */
+export function ApproveInvoiceForm({
+  action, companions, live, email,
+}: {
+  action: BoundAction;
+  companions: { id: string; quoteNumber: string; label: string; total: string }[];
+  live: boolean;
+  email: string;
+}) {
+  const confirmText = live
+    ? `Approve the proof and have Shopify email an invoice to ${email}? The customer will be asked to pay before anything is printed.`
+    : 'Test mode: COS will work out the Shopify invoice and show it here. Nothing is sent to Shopify or the customer. Carry on?';
+  return (
+    <ActionForm action={action}>
+      {(s) => (
+        <>
+          {companions.length ? (
+            <fieldset style={{ border: 0, padding: 0, margin: '0 0 10px' }}>
+              <legend className="muted">Put other designs from this customer on the same invoice (multi-buy is worked out across them):</legend>
+              {companions.map((c) => (
+                <label key={c.id} style={{ display: 'block' }}>
+                  <input type="checkbox" name="with" value={c.id} /> {c.quoteNumber}: {c.label} ({c.total})
+                </label>
+              ))}
+            </fieldset>
+          ) : null}
+          <InvoiceSubmit confirmText={confirmText} label={live ? 'Approve and send invoice' : 'Approve and send invoice (test mode)'} />
           <FormMessage state={s} />
         </>
       )}
