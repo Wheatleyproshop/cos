@@ -37,7 +37,7 @@ COS already has a Shopify app: the one behind **Connect to Shopify** on Business
 1. Shopify admin → **Settings → Apps → Develop apps**. This now opens the **Dev Dashboard** (Shopify moved custom apps there in November 2026).
 2. Open the COS app → **Configuration** (or **Versions → Create version**) → **Access scopes**. Add `write_draft_orders`, `read_customers` and `write_customers`, and keep the existing ones (`read_products`, `read_inventory`, `read_orders`, `read_all_orders`). The customer permissions let COS find the customer by email, or add them, so their details are filled in on the order.
 3. **Release** the new version.
-4. In Vercel → COS project → **Settings → Environment Variables**, add `SHOPIFY_EXTRA_SCOPES` = `write_draft_orders,read_customers,write_customers` (Production). Redeploy.
+4. (Nothing to add in Vercel: COS asks for these permissions by default.)
 5. In COS → Business → Stock & commitments, press **Reconnect Shopify** and approve. The approval screen should now list draft orders.
 
 *Alternative:* if you already have an Admin API access token with those permissions (it starts `shpat_`), put it in `SHOPIFY_ADMIN_TOKEN` instead and skip steps 4 and 5. Shopify won't issue fixed tokens like this for new apps from 1 December 2026, so the steps above are the better route.
@@ -66,7 +66,7 @@ Nothing new to set up. Paid invoice orders are normal Shopify orders, so they ar
 | Name | Value |
 |---|---|
 | `SHOPIFY_STORE_DOMAIN` | `desirable-golf-online-store.myshopify.com` |
-| `SHOPIFY_EXTRA_SCOPES` | `write_draft_orders,read_customers,write_customers` (step 1) |
+| `SHOPIFY_EXTRA_SCOPES` | not needed (COS asks for the pay-before-print permissions by default) |
 | `SHOPIFY_ADMIN_TOKEN` | only if you use the alternative token route |
 | `SHOPIFY_WEBHOOK_SECRET` | not needed (COS uses the app's client secret); only for a webhook added by hand |
 | `SHOPIFY_API_VERSION` | optional, defaults to `2026-10` |

@@ -13,12 +13,17 @@ import { decryptSecret, encryptSecret, safeEqual } from './tokens';
 
 const API_VERSION = '2026-10';
 /**
- * Read-only: products and costs, stock levels, and orders (for sales). SHOPIFY_EXTRA_SCOPES adds more
- * when the owner reconnects, e.g. "write_draft_orders" for pay-before-print invoices.
+ * Products and costs, stock levels and orders (for sales), plus pay before print: creating draft-order
+ * invoices and finding or adding the customer. SHOPIFY_EXTRA_SCOPES can add more when reconnecting.
  */
-export const SHOPIFY_SCOPES = ['read_products,read_inventory,read_orders,read_all_orders', process.env.SHOPIFY_EXTRA_SCOPES?.replace(/\s+/g, '')]
-  .filter(Boolean)
-  .join(',');
+export const SHOPIFY_SCOPES = [
+  ...new Set(
+    ['read_products,read_inventory,read_orders,read_all_orders,write_draft_orders,read_customers,write_customers', process.env.SHOPIFY_EXTRA_SCOPES?.replace(/\s+/g, '')]
+      .filter(Boolean)
+      .join(',')
+      .split(','),
+  ),
+].join(',');
 
 export function shopifyConfig() {
   const shop = process.env.SHOPIFY_SHOP?.trim().replace(/\.myshopify\.com$/, '');
