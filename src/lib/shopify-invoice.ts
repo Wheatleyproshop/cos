@@ -302,9 +302,12 @@ export function deliveryFromOrder(o: OrderShipping): { method: 'delivery' | 'col
 
 /**
  * Pay before print applies to ball designs customers send online (the design page or a promotion),
- * for the shop linked to Shopify. Approving those sends a Shopify invoice; print starts once paid.
+ * for the shop linked to Shopify, once invoices are live (SHOPIFY_INVOICES=live). Approving those
+ * sends a Shopify invoice; print starts once paid. In test mode approvals work as before, so the
+ * shop isn't stuck while Shopify is being set up (staff can still preview the invoice).
  */
 export function payBeforePrint(org: { slug: string }, specificationJson: unknown) {
+  if (process.env.SHOPIFY_INVOICES?.trim().toLowerCase() !== 'live') return false;
   const s = asBallPrintSpec(specificationJson);
   return Boolean(s && (s.submittedOnline || s.promo) && org.slug === (process.env.SHOPIFY_COS_ORG?.trim() || 'desirable-golf'));
 }

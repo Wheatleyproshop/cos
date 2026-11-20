@@ -160,6 +160,7 @@ afterAll(async () => {
   await close();
 });
 
+let ipSeq = 30;
 async function promoWithTwoDesigns(email: string) {
   const promos = await import('@/lib/services/ball-promotions');
   const { getBallRange } = await import('@/lib/services/ball-printing');
@@ -175,7 +176,9 @@ async function promoWithTwoDesigns(email: string) {
       { logo: null, proof: proof() },
       { ip },
     );
-  return [await send('Pro V1', '203.0.113.31'), await send('Pro V1x Left Dash', '203.0.113.32')];
+  // A fresh address per design keeps each test under the per-person hourly design limit.
+  ipSeq += 2;
+  return [await send('Pro V1', `203.0.113.${ipSeq}`), await send('Pro V1x Left Dash', `203.0.113.${ipSeq + 1}`)];
 }
 
 describe('pay before print: approve, invoice, paid', () => {
@@ -283,7 +286,16 @@ describe('pay before print: approve, invoice, paid', () => {
 });
 
 describe('pay before print: approving never starts print unpaid', () => {
+  it('in test mode approvals work as before (nothing blocked while Shopify is being set up)', async () => {
+    vi.stubEnv('SHOPIFY_INVOICES', '');
+    const quotesSvc = await import('@/lib/services/quotes');
+    const [a] = await promoWithTwoDesigns('testmode@example.com');
+    const order = await quotesSvc.acceptQuoteInStore(manager, a.id, 'Gift Buyer');
+    expect(order.orderNumber).toBeTruthy();
+  });
+
   it('staff can’t approve an online ball design into print without payment; “Mark paid in store” records it', async () => {
+    vi.stubEnv('SHOPIFY_INVOICES', 'live');
     const quotesSvc = await import('@/lib/services/quotes');
     const [a, b] = await promoWithTwoDesigns('till@example.com');
     await expect(quotesSvc.acceptQuoteInStore(manager, a.id, 'Gift Buyer')).rejects.toThrow(/paid before it’s printed/);
@@ -294,7 +306,7 @@ describe('pay before print: approving never starts print unpaid', () => {
   });
 
   it('the customer approving on their emailed link creates the invoice instead of an order', async () => {
-    vi.stubEnv('SHOPIFY_INVOICES', '');
+    vi.stubEnv('SHOPIFY_INVOICES', 'live');
     const quotesSvc = await import('@/lib/services/quotes');
     const svc = await import('@/lib/services/shopify-invoices');
     const [a] = await promoWithTwoDesigns('link@example.com');
@@ -302,6 +314,8 @@ describe('pay before print: approving never starts print unpaid', () => {
     const token = url.split('/q/')[1];
     await expect(quotesSvc.acceptQuoteByToken(token, 'Gift Buyer', {})).rejects.toThrow(/payment link/);
     const found = (await quotesSvc.findQuoteByToken(token))!;
+    // The invoice itself in test mode (no Shopify here); the guard above is what live mode adds.
+    vi.stubEnv('SHOPIFY_INVOICES', '');
     const r = await svc.approveByCustomerAndInvoice(found, 'Gift Buyer');
     expect(r.mode).toBe('dry_run');
     const [q] = await withTenant(org.id, (tx) => tx.select().from(quotes).where(eq(quotes.id, a.id)));

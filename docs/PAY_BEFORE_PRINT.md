@@ -24,7 +24,7 @@ Ball designs that customers send online (the design page or a promotion link) ar
 
 ## Test mode (the default)
 
-Until you switch it on, nothing goes to Shopify or the customer. **Approve and send invoice (test mode)** works out the invoice and shows it on the quote: each line, the discount and the exact data that would go to Shopify. The design stays open, so you can send the real invoice later.
+Until you switch it on, nothing goes to Shopify or the customer, and **approvals work as they always have**: "Record approval & create order" and "Approved ✓" still put designs straight into print. The pay-before-print rules above only start once `SHOPIFY_INVOICES` is `live`, so the shop isn't stuck while Shopify is being set up. **Approve and send invoice (test mode)** works out the invoice and shows it on the quote: each line, the discount and the exact data that would go to Shopify. The design stays open, so you can send the real invoice later.
 
 ## Setting it up
 
