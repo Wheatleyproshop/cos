@@ -39,14 +39,30 @@ describe('pay before print: the Shopify draft order', () => {
     expect(p.input.appliedDiscount).toBeUndefined();
     expect(p.input.acceptAutomaticDiscounts).toBe(false);
     expect(p.input.lineItems[0]).toEqual({ variantId: 'gid://shopify/ProductVariant/54890192109948', quantity: 1, customAttributes: [{ key: 'COS quote', value: expect.stringMatching(/^Q-/) }] });
-    const personal = p.input.lineItems[1] as { title: string; originalUnitPriceWithCurrency: { amount: string }; customAttributes: { key: string; value: string }[] };
-    expect(personal.title).toBe(`Free personalisation: “Happy Christmas Dad” – ${p.input.lineItems[0].customAttributes[0].value}`);
-    expect(personal.originalUnitPriceWithCurrency).toEqual({ amount: '0.00', currencyCode: 'GBP' });
-    expect(personal.customAttributes.map((a) => a.key)).toEqual(['COS quote', 'Ball', 'Personalisation', 'Proof image']);
+    // The hidden £0 "Custom print" product (so the line has a picture), with the print details as properties.
+    const personal = p.input.lineItems[1] as { variantId: string; quantity: number; customAttributes: { key: string; value: string }[] };
+    expect(personal.variantId).toBe('gid://shopify/ProductVariant/58241773175164');
+    expect(personal.customAttributes).toEqual([
+      { key: 'Print', value: '“Happy Christmas Dad”' },
+      { key: 'Ball', value: '1 dozen Titleist Pro V1' },
+      { key: 'COS', value: p.input.lineItems[0].customAttributes[0].value },
+      { key: 'Proof image', value: 'https://cos.example/proof' },
+    ]);
     expect(p.input.customAttributes[0]).toEqual({ key: 'COS invoice', value: '11111111-2222-3333-4444-555555555555' });
     expect(p.input.note).toContain('Happy Christmas Dad');
     expect(p.input.phone).toBe('+447700900123');
     expect(p.warnings).toEqual([]);
+  });
+
+  it('without the Custom print product (or with a setup fee) the personalisation is a custom line, titled with the print', () => {
+    const noProduct = KNOWN_PROMO_VARIANTS.filter((v) => v.handle !== 'custom-print-personalisation');
+    const p = buildDraftOrder({ invoiceId: 'x', customer, designs: [design('Pro V1', 1)], variants: noProduct });
+    const personal = p.input.lineItems[1] as { title: string; originalUnitPriceWithCurrency: { amount: string } };
+    expect(personal.title).toMatch(/^Free personalisation: “Happy Christmas Dad” – Q-/);
+    expect(personal.originalUnitPriceWithCurrency.amount).toBe('0.00');
+    const fee = build([design('Pro V1', 1, { setupFeePence: 1000, quoteTotalPence: 5500 })]);
+    expect((fee.input.lineItems[1] as { title: string }).title).toMatch(/^Personalisation: /);
+    expect(fee.totalPence).toBe(5500);
   });
 
   it('2 dozen of one ball = £80', () => {
@@ -63,7 +79,9 @@ describe('pay before print: the Shopify draft order', () => {
     expect(p.input.appliedDiscount!.value).toBe(10);
     expect(p.input.lineItems.filter((l) => 'variantId' in l).map((l) => (l as { variantId: string }).variantId)).toEqual([
       'gid://shopify/ProductVariant/54890192109948',
+      'gid://shopify/ProductVariant/58241773175164',
       'gid://shopify/ProductVariant/54906911981948',
+      'gid://shopify/ProductVariant/58241773175164',
     ]);
     expect(p.warnings.join(' ')).toMatch(/Multi-buy applied across these designs/);
   });
@@ -217,6 +235,7 @@ describe('pay before print: approve, invoice, paid', () => {
             nodes: [
               { handle: 'pro-v1', title: 'Titleist Pro V1', variants: { nodes: [{ id: 'gid://shopify/ProductVariant/54890192109948', title: 'Default Title', price: '45.00', compareAtPrice: '50.00' }] } },
               { handle: 'pro-v1x-left-dash', title: 'Titleist Pro V1x Left Dash', variants: { nodes: [{ id: 'gid://shopify/ProductVariant/54906911981948', title: 'Default Title', price: '45.00', compareAtPrice: '50.00' }] } },
+              { handle: 'custom-print-personalisation', title: 'Custom print – personalisation', variants: { nodes: [{ id: 'gid://shopify/ProductVariant/58241773175164', title: 'Default Title', price: '0.00', compareAtPrice: null }] } },
             ],
           },
         });
@@ -240,6 +259,8 @@ describe('pay before print: approve, invoice, paid', () => {
     expect(r.invoice).toMatchObject({ status: 'awaiting_payment', draftOrderId: 'gid://shopify/DraftOrder/999', draftOrderName: '#D42', invoiceUrl: 'https://shop.example/invoice/abc', totalPence: 8000 });
     const create = sent.find((s) => s.query.includes('draftOrderCreate'))!.variables.input as { appliedDiscount: { value: number }; acceptAutomaticDiscounts: boolean; purchasingEntity: unknown; tags: string[] };
     expect(create.purchasingEntity).toEqual({ customerId: 'gid://shopify/Customer/77' });
+    expect(String(sent.find((x) => x.query.includes('products('))!.variables.q)).toContain('handle:custom-print-personalisation');
+    expect((create as unknown as { lineItems: { variantId?: string }[] }).lineItems.filter((l) => l.variantId === 'gid://shopify/ProductVariant/58241773175164')).toHaveLength(2);
     expect(create.tags).toContain('personalised-print');
     expect(create.appliedDiscount.value).toBe(10);
     expect(create.acceptAutomaticDiscounts).toBe(false);
@@ -336,8 +357,12 @@ describe('pay before print: approving never starts print unpaid', () => {
     expect(r.plan.totalPence).toBe(4500);
     expect(r.plan.input.note).toContain(`PRINT BEFORE POSTING – COS ${order.orderNumber}`);
     expect(r.plan.input.note).toContain(`/orders/${order.orderNumber}`);
-    const personal = r.plan.input.lineItems[1] as { title: string };
-    expect(personal.title).toBe(`Free personalisation: “Happy Christmas Dad” (Classic serif, Navy ink) – ${order.orderNumber}`);
+    const personal = r.plan.input.lineItems[1] as { customAttributes: { key: string; value: string }[] };
+    expect(personal.customAttributes.slice(0, 3)).toEqual([
+      { key: 'Print', value: '“Happy Christmas Dad” (Classic serif, Navy ink)' },
+      { key: 'Ball', value: '1 dozen Titleist Pro V1' },
+      { key: 'COS', value: order.orderNumber },
+    ]);
   });
 });
 
