@@ -1,9 +1,11 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
+import { redirect } from 'next/navigation';
 import { StockUploadForm } from '@/components/business-ui';
 import { ActionButton } from '@/components/forms';
 import { PageHeader } from '@/components/views';
-import { requireBusiness } from '@/lib/business-lock';
+import { requireStaff } from '@/lib/auth';
+import { businessUnlocked, canSeeBusiness, requireBusiness, shopifyConnectPass } from '@/lib/business-lock';
 import { money, todayInTz } from '@/lib/format';
 import { spendingInsights } from '@/lib/services/business/insights';
 import { commitments, stockReport, type Breakdown } from '@/lib/services/business/stock';
@@ -58,7 +60,16 @@ export default async function StockPage({ searchParams }: { searchParams: Promis
       : sp.payments === 'failed'
         ? 'Connected, but Shopify didn’t set up the “order paid” notification for pay before print. Press Reconnect to try again.'
         : null;
+  // Back from Shopify with the area locked: unlock, then come back here so the result shows.
+  if (sp.shopify || sp.payments) {
+    const who = await requireStaff();
+    if (canSeeBusiness(who) && !(await businessUnlocked(who))) {
+      const q = new URLSearchParams(Object.entries({ shopify: sp.shopify ?? '', payments: sp.payments ?? '' }).filter(([, v]) => v));
+      redirect(`/business/unlock?next=${encodeURIComponent(`/business/stock?${q}`)}`);
+    }
+  }
   const staff = await requireBusiness();
+  const connectPass = shopifyConnectPass(staff.id);
   const today = todayInTz(staff.org.timezone);
   const [y, m] = today.split('-').map(Number);
   const yearFrom = new Date(Date.UTC(y - 1, m, 1)).toISOString().slice(0, 10);
@@ -108,7 +119,7 @@ export default async function StockPage({ searchParams }: { searchParams: Promis
             <span>
               <b>Almost there:</b> <span className="muted">approve COS’s read-only access in Shopify (one time).</span>
             </span>
-            <a href="/api/shopify/install" className="btn small primary">
+            <a href={`/api/shopify/install?pass=${connectPass}`} className="btn small primary">
               Connect to Shopify
             </a>
           </>
@@ -123,7 +134,7 @@ export default async function StockPage({ searchParams }: { searchParams: Promis
               </span>
             </span>
             <span style={{ display: 'flex', gap: 8 }}>
-              <a href="/api/shopify/install" className="btn small" title="Approve COS again in Shopify, e.g. after adding read_all_orders for full order history">
+              <a href={`/api/shopify/install?pass=${connectPass}`} className="btn small" title="Approve COS again in Shopify, e.g. after adding read_all_orders for full order history">
                 Reconnect
               </a>
               <ActionButton action={syncShopifyAction} className="btn small primary">

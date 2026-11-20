@@ -117,3 +117,19 @@ export async function setBusinessPasscode(password: string, passcode: string, co
 export async function lockBusiness() {
   (await cookies()).delete(BUSINESS_COOKIE);
 }
+
+/**
+ * Leaving a Business page locks the area (pagehide), which used to lock it before "Reconnect Shopify"
+ * reached the server. The Stock page (only shown unlocked) hands the button a 10-minute pass instead.
+ */
+export function shopifyConnectPass(staffId: string, now = Date.now()) {
+  const exp = Math.floor(now / 1000) + 600;
+  return `${exp}.${signValue(`shopify-connect:${staffId}:${exp}`)}`;
+}
+
+export function validShopifyConnectPass(staffId: string, pass: string | null, now = Date.now()) {
+  const [expRaw, sig] = (pass ?? '').split('.');
+  const exp = Number(expRaw);
+  if (!sig || !Number.isInteger(exp) || exp < Math.floor(now / 1000)) return false;
+  return safeEqual(sig, signValue(`shopify-connect:${staffId}:${exp}`));
+}
